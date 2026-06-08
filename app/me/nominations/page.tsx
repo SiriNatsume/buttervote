@@ -17,7 +17,7 @@ export default async function MyNominationsPage({
   const { data: nominations } = await supabase
     .from("nominations")
     .select(
-      "id,contest_id,name,description,status,rejection_reason,rejected_at,created_at,image_path,image_width,image_height,image_size,nominator_display_name, contests(id,title,status,candidate_description_max_length)",
+      "id,contest_id,name,description,status,rejection_reason,rejected_at,created_at,image_path,image_width,image_height,image_size,nominator_display_name, contests(id,title,status,candidate_description_max_length,nomination_image_required)",
     )
     .eq("submitter_id", user.id)
     .order("created_at", { ascending: false });
@@ -30,6 +30,7 @@ export default async function MyNominationsPage({
             title: string;
             status: ContestStatus;
             candidate_description_max_length: number | null;
+            nomination_image_required: boolean | null;
           }
         | null
         | undefined;
@@ -55,6 +56,8 @@ export default async function MyNominationsPage({
               status: contest.status,
               candidate_description_max_length:
                 contest.candidate_description_max_length,
+              nomination_image_required:
+                contest.nomination_image_required === true,
             }
           : null,
       };

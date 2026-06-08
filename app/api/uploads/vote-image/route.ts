@@ -26,6 +26,14 @@ async function canUploadPath(storagePath: string, profileId: string, isAdmin: bo
     return isAdmin;
   }
 
+  if (
+    new RegExp(`^nomination-drafts/${uuidPattern}/image\\.webp$`).test(
+      storagePath,
+    )
+  ) {
+    return true;
+  }
+
   const nominationMatch = storagePath.match(
     new RegExp(`^nominations/(${uuidPattern})/image\\.webp$`),
   );

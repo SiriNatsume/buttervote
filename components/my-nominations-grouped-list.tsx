@@ -44,6 +44,7 @@ export type MyNominationItem = {
     title: string;
     status: ContestStatus;
     candidate_description_max_length: number | null;
+    nomination_image_required: boolean;
   } | null;
 };
 
@@ -180,6 +181,9 @@ function NominationCard({
     nomination.status === "pending" ||
     nomination.status === "rejected";
   const isEditing = editingId === nomination.id;
+  const needsImageBeforeSubmit =
+    nomination.contest?.nomination_image_required === true &&
+    !nomination.image_path;
   const canSupplementImage =
     nomination.status === "approved" && !nomination.image_path;
 
@@ -292,8 +296,17 @@ function NominationCard({
                   defaultValue={nomination.nominator_display_name ?? ""}
                 />
               </div>
-              <FormSubmitButton className="w-full sm:w-auto" loadingText="保存中...">
-                保存并重新提交
+              {needsImageBeforeSubmit ? (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                  该活动要求提名图片，请先上传图片后再重新提交。
+                </div>
+              ) : null}
+              <FormSubmitButton
+                className="w-full sm:w-auto"
+                disabled={needsImageBeforeSubmit}
+                loadingText="保存中..."
+              >
+                {needsImageBeforeSubmit ? "请先上传图片" : "保存并重新提交"}
               </FormSubmitButton>
             </TransitionActionForm>
             <div>

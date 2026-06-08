@@ -26,6 +26,7 @@ type MobileMenuProfile = {
 export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const hasRejectedNominations = Boolean(profile?.hasRejectedNominations);
 
   useEffect(() => {
     setOpen(false);
@@ -41,14 +42,14 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
       onToggle={(event) => setOpen(event.currentTarget.open)}
       className="relative md:hidden"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-[#EED8AA]/80 bg-[#FFF8E8] px-3 py-2 text-sm font-medium text-[#6A3E21] shadow-sm transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
+      <summary className="relative flex cursor-pointer list-none items-center gap-2 rounded-full border border-[#EED8AA]/80 bg-[#FFF8E8] px-3 py-2 text-sm font-medium text-[#6A3E21] shadow-sm transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
         <Menu className="size-4" />
-        <span className="relative">
-          菜单
-          {profile?.hasRejectedNominations ? (
-            <span className="absolute -right-2 -top-1 size-2 rounded-full bg-red-500" />
-          ) : null}
-        </span>
+        <span>菜单</span>
+        {hasRejectedNominations ? (
+          <span className="absolute -right-1 -top-1 size-2.5 rounded-full bg-red-500 ring-2 ring-[#FFFCF4]">
+            <span className="sr-only">有被拒绝的提名</span>
+          </span>
+        ) : null}
       </summary>
       <div className="absolute right-0 top-full z-50 mt-3 w-[min(86vw,20rem)] rounded-2xl border border-[#EED8AA]/80 bg-[#FFFCF4] p-3 shadow-xl">
         {profile ? (
@@ -80,11 +81,18 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
           </Button>
           {profile ? (
             <Button asChild variant="ghost" className="justify-start">
-              <Link href="/me/nominations" onClick={close} className="relative">
+              <Link
+                href="/me/nominations"
+                onClick={close}
+                className="relative pr-7"
+              >
                 <UserRound className="size-4" />
                 我的提名
                 {profile.hasRejectedNominations ? (
-                  <span className="ml-auto size-2 rounded-full bg-red-500" />
+                  <>
+                    <span className="absolute right-3 top-1/2 size-2.5 -translate-y-1/2 rounded-full bg-red-500 ring-2 ring-[#FFFCF4]" />
+                    <span className="sr-only">有被拒绝的提名</span>
+                  </>
                 ) : null}
               </Link>
             </Button>

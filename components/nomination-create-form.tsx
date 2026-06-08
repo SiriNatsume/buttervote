@@ -1,17 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertCircle, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, ImagePlus, Search } from "lucide-react";
 import { createNominationAction } from "@/lib/actions/nomination-actions";
 import { formatDateTime } from "@/lib/time";
 import type { ExistingNomination } from "@/components/existing-nominations-list";
 import { DescriptionTextarea } from "@/components/description-textarea";
 import { FormStatusFieldset } from "@/components/form-status-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { ImageCropUpload } from "@/components/image-crop-upload";
 import { TransitionActionForm } from "@/components/transition-action-form";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+type UploadedImageValue = {
+  imagePath: string;
+  imageWidth: number;
+  imageHeight: number;
+  imageSize: number;
+};
 
 const nominationStatusLabel: Record<ExistingNomination["status"], string> = {
   draft: "待上传图片",
@@ -19,6 +27,18 @@ const nominationStatusLabel: Record<ExistingNomination["status"], string> = {
   approved: "已通过",
   rejected: "已拒绝",
 };
+
+function createBrowserUuid() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    const nibble = char === "x" ? value : (value & 0x3) | 0x8;
+    return nibble.toString(16);
+  });
+}
 
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
@@ -125,6 +145,18 @@ export function NominationCreateForm({
   showNominatorInfo: boolean;
 }) {
   const [candidateName, setCandidateName] = useState("");
+  const [draftImageId, setDraftImageId] = useState("");
+  const [requiredImage, setRequiredImage] = useState<UploadedImageValue | null>(
+    null,
+  );
+  const requiresImage = imageRequired === true;
+  const canSubmit = !requiresImage || Boolean(draftImageId && requiredImage);
+
+  useEffect(() => {
+    if (requiresImage && !draftImageId) {
+      setDraftImageId(createBrowserUuid());
+    }
+  }, [draftImageId, requiresImage]);
 
   return (
     <TransitionActionForm
@@ -134,10 +166,57 @@ export function NominationCreateForm({
     >
       <FormStatusFieldset className="space-y-5">
         <input type="hidden" name="contestId" value={contestId} />
-        {imageRequired ? (
-          <div className="rounded-2xl border border-amber-300 bg-amber-50/80 px-4 py-3 text-sm leading-6 text-amber-900">
-            本活动要求提名图片。提交基础信息后，请继续上传图片；上传成功后才会进入待审核。
-          </div>
+        {requiresImage ? (
+          <>
+            <input type="hidden" name="nominationId" value={draftImageId} />
+            <input
+              type="hidden"
+              name="imagePath"
+              value={requiredImage?.imagePath ?? ""}
+            />
+            <input
+              type="hidden"
+              name="imageWidth"
+              value={requiredImage?.imageWidth ?? ""}
+            />
+            <input
+              type="hidden"
+              name="imageHeight"
+              value={requiredImage?.imageHeight ?? ""}
+            />
+            <input
+              type="hidden"
+              name="imageSize"
+              value={requiredImage?.imageSize ?? ""}
+            />
+            <div className="space-y-3 rounded-2xl border border-amber-300 bg-amber-50/80 p-4">
+              <div className="flex items-start gap-2 text-sm leading-6 text-amber-900">
+                <ImagePlus className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  本活动要求提名图片。请先上传图片，上传成功后才能提交提名。
+                </span>
+              </div>
+              {draftImageId ? (
+                <ImageCropUpload
+                  mode="candidate-image"
+                  storagePath={`nomination-drafts/${draftImageId}/image.webp`}
+                  value={requiredImage ?? undefined}
+                  onUploaded={(result) =>
+                    setRequiredImage({
+                      imagePath: result.imagePath,
+                      imageWidth: result.imageWidth,
+                      imageHeight: result.imageHeight,
+                      imageSize: result.imageSize,
+                    })
+                  }
+                />
+              ) : (
+                <div className="rounded-xl border border-[#EED8AA]/70 bg-[#FFFCF4]/80 px-4 py-3 text-sm text-muted-foreground">
+                  图片上传控件准备中...
+                </div>
+              )}
+            </div>
+          </>
         ) : null}
         <div className="space-y-2">
           <Label htmlFor="name">候选项名称</Label>
@@ -176,8 +255,12 @@ export function NominationCreateForm({
             placeholder="用于公开展示的提名者名称"
           />
         </div>
-        <FormSubmitButton className="w-full sm:w-auto" loadingText="提名提交中...">
-          提交提名
+        <FormSubmitButton
+          className="w-full sm:w-auto"
+          disabled={!canSubmit}
+          loadingText="提名提交中..."
+        >
+          {requiresImage && !canSubmit ? "请先上传图片" : "提交提名"}
         </FormSubmitButton>
       </FormStatusFieldset>
     </TransitionActionForm>
