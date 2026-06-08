@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vote-site",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-05-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+  "routes": [
+    {
+      "pattern": "buttervote.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.buttervote.com",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://tjpddswobajolyxmxrfs.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqcGRkc3dvYmFqb2x5eG14cmZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODQyNzgsImV4cCI6MjA5NDA2MDI3OH0.JqOlZc73ZF7fu9ONve6fToKHRpBZtGic0PyHovZ6fbM",
+    "APP_SESSION_COOKIE_NAME": "app_session",
+    "APP_SESSION_DAYS": "30",
+    "QQ_LOGIN_TICKET_TTL_MINUTES": "5",
+    "NEXT_PUBLIC_SITE_URL": "https://buttervote.com",
+    "USER_GROUP_MEMBERSHIP_DAYS": "7"
+  }
+}
