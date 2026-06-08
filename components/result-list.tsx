@@ -52,14 +52,17 @@ export function ResultList({
                     <Badge
                       variant="outline"
                       className={
-                        result.rank === 1
+                        result.position === 1
                           ? "border-yellow-300 bg-yellow-100 text-yellow-800"
                           : "border-[#EED8AA] bg-[#FFF3D0] text-[#6A3E21]"
                       }
                     >
                       <Trophy className="mr-1 size-3" />
-                      第 {result.rank} 名
+                      排序第 {result.position} 位
                     </Badge>
+                    {result.rank !== result.position ? (
+                      <Badge variant="outline">票数并列第 {result.rank} 名</Badge>
+                    ) : null}
                     {result.isActive === false ? (
                       <Badge variant="outline">已删除</Badge>
                     ) : null}

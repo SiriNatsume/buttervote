@@ -213,7 +213,9 @@ export default async function GroupResultsPage({
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           <Trophy className="size-4 text-[#B9854C]" />
-                          <span className="shrink-0">第 {result.rank} 名</span>
+                          <span className="shrink-0">
+                            排序第 {result.position} 位
+                          </span>
                           <span className="truncate font-medium">
                             {result.name}
                           </span>

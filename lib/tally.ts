@@ -12,7 +12,19 @@ export type TallyResult = {
   loveScore: number;
   loveVoteCount: number;
   lastVoteAt: string | null;
+  /**
+   * Pure score rank. Candidates with the same score share this rank even when
+   * later tie-breakers sort them apart.
+   */
   rank: number;
+  /**
+   * One-based position after applying the full display sort.
+   */
+  position: number;
+  /**
+   * Alias for `position` for stage rules that need the fully resolved order.
+   */
+  resolvedRank: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -148,6 +160,8 @@ export function tallyVotes(params: {
         (normalScores.get(candidate.id) ?? 0) +
         (loveScores.get(candidate.id) ?? 0),
       rank: 0,
+      position: 0,
+      resolvedRank: 0,
     }))
     .sort((a, b) => {
       if (b.score !== a.score) {
@@ -181,6 +195,8 @@ export function tallyVotes(params: {
     return {
       ...item,
       rank: currentRank,
+      position: index + 1,
+      resolvedRank: index + 1,
     };
   });
 }

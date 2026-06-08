@@ -21,6 +21,26 @@ export type NominationStatus = "draft" | "pending" | "approved" | "rejected";
 export type ClosedResultVisibility = "admin_only" | "public";
 export type ScheduledTransitionTarget = ContestStatus;
 export type ContestGroupAccessMode = "public" | "restricted";
+export type TournamentStatus = "draft" | "active" | "completed" | "archived";
+export type TournamentStageKind =
+  | "screening"
+  | "preliminary"
+  | "tiebreaker"
+  | "knockout";
+export type TournamentStageStatus =
+  | "draft"
+  | "waiting"
+  | "voting"
+  | "closed"
+  | "published";
+export type TournamentEntryStatus =
+  | "screening"
+  | "preliminary"
+  | "tiebreaker"
+  | "knockout"
+  | "eliminated"
+  | "champion"
+  | "withdrawn";
 
 export type Profile = {
   id: string;
@@ -204,6 +224,72 @@ export type ContestScheduledTransition = {
   run_at: string;
   executed_at: string | null;
   created_by: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type Tournament = {
+  id: string;
+  name: string;
+  status: TournamentStatus;
+  config: Json;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type TournamentStage = {
+  id: string;
+  tournament_id: string;
+  kind: TournamentStageKind;
+  contest_id: string | null;
+  group_id: string | null;
+  sequence: number;
+  status: TournamentStageStatus;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type TournamentEntry = {
+  id: string;
+  tournament_id: string;
+  root_candidate_id: string;
+  current_candidate_id: string | null;
+  source_candidate_id: string | null;
+  screening_rank: number | null;
+  preliminary_group: "A" | "B" | "C" | "D" | null;
+  preliminary_rank: number | null;
+  is_group_winner: boolean;
+  status: TournamentEntryStatus;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type TournamentDrawLog = {
+  id: string;
+  tournament_id: string;
+  stage_id: string | null;
+  kind: string;
+  seed: string;
+  input: Json;
+  output: Json;
+  created_by: string | null;
+  created_at: string;
+} & Record<string, unknown>;
+
+export type TournamentMatch = {
+  id: string;
+  tournament_id: string;
+  stage_id: string | null;
+  contest_id: string | null;
+  round: string;
+  slot: number;
+  left_entry_id: string | null;
+  right_entry_id: string | null;
+  winner_entry_id: string | null;
+  loser_entry_id: string | null;
+  metadata: Json;
   created_at: string;
   updated_at: string;
 } & Record<string, unknown>;
@@ -458,6 +544,87 @@ type Tables = {
     },
     Partial<Omit<ContestScheduledTransition, "id" | "created_at">>
   >;
+  tournaments: Table<
+    Tournament,
+    {
+      id?: string;
+      name: string;
+      status?: TournamentStatus;
+      config?: Json;
+      created_by?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<Tournament, "id" | "created_at">>
+  >;
+  tournament_stages: Table<
+    TournamentStage,
+    {
+      id?: string;
+      tournament_id: string;
+      kind: TournamentStageKind;
+      contest_id?: string | null;
+      group_id?: string | null;
+      sequence?: number;
+      status?: TournamentStageStatus;
+      metadata?: Json;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<TournamentStage, "id" | "created_at">>
+  >;
+  tournament_entries: Table<
+    TournamentEntry,
+    {
+      id?: string;
+      tournament_id: string;
+      root_candidate_id: string;
+      current_candidate_id?: string | null;
+      source_candidate_id?: string | null;
+      screening_rank?: number | null;
+      preliminary_group?: "A" | "B" | "C" | "D" | null;
+      preliminary_rank?: number | null;
+      is_group_winner?: boolean;
+      status?: TournamentEntryStatus;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<TournamentEntry, "id" | "created_at">>
+  >;
+  tournament_draw_logs: Table<
+    TournamentDrawLog,
+    {
+      id?: string;
+      tournament_id: string;
+      stage_id?: string | null;
+      kind: string;
+      seed: string;
+      input?: Json;
+      output?: Json;
+      created_by?: string | null;
+      created_at?: string;
+    },
+    Partial<Omit<TournamentDrawLog, "id" | "created_at">>
+  >;
+  tournament_matches: Table<
+    TournamentMatch,
+    {
+      id?: string;
+      tournament_id: string;
+      stage_id?: string | null;
+      contest_id?: string | null;
+      round: string;
+      slot: number;
+      left_entry_id?: string | null;
+      right_entry_id?: string | null;
+      winner_entry_id?: string | null;
+      loser_entry_id?: string | null;
+      metadata?: Json;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<TournamentMatch, "id" | "created_at">>
+  >;
 };
 
 export type Database = {
@@ -542,6 +709,28 @@ export type Database = {
           p_allowed_user_group_ids?: string[] | null;
         };
         Returns: boolean;
+      };
+      create_preliminary_stage_atomic: {
+        Args: {
+          p_tournament_id: string;
+          p_screening_stage_id: string;
+          p_target_group_id?: string | null;
+          p_seed: string;
+          p_input: Json;
+          p_output: Json;
+          p_groups: Json;
+          p_created_by: string;
+        };
+        Returns: Json;
+      };
+      create_tournament_with_screening_stage_atomic: {
+        Args: {
+          p_name: string;
+          p_screening_contest_id: string;
+          p_config: Json;
+          p_created_by: string;
+        };
+        Returns: Json;
       };
     };
     Enums: Record<string, never>;

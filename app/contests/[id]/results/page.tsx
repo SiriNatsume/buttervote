@@ -13,7 +13,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
-import type { LoveVoteAllocation, Vote } from "@/lib/types";
+import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
+import type { LoveVoteAllocation, TournamentEntry, Vote } from "@/lib/types";
 
 type VoteProfile = {
   id: string;
@@ -28,6 +29,15 @@ type AdminVoteRow = Vote & {
   profile?: VoteProfile | null;
 };
 
+type TournamentDrawLogInfo = {
+  id: string;
+  kind: string;
+  seed: string;
+  input: unknown;
+  output: unknown;
+  created_at: string;
+};
+
 function voterDisplayName(profile?: VoteProfile | null) {
   return (
     profile?.display_name ||
@@ -35,6 +45,10 @@ function voterDisplayName(profile?: VoteProfile | null) {
     profile?.email ||
     "未知用户"
   );
+}
+
+function formatJson(value: unknown) {
+  return JSON.stringify(value, null, 2);
 }
 
 export default async function ResultsPage({
@@ -79,6 +93,27 @@ export default async function ResultsPage({
         .eq("id", contest.group_id)
         .maybeSingle()
     : { data: null };
+  const { data: tournamentStage } = await supabase
+    .from("tournament_stages")
+    .select("id,tournament_id,kind,metadata")
+    .eq("contest_id", id)
+    .maybeSingle();
+  const { data: tournamentLogs } = tournamentStage
+    ? await supabase
+        .from("tournament_draw_logs")
+        .select("id,kind,seed,input,output,created_at")
+        .eq("tournament_id", tournamentStage.tournament_id)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+  const { data: tournamentEntries } =
+    isAdmin && tournamentStage
+      ? await dataClient
+          .from("tournament_entries")
+          .select(
+            "id,tournament_id,root_candidate_id,current_candidate_id,source_candidate_id,screening_rank,preliminary_group,preliminary_rank,is_group_winner,status,created_at,updated_at",
+          )
+          .eq("tournament_id", tournamentStage.tournament_id)
+      : { data: [] };
 
   let votes: Vote[] = [];
   let adminVoteRows: AdminVoteRow[] = [];
@@ -153,6 +188,32 @@ export default async function ResultsPage({
   });
   const showLoveBreakdown = canReadAllVotes && contest.status !== "voting";
   const totalLoveVotes = loveAllocations.length;
+  const entryByCandidateId = new Map<string, TournamentEntry>();
+
+  for (const entry of (tournamentEntries ?? []) as TournamentEntry[]) {
+    for (const candidateId of [
+      entry.current_candidate_id,
+      entry.source_candidate_id,
+      entry.root_candidate_id,
+    ]) {
+      if (candidateId) {
+        entryByCandidateId.set(candidateId, entry);
+      }
+    }
+  }
+
+  const screeningRankByCandidate = new Map(
+    results
+      .map((result) => [
+        result.candidateId,
+        entryByCandidateId.get(result.candidateId)?.screening_rank,
+      ] as const)
+      .filter((item): item is readonly [string, number] => typeof item[1] === "number"),
+  );
+  const preliminaryResolution =
+    isAdmin && tournamentStage?.kind === "preliminary"
+      ? resolvePreliminaryGroup(results, screeningRankByCandidate)
+      : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
@@ -206,6 +267,37 @@ export default async function ResultsPage({
                       </div>
                     ))}
                 </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {isAdmin && preliminaryResolution?.needsTiebreaker ? (
+            <Card className="border-[#F0D08A] bg-[#FFF8E8]">
+              <CardHeader>
+                <CardTitle>需要加赛</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-[#6A3E21]">
+                {preliminaryResolution.advancementTie ? (
+                  <div>
+                    影响晋级：第 4 名分数线出现同票，剩余{" "}
+                    {preliminaryResolution.advancementTie.remainingSlots} 个名额。
+                    相关候选项：
+                    {preliminaryResolution.advancementTie.candidates
+                      .map((candidate) => candidate.name)
+                      .join("、")}
+                    。
+                  </div>
+                ) : null}
+                {preliminaryResolution.groupFirstTie ? (
+                  <div>
+                    影响小组第一：最高票出现同票。相关候选项：
+                    {preliminaryResolution.groupFirstTie.candidates
+                      .map((candidate) => candidate.name)
+                      .join("、")}
+                    。
+                  </div>
+                ) : null}
+                <div>请创建 24 小时单选加赛，不要静默晋级。</div>
               </CardContent>
             </Card>
           ) : null}
@@ -268,8 +360,94 @@ export default async function ResultsPage({
               </CardContent>
             </Card>
           ) : null}
+
+          {isAdmin && tournamentStage ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>赛制排序依据</CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead className="text-left text-muted-foreground">
+                    <tr className="border-b">
+                      <th className="py-2 pr-3">排序</th>
+                      <th className="py-2 pr-3">候选项</th>
+                      <th className="py-2 pr-3">得票</th>
+                      <th className="py-2 pr-3">票数名次</th>
+                      <th className="py-2 pr-3">最后得票时间</th>
+                      <th className="py-2 pr-3">海选排名</th>
+                      <th className="py-2 pr-3">预赛组别/排名</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.map((result) => {
+                      const entry = entryByCandidateId.get(result.candidateId);
+
+                      return (
+                        <tr
+                          key={result.candidateId}
+                          className="border-b border-[#EED8AA]/60"
+                        >
+                          <td className="py-2 pr-3">{result.position}</td>
+                          <td className="py-2 pr-3 font-medium">
+                            {result.name}
+                          </td>
+                          <td className="py-2 pr-3">{result.score}</td>
+                          <td className="py-2 pr-3">{result.rank}</td>
+                          <td className="py-2 pr-3">
+                            {formatDateTime(result.lastVoteAt)}
+                          </td>
+                          <td className="py-2 pr-3">
+                            {entry?.screening_rank ?? "未记录"}
+                          </td>
+                          <td className="py-2 pr-3">
+                            {entry?.preliminary_group ?? "未记录"}
+                            {entry?.preliminary_rank
+                              ? ` / 第 ${entry.preliminary_rank} 名`
+                              : ""}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       )}
+
+      {(tournamentLogs ?? []).length > 0 ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>赛制抽签日志</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {((tournamentLogs ?? []) as TournamentDrawLogInfo[]).map((log) => (
+              <div
+                key={log.id}
+                className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFFCF4]/80 p-4"
+              >
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                  <Badge variant="outline">{log.kind}</Badge>
+                  <Badge variant="secondary">seed：{log.seed}</Badge>
+                  <span className="text-muted-foreground">
+                    {formatDateTime(log.created_at)}
+                  </span>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <pre className="max-h-72 overflow-auto rounded-xl bg-[#2B2118] p-3 text-xs leading-5 text-[#FFF8E8]">
+                    {formatJson(log.input)}
+                  </pre>
+                  <pre className="max-h-72 overflow-auto rounded-xl bg-[#2B2118] p-3 text-xs leading-5 text-[#FFF8E8]">
+                    {formatJson(log.output)}
+                  </pre>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Button asChild variant="outline" className="mt-8">
         <Link href={`/contests/${contest.id}`}>返回活动</Link>
