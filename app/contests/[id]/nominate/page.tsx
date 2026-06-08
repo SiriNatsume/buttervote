@@ -30,7 +30,7 @@ export default async function NominatePage({
   const { data: contest } = await supabase
     .from("contests")
     .select(
-      "id,title,status,group_id,max_nominations_per_user,show_existing_nominations,show_nominator_info,candidate_description_max_length",
+      "id,title,status,group_id,max_nominations_per_user,show_existing_nominations,show_nominator_info,candidate_description_max_length,nomination_image_required",
     )
     .eq("id", id)
     .maybeSingle();
@@ -71,6 +71,7 @@ export default async function NominatePage({
         .from("nominations")
         .select("id,name,description,status,nominator_display_name,created_at")
         .eq("contest_id", contest.id)
+        .neq("status", "draft")
         .order("created_at", { ascending: true })
     : { data: [] };
 
@@ -113,7 +114,11 @@ export default async function NominatePage({
         <Card>
           <CardHeader>
             <CardTitle>上传提名图片</CardTitle>
-            <CardDescription>{contest.title}</CardDescription>
+            <CardDescription>
+              {contest.nomination_image_required
+                ? `${contest.title}：上传成功后会进入待审核。`
+                : contest.title}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <NominationImageUploader
@@ -158,6 +163,7 @@ export default async function NominatePage({
             <NominationCreateForm
               contestId={contest.id}
               descriptionMaxLength={contest.candidate_description_max_length}
+              imageRequired={contest.nomination_image_required === true}
               existingNominations={existingNominations ?? []}
               showNominatorInfo={contest.show_nominator_info !== false}
             />

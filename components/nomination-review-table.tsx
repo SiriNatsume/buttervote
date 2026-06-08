@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -34,9 +35,45 @@ type ReviewNomination = Nomination & {
   contests?: {
     title: string;
   } | null;
+  profiles?: {
+    id: string;
+    display_name: string | null;
+    email: string | null;
+    qq_nickname: string | null;
+    qq_user_id: string | null;
+    login_provider: string | null;
+  } | null;
 };
 
 type ReviewAction = "approve" | "reject";
+
+function UserIdentity({
+  profile,
+  fallbackId,
+}: {
+  profile?: ReviewNomination["profiles"];
+  fallbackId: string | null;
+}) {
+  if (!profile) {
+    return (
+      <div className="text-sm text-muted-foreground">
+        {fallbackId ? `用户 ID：${fallbackId}` : "无提交用户"}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1 text-sm text-muted-foreground">
+      <div className="font-medium text-foreground">
+        {profile.display_name || profile.qq_nickname || profile.email || "未命名用户"}
+      </div>
+      {profile.qq_nickname ? <div>QQ 昵称：{profile.qq_nickname}</div> : null}
+      {profile.qq_user_id ? <div>QQ：{profile.qq_user_id}</div> : null}
+      {profile.email ? <div>邮箱：{profile.email}</div> : null}
+      <div className="text-xs">ID：{profile.id}</div>
+    </div>
+  );
+}
 
 export function NominationReviewTable({
   nominations,
@@ -50,6 +87,10 @@ export function NominationReviewTable({
   } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [batchAction, setBatchAction] = useState<ReviewAction | null>(null);
+  const [batchRejectReason, setBatchRejectReason] = useState("");
+  const [singleRejectTarget, setSingleRejectTarget] =
+    useState<ReviewNomination | null>(null);
+  const [singleRejectReason, setSingleRejectReason] = useState("");
   const [isBatchPending, setIsBatchPending] = useState(false);
   const [, startTransition] = useTransition();
 
@@ -77,7 +118,11 @@ export function NominationReviewTable({
     );
   }
 
-  function handleReview(nominationId: string, reviewAction: ReviewAction) {
+  function handleReview(
+    nominationId: string,
+    reviewAction: ReviewAction,
+    rejectionReason?: string,
+  ) {
     if (pendingReview || isBatchPending) {
       return;
     }
@@ -85,6 +130,9 @@ export function NominationReviewTable({
     const formData = new FormData();
     formData.set("nominationId", nominationId);
     formData.set("reviewAction", reviewAction);
+    if (reviewAction === "reject" && rejectionReason?.trim()) {
+      formData.set("rejectionReason", rejectionReason.trim());
+    }
     setPendingReview({ id: nominationId, action: reviewAction });
 
     startTransition(async () => {
@@ -99,6 +147,8 @@ export function NominationReviewTable({
         setRows((current) =>
           current.filter((nomination) => nomination.id !== nominationId),
         );
+        setSingleRejectTarget(null);
+        setSingleRejectReason("");
         toast.success(result.message ?? "审核已更新");
       } catch (error) {
         toast.error(
@@ -112,7 +162,10 @@ export function NominationReviewTable({
     });
   }
 
-  function handleBatchReview(reviewAction: ReviewAction) {
+  function handleBatchReview(
+    reviewAction: ReviewAction,
+    rejectionReason?: string,
+  ) {
     if (isBatchPending || pendingReview) {
       return;
     }
@@ -128,6 +181,7 @@ export function NominationReviewTable({
         const result = await batchReviewNominations({
           nominationIds: selectedIds,
           action: reviewAction,
+          rejectionReason: reviewAction === "reject" ? rejectionReason?.trim() : undefined,
         });
 
         if (!result.ok) {
@@ -141,6 +195,7 @@ export function NominationReviewTable({
         );
         setSelectedIds([]);
         setBatchAction(null);
+        setBatchRejectReason("");
         toast.success(result.message ?? "批量审核已完成");
       } catch (error) {
         toast.error(
@@ -252,6 +307,15 @@ export function NominationReviewTable({
               <div className="mt-3 rounded-xl bg-[#FFF8E8]/70 px-3 py-2 text-sm text-muted-foreground">
                 提名者：{nomination.nominator_display_name || "未填写"}
               </div>
+              <div className="mt-3 rounded-xl bg-white/70 px-3 py-2">
+                <div className="mb-1 text-xs font-medium text-muted-foreground">
+                  提交用户
+                </div>
+                <UserIdentity
+                  profile={nomination.profiles}
+                  fallbackId={nomination.submitter_id}
+                />
+              </div>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <LoadingButton
                   type="button"
@@ -273,7 +337,7 @@ export function NominationReviewTable({
                   disabled={isBatchPending || Boolean(pendingReview)}
                   loading={isRejecting}
                   loadingText="保存中..."
-                  onClick={() => handleReview(nomination.id, "reject")}
+                  onClick={() => setSingleRejectTarget(nomination)}
                 >
                   <X className="size-4" />
                   拒绝
@@ -299,6 +363,7 @@ export function NominationReviewTable({
               <TableHead>活动</TableHead>
               <TableHead>简介</TableHead>
               <TableHead>提名者</TableHead>
+              <TableHead>提交用户</TableHead>
               <TableHead className="w-[180px] text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -351,6 +416,12 @@ export function NominationReviewTable({
                     {nomination.nominator_display_name || "未填写"}
                   </TableCell>
                   <TableCell>
+                    <UserIdentity
+                      profile={nomination.profiles}
+                      fallbackId={nomination.submitter_id}
+                    />
+                  </TableCell>
+                  <TableCell>
                     <div className="flex justify-end gap-2">
                       <LoadingButton
                         type="button"
@@ -370,7 +441,7 @@ export function NominationReviewTable({
                         disabled={isBatchPending || Boolean(pendingReview)}
                         loading={isRejecting}
                         loadingText="保存中..."
-                        onClick={() => handleReview(nomination.id, "reject")}
+                        onClick={() => setSingleRejectTarget(nomination)}
                       >
                         <X className="size-4" />
                         拒绝
@@ -388,6 +459,7 @@ export function NominationReviewTable({
         onOpenChange={(open) => {
           if (!open && !isBatchPending) {
             setBatchAction(null);
+            setBatchRejectReason("");
           }
         }}
       >
@@ -411,6 +483,25 @@ export function NominationReviewTable({
                 </div>
               ))}
           </div>
+          {batchAction === "reject" ? (
+            <div className="space-y-2">
+              <label
+                htmlFor="batch-rejection-reason"
+                className="text-sm font-medium"
+              >
+                拒绝理由（可选）
+              </label>
+              <Textarea
+                id="batch-rejection-reason"
+                value={batchRejectReason}
+                onChange={(event) =>
+                  setBatchRejectReason(event.currentTarget.value)
+                }
+                maxLength={500}
+                placeholder="例如：图片不清晰、简介信息不足，或与已有提名重复。"
+              />
+            </div>
+          ) : null}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
@@ -425,9 +516,83 @@ export function NominationReviewTable({
               variant={batchAction === "reject" ? "destructive" : "default"}
               loading={isBatchPending}
               loadingText="处理中..."
-              onClick={() => batchAction && handleBatchReview(batchAction)}
+              onClick={() =>
+                batchAction && handleBatchReview(batchAction, batchRejectReason)
+              }
             >
               确认
+            </LoadingButton>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={singleRejectTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !pendingReview) {
+            setSingleRejectTarget(null);
+            setSingleRejectReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>拒绝提名</DialogTitle>
+            <DialogDescription>
+              可以填写拒绝理由，帮助用户修改后重新提交。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-3 text-sm">
+            {singleRejectTarget?.name}
+          </div>
+          <div className="space-y-2">
+            <label
+              htmlFor="single-rejection-reason"
+              className="text-sm font-medium"
+            >
+              拒绝理由（可选）
+            </label>
+            <Textarea
+              id="single-rejection-reason"
+              value={singleRejectReason}
+              onChange={(event) =>
+                setSingleRejectReason(event.currentTarget.value)
+              }
+              maxLength={500}
+              placeholder="例如：图片不清晰、简介信息不足，或与已有提名重复。"
+            />
+          </div>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={Boolean(pendingReview)}
+              onClick={() => {
+                setSingleRejectTarget(null);
+                setSingleRejectReason("");
+              }}
+            >
+              取消
+            </Button>
+            <LoadingButton
+              type="button"
+              variant="destructive"
+              loading={Boolean(
+                pendingReview &&
+                  pendingReview.id === singleRejectTarget?.id &&
+                  pendingReview.action === "reject",
+              )}
+              loadingText="保存中..."
+              onClick={() => {
+                if (singleRejectTarget) {
+                  handleReview(
+                    singleRejectTarget.id,
+                    "reject",
+                    singleRejectReason,
+                  );
+                }
+              }}
+            >
+              确认拒绝
             </LoadingButton>
           </div>
         </DialogContent>

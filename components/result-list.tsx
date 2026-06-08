@@ -1,6 +1,7 @@
 import { Heart, ImageIcon, Trophy } from "lucide-react";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import type { TallyResult } from "@/lib/tally";
+import { formatDateTime } from "@/lib/time";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 
@@ -79,6 +80,11 @@ export function ResultList({
                       <Heart className="size-3 fill-current" />
                       普通得分 {result.normalScore} / 真爱票得分{" "}
                       {result.loveScore} / 真爱票 {result.loveVoteCount} 张
+                    </p>
+                  ) : null}
+                  {result.lastVoteAt ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      最后得票时间：{formatDateTime(result.lastVoteAt)}
                     </p>
                   ) : null}
                 </div>

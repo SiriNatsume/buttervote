@@ -152,6 +152,15 @@ export function ContestForm({
               <Checkbox name="show_candidate_description" defaultChecked />
               展示候选项简介
             </Label>
+            <Label className="flex items-center gap-3 sm:col-span-2">
+              <Checkbox name="nomination_image_required" />
+              <span>
+                提名必须上传图片
+                <span className="block text-xs leading-5 text-muted-foreground">
+                  勾选后，用户上传图片后才会进入待审核。
+                </span>
+              </span>
+            </Label>
           </div>
             <FormSubmitButton className="w-full" loadingText="保存中...">
               创建

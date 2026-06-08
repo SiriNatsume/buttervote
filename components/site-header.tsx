@@ -3,6 +3,7 @@ import Image from "next/image";
 import { LogIn, LogOut, Settings, UserRound, UsersRound } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth-actions";
 import { getCurrentProfile } from "@/lib/auth";
+import { createServerDataClient } from "@/lib/supabase/server-data";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { MobileSiteMenu } from "@/components/mobile-site-menu";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,17 @@ export async function SiteHeader() {
     "已登录用户";
   const avatarUrl =
     typeof profile?.qq_avatar_url === "string" ? profile.qq_avatar_url : null;
+  let hasRejectedNominations = false;
+
+  if (profile) {
+    const dataClient = await createServerDataClient();
+    const { count } = await dataClient
+      .from("nominations")
+      .select("id", { count: "exact", head: true })
+      .eq("submitter_id", profile.id)
+      .eq("status", "rejected");
+    hasRejectedNominations = (count ?? 0) > 0;
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#EED8AA]/70 bg-[#FFFCF4]/80 backdrop-blur">
@@ -40,9 +52,12 @@ export async function SiteHeader() {
           </Button>
           {profile ? (
             <Button asChild variant="ghost" size="sm">
-              <Link href="/me/nominations">
+              <Link href="/me/nominations" className="relative">
                 <UserRound className="size-4" />
                 我的提名
+                {hasRejectedNominations ? (
+                  <span className="absolute right-1 top-1 size-2 rounded-full bg-red-500" />
+                ) : null}
               </Link>
             </Button>
           ) : null}
@@ -102,6 +117,7 @@ export async function SiteHeader() {
                   role: profile.role,
                   displayName,
                   avatarUrl,
+                  hasRejectedNominations,
                 }
               : null
           }

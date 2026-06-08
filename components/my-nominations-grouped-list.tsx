@@ -31,6 +31,8 @@ export type MyNominationItem = {
   name: string;
   description: string | null;
   status: NominationStatus;
+  rejection_reason?: string | null;
+  rejected_at?: string | null;
   created_at: string;
   image_path?: string | null;
   image_width?: number | null;
@@ -46,16 +48,26 @@ export type MyNominationItem = {
 };
 
 const nominationStatusLabel: Record<NominationStatus, string> = {
+  draft: "待上传图片",
   pending: "待审核",
   approved: "已通过",
   rejected: "已拒绝",
 };
 
 const nominationStatusClass: Record<NominationStatus, string> = {
+  draft: "border-orange-200 bg-orange-100 text-orange-800",
   pending: "border-amber-200 bg-amber-100 text-amber-800",
   approved: "border-yellow-300 bg-yellow-100 text-yellow-800",
   rejected: "border-stone-300 bg-stone-100 text-stone-600",
 };
+
+const statusFilters: Array<{ value: "all" | NominationStatus; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "pending", label: "待审核" },
+  { value: "approved", label: "已通过" },
+  { value: "rejected", label: "已拒绝" },
+  { value: "draft", label: "待上传图片" },
+];
 
 type NominationGroup = {
   key: string;
@@ -164,7 +176,9 @@ function NominationCard({
   onToggleEdit: (id: string) => void;
 }) {
   const editable =
-    nomination.status === "pending" || nomination.status === "rejected";
+    nomination.status === "draft" ||
+    nomination.status === "pending" ||
+    nomination.status === "rejected";
   const isEditing = editingId === nomination.id;
   const canSupplementImage =
     nomination.status === "approved" && !nomination.image_path;
@@ -205,6 +219,19 @@ function NominationCard({
         {nomination.nominator_display_name ? (
           <div className="rounded-xl bg-[#FFF8E8]/70 px-3 py-2 text-sm text-muted-foreground">
             提名者：{nomination.nominator_display_name}
+          </div>
+        ) : null}
+        {nomination.status === "rejected" ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm leading-6 text-red-800">
+            <div className="font-medium">拒绝理由</div>
+            <div className="mt-1">
+              {nomination.rejection_reason || "管理员未填写拒绝理由。"}
+            </div>
+          </div>
+        ) : null}
+        {nomination.status === "draft" ? (
+          <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm leading-6 text-orange-800">
+            该提名需要上传图片后才会进入待审核。
           </div>
         ) : null}
         {editable ? (
@@ -296,6 +323,9 @@ export function MyNominationsGroupedList({
   nominations: MyNominationItem[];
 }) {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | NominationStatus>(
+    "all",
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const groups = useMemo(
     () => groupNominationsByContest(nominations),
@@ -312,11 +342,12 @@ export function MyNominationsGroupedList({
         .map((group) => ({
           ...group,
           nominations: group.nominations.filter((nomination) =>
+            (statusFilter === "all" || nomination.status === statusFilter) &&
             matchesNomination(nomination, query),
           ),
         }))
         .filter((group) => group.nominations.length > 0),
-    [groups, query],
+    [groups, query, statusFilter],
   );
   const totalMatches = filteredGroups.reduce(
     (sum, group) => sum + group.nominations.length,
@@ -382,6 +413,19 @@ export function MyNominationsGroupedList({
               全部收起
             </Button>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {statusFilters.map((filter) => (
+            <Button
+              key={filter.value}
+              type="button"
+              size="sm"
+              variant={statusFilter === filter.value ? "default" : "outline"}
+              onClick={() => setStatusFilter(filter.value)}
+            >
+              {filter.label}
+            </Button>
+          ))}
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
           共 {totalMatches} 条提名

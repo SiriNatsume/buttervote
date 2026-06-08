@@ -83,6 +83,7 @@ export default async function ContestDetailPage({
         .from("nominations")
         .select("id,name,description,status,nominator_display_name,created_at")
         .eq("contest_id", contest.id)
+        .neq("status", "draft")
         .order("created_at", { ascending: true })
     : { data: [] };
   const validVotingDeadline =

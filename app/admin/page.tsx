@@ -39,7 +39,7 @@ export default async function AdminPage({
       supabase
         .from("nominations")
         .select(
-          "id,contest_id,submitter_id,name,description,status,image_path,image_width,image_height,image_size,nominator_display_name,nominator_note,created_at,updated_at, contests(title)",
+          "id,contest_id,submitter_id,name,description,status,image_path,image_width,image_height,image_size,nominator_display_name,nominator_note,rejection_reason,rejected_at,created_at,updated_at, contests(title)",
         )
         .eq("status", "pending")
         .order("created_at", { ascending: true }),
@@ -63,6 +63,29 @@ export default async function AdminPage({
   const groupItems: AdminGroupItem[] = (groups ?? []).map((group) => ({
     id: group.id,
     name: group.name,
+  }));
+  const submitterIds = [
+    ...new Set(
+      (nominations ?? [])
+        .map((nomination) => nomination.submitter_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const { data: nominationProfiles } =
+    submitterIds.length > 0
+      ? await supabase
+          .from("profiles")
+          .select("id,display_name,email,qq_nickname,qq_user_id,login_provider")
+          .in("id", submitterIds)
+      : { data: [] };
+  const profileById = new Map(
+    (nominationProfiles ?? []).map((profile) => [profile.id, profile]),
+  );
+  const nominationsWithProfiles = (nominations ?? []).map((nomination) => ({
+    ...nomination,
+    profiles: nomination.submitter_id
+      ? profileById.get(nomination.submitter_id) ?? null
+      : null,
   }));
 
   return (
@@ -120,7 +143,7 @@ export default async function AdminPage({
           <CardTitle>待审核提名</CardTitle>
         </CardHeader>
         <CardContent>
-          <NominationReviewTable nominations={nominations ?? []} />
+          <NominationReviewTable nominations={nominationsWithProfiles} />
         </CardContent>
       </Card>
     </div>

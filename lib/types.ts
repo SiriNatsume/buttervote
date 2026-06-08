@@ -17,7 +17,7 @@ export type ContestStatus =
 
 export type VoteType = "single" | "multiple" | "ranked";
 
-export type NominationStatus = "pending" | "approved" | "rejected";
+export type NominationStatus = "draft" | "pending" | "approved" | "rejected";
 export type ClosedResultVisibility = "admin_only" | "public";
 export type ScheduledTransitionTarget = ContestStatus;
 export type ContestGroupAccessMode = "public" | "restricted";
@@ -111,6 +111,7 @@ export type Contest = {
   show_candidate_description: boolean;
   show_nominator_info: boolean;
   show_existing_nominations: boolean;
+  nomination_image_required: boolean;
   max_nominations_per_user: number | null;
   candidate_description_max_length: number | null;
   live_results_enabled: boolean;
@@ -140,6 +141,8 @@ export type Nomination = {
   image_size: number | null;
   nominator_display_name: string | null;
   nominator_note: string | null;
+  rejection_reason: string | null;
+  rejected_at: string | null;
   created_at: string;
   updated_at: string;
 } & Record<string, unknown>;
@@ -284,6 +287,7 @@ type Tables = {
       show_candidate_description?: boolean;
       show_nominator_info?: boolean;
       show_existing_nominations?: boolean;
+      nomination_image_required?: boolean;
       max_nominations_per_user?: number | null;
       candidate_description_max_length?: number | null;
       live_results_enabled?: boolean;
@@ -370,6 +374,8 @@ type Tables = {
       image_size?: number | null;
       nominator_display_name?: string | null;
       nominator_note?: string | null;
+      rejection_reason?: string | null;
+      rejected_at?: string | null;
       created_at?: string;
       updated_at?: string;
     },

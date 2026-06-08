@@ -8,6 +8,7 @@ import type { Nomination, NominationStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const nominationStatusLabel: Record<NominationStatus, string> = {
+  draft: "待上传图片",
   pending: "待审核",
   approved: "已通过",
   rejected: "已拒绝",

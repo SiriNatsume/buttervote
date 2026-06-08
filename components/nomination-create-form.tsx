@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const nominationStatusLabel: Record<ExistingNomination["status"], string> = {
+  draft: "待上传图片",
   pending: "待审核",
   approved: "已通过",
   rejected: "已拒绝",
@@ -113,11 +114,13 @@ function DuplicateNominationHint({
 export function NominationCreateForm({
   contestId,
   descriptionMaxLength,
+  imageRequired,
   existingNominations,
   showNominatorInfo,
 }: {
   contestId: string;
   descriptionMaxLength?: number | null;
+  imageRequired?: boolean;
   existingNominations: ExistingNomination[];
   showNominatorInfo: boolean;
 }) {
@@ -131,6 +134,11 @@ export function NominationCreateForm({
     >
       <FormStatusFieldset className="space-y-5">
         <input type="hidden" name="contestId" value={contestId} />
+        {imageRequired ? (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50/80 px-4 py-3 text-sm leading-6 text-amber-900">
+            本活动要求提名图片。提交基础信息后，请继续上传图片；上传成功后才会进入待审核。
+          </div>
+        ) : null}
         <div className="space-y-2">
           <Label htmlFor="name">候选项名称</Label>
           <div className="relative">

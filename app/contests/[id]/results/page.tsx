@@ -12,7 +12,30 @@ import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transiti
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { tallyVotes } from "@/lib/tally";
+import { formatDateTime } from "@/lib/time";
 import type { LoveVoteAllocation, Vote } from "@/lib/types";
+
+type VoteProfile = {
+  id: string;
+  display_name: string | null;
+  email: string | null;
+  qq_nickname: string | null;
+  qq_user_id: string | null;
+  login_provider: string | null;
+};
+
+type AdminVoteRow = Vote & {
+  profile?: VoteProfile | null;
+};
+
+function voterDisplayName(profile?: VoteProfile | null) {
+  return (
+    profile?.display_name ||
+    profile?.qq_nickname ||
+    profile?.email ||
+    "未知用户"
+  );
+}
 
 export default async function ResultsPage({
   params,
@@ -58,6 +81,7 @@ export default async function ResultsPage({
     : { data: null };
 
   let votes: Vote[] = [];
+  let adminVoteRows: AdminVoteRow[] = [];
   let loveAllocations: Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">> =
     [];
 
@@ -75,7 +99,32 @@ export default async function ResultsPage({
             .eq("contest_id", id)
         : Promise.resolve({ data: [] }),
     ]);
-    votes = voteRows ?? [];
+    const voterIds = [
+      ...new Set(
+        (voteRows ?? [])
+          .map((vote) => vote.voter_id)
+          .filter((voterId): voterId is string => Boolean(voterId)),
+      ),
+    ];
+    const { data: voterProfiles } =
+      voterIds.length > 0
+        ? await dataClient
+            .from("profiles")
+            .select("id,display_name,email,qq_nickname,qq_user_id,login_provider")
+            .in("id", voterIds)
+        : { data: [] };
+    const profileById = new Map(
+      (voterProfiles ?? []).map((voterProfile) => [
+        voterProfile.id,
+        voterProfile,
+      ]),
+    );
+
+    adminVoteRows = (voteRows ?? []).map((vote) => ({
+      ...vote,
+      profile: vote.voter_id ? profileById.get(vote.voter_id) ?? null : null,
+    }));
+    votes = adminVoteRows;
     loveAllocations = loveRows ?? [];
   } else if (canReadAllVotes) {
     const [{ data: voteRows }, { data: loveRows }] = await Promise.all([
@@ -174,6 +223,51 @@ export default async function ResultsPage({
               暂无候选项或投票。候选项和有效投票产生后会显示结果。
             </div>
           )}
+
+          {isAdmin && adminVoteRows.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>投票记录</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {adminVoteRows.map((vote) => (
+                  <div
+                    key={vote.id}
+                    className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFFCF4]/80 p-4 text-sm"
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          {voterDisplayName(vote.profile)}
+                        </div>
+                        {vote.profile?.qq_nickname ? (
+                          <div className="text-muted-foreground">
+                            QQ 昵称：{vote.profile.qq_nickname}
+                          </div>
+                        ) : null}
+                        {vote.profile?.qq_user_id ? (
+                          <div className="text-muted-foreground">
+                            QQ：{vote.profile.qq_user_id}
+                          </div>
+                        ) : null}
+                        {vote.profile?.email ? (
+                          <div className="text-muted-foreground">
+                            邮箱：{vote.profile.email}
+                          </div>
+                        ) : null}
+                        <div className="text-xs text-muted-foreground">
+                          用户 ID：{vote.profile?.id ?? vote.voter_id ?? "未知"}
+                        </div>
+                      </div>
+                      <div className="text-muted-foreground">
+                        投票时间：{formatDateTime(vote.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       )}
 

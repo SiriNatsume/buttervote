@@ -11,6 +11,7 @@ export type TallyResult = {
   normalScore: number;
   loveScore: number;
   loveVoteCount: number;
+  lastVoteAt: string | null;
   rank: number;
 };
 
@@ -43,6 +44,9 @@ export function tallyVotes(params: {
   const loveVoteCounts = new Map(
     candidates.map((candidate) => [candidate.id, 0]),
   );
+  const lastVoteAtByCandidate = new Map(
+    candidates.map((candidate) => [candidate.id, null as string | null]),
+  );
   const loveByVote = new Map<string, Set<string>>();
   const effectiveLoveVoteWeight =
     typeof loveVoteWeight === "number" && Number.isFinite(loveVoteWeight)
@@ -61,8 +65,21 @@ export function tallyVotes(params: {
     }
   }
 
-  function addPoints(voteId: string, candidateId: string, points: number) {
+  function recordLastVoteAt(candidateId: string, votedAt: string) {
+    const current = lastVoteAtByCandidate.get(candidateId);
+    if (!current || votedAt > current) {
+      lastVoteAtByCandidate.set(candidateId, votedAt);
+    }
+  }
+
+  function addPoints(
+    voteId: string,
+    candidateId: string,
+    points: number,
+    votedAt: string,
+  ) {
     const isLoveVote = loveByVote.get(voteId)?.has(candidateId) ?? false;
+    recordLastVoteAt(candidateId, votedAt);
 
     if (isLoveVote && effectiveLoveVoteWeight !== null) {
       loveScores.set(
@@ -87,7 +104,7 @@ export function tallyVotes(params: {
     if (voteType === "single") {
       const candidateId = vote.payload.candidateId;
       if (typeof candidateId === "string" && candidateIds.has(candidateId)) {
-        addPoints(vote.id, candidateId, 1);
+        addPoints(vote.id, candidateId, 1, vote.created_at);
       }
     }
 
@@ -96,7 +113,7 @@ export function tallyVotes(params: {
       if (Array.isArray(candidateIdsPayload)) {
         for (const candidateId of candidateIdsPayload) {
           if (typeof candidateId === "string" && candidateIds.has(candidateId)) {
-            addPoints(vote.id, candidateId, 1);
+            addPoints(vote.id, candidateId, 1, vote.created_at);
           }
         }
       }
@@ -108,7 +125,7 @@ export function tallyVotes(params: {
         ranking.slice(0, 3).forEach((candidateId, index) => {
           const points = [3, 2, 1][index] ?? 0;
           if (typeof candidateId === "string" && candidateIds.has(candidateId)) {
-            addPoints(vote.id, candidateId, points);
+            addPoints(vote.id, candidateId, points, vote.created_at);
           }
         });
       }
@@ -126,12 +143,31 @@ export function tallyVotes(params: {
       normalScore: normalScores.get(candidate.id) ?? 0,
       loveScore: loveScores.get(candidate.id) ?? 0,
       loveVoteCount: loveVoteCounts.get(candidate.id) ?? 0,
+      lastVoteAt: lastVoteAtByCandidate.get(candidate.id) ?? null,
       score:
         (normalScores.get(candidate.id) ?? 0) +
         (loveScores.get(candidate.id) ?? 0),
       rank: 0,
     }))
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "zh-Hans"));
+    .sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+
+      if (a.lastVoteAt && b.lastVoteAt) {
+        return a.lastVoteAt.localeCompare(b.lastVoteAt);
+      }
+
+      if (a.lastVoteAt) {
+        return -1;
+      }
+
+      if (b.lastVoteAt) {
+        return 1;
+      }
+
+      return a.name.localeCompare(b.name, "zh-Hans");
+    });
 
   let lastScore: number | null = null;
   let currentRank = 0;

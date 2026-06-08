@@ -25,6 +25,7 @@ const contestSchema = z.object({
   vote_type: z.enum(["single", "multiple", "ranked"]),
   max_choices: z.coerce.number().int().min(1),
   require_exact_choices: z.boolean(),
+  nomination_image_required: z.boolean(),
   group_id: z.string().uuid().nullable(),
   show_candidate_image: z.boolean(),
   show_candidate_description: z.boolean(),
@@ -42,11 +43,13 @@ const statusSchema = z.object({
 const reviewSchema = z.object({
   nominationId: z.string().uuid(),
   reviewAction: z.enum(["approve", "reject"]),
+  rejectionReason: z.string().trim().max(500, "拒绝理由最多 500 字").optional(),
 });
 
 const batchReviewSchema = z.object({
   nominationIds: z.array(z.string().uuid()).min(1, "请至少选择一条提名"),
   action: z.enum(["approve", "reject"]),
+  rejectionReason: z.string().trim().max(500, "拒绝理由最多 500 字").optional(),
 });
 
 const groupSchema = z.object({
@@ -460,6 +463,9 @@ export async function createContestAction(formData: FormData) {
     vote_type: formData.get("vote_type"),
     max_choices: formData.get("max_choices"),
     require_exact_choices: checkboxFromForm(formData.get("require_exact_choices")),
+    nomination_image_required: checkboxFromForm(
+      formData.get("nomination_image_required"),
+    ),
     group_id: optionalUuidFromForm(formData.get("group_id")),
     show_candidate_image: checkboxFromForm(formData.get("show_candidate_image")),
     show_candidate_description: checkboxFromForm(
@@ -486,6 +492,7 @@ export async function createContestAction(formData: FormData) {
       vote_type: parsed.data.vote_type,
       max_choices: parsed.data.max_choices,
       require_exact_choices: parsed.data.require_exact_choices,
+      nomination_image_required: parsed.data.nomination_image_required,
       group_id: parsed.data.group_id,
       show_candidate_image: parsed.data.show_candidate_image,
       show_candidate_description: parsed.data.show_candidate_description,
@@ -521,6 +528,9 @@ export async function updateContestAction(formData: FormData) {
     vote_type: formData.get("vote_type"),
     max_choices: formData.get("max_choices"),
     require_exact_choices: checkboxFromForm(formData.get("require_exact_choices")),
+    nomination_image_required: checkboxFromForm(
+      formData.get("nomination_image_required"),
+    ),
     group_id: optionalUuidFromForm(formData.get("group_id")),
     show_candidate_image: checkboxFromForm(formData.get("show_candidate_image")),
     show_candidate_description: checkboxFromForm(
@@ -558,6 +568,7 @@ export async function updateContestAction(formData: FormData) {
       vote_type: updates.vote_type,
       max_choices: updates.max_choices,
       require_exact_choices: updates.require_exact_choices,
+      nomination_image_required: updates.nomination_image_required,
       group_id: updates.group_id,
       show_candidate_image: updates.show_candidate_image,
       show_candidate_description: updates.show_candidate_description,
@@ -1178,6 +1189,7 @@ export async function reviewNominationAction(formData: FormData) {
   const parsed = reviewSchema.safeParse({
     nominationId: formData.get("nominationId"),
     reviewAction: formData.get("reviewAction"),
+    rejectionReason: optionalTrimmedText(formData.get("rejectionReason")),
   });
 
   if (!parsed.success) {
@@ -1187,7 +1199,7 @@ export async function reviewNominationAction(formData: FormData) {
   const supabase = await createServerDataClient();
   const { data: nomination, error: nominationError } = await supabase
     .from("nominations")
-    .select("id,contest_id,name,description,status")
+    .select("id,contest_id,submitter_id,name,description,status,image_path")
     .eq("id", parsed.data.nominationId)
     .maybeSingle();
 
@@ -1200,9 +1212,19 @@ export async function reviewNominationAction(formData: FormData) {
   }
 
   if (parsed.data.reviewAction === "approve") {
+    const { data: contestForReview } = await supabase
+      .from("contests")
+      .select("candidate_description_max_length,nomination_image_required")
+      .eq("id", nomination.contest_id)
+      .maybeSingle();
+
+    if (contestForReview?.nomination_image_required === true && !nomination.image_path) {
+      return actionFailure("该活动要求提名图片，请先补充图片后再通过。");
+    }
+
     const descriptionLimitError = getDescriptionLimitError(
       nomination.description ?? undefined,
-      await getContestDescriptionMaxLength(supabase, nomination.contest_id),
+      contestForReview?.candidate_description_max_length ?? null,
     );
 
     if (descriptionLimitError) {
@@ -1220,21 +1242,33 @@ export async function reviewNominationAction(formData: FormData) {
     if (reviewError) {
       return actionFailure(friendlyReviewWriteError(reviewError));
     }
-  } else {
-    const { error: reviewError } = await supabase.rpc(
-      "review_nominations_atomic",
-      {
-        p_nomination_ids: [nomination.id],
-        p_action: "reject",
-      },
-    );
 
-    if (reviewError) {
-      return actionFailure(friendlyReviewWriteError(reviewError));
+    await supabase
+      .from("nominations")
+      .update({ rejection_reason: null, rejected_at: null })
+      .eq("id", nomination.id);
+  } else {
+    const { data: rejectedNomination, error: reviewError } = await supabase
+      .from("nominations")
+      .update({
+        status: "rejected",
+        rejection_reason: parsed.data.rejectionReason ?? null,
+        rejected_at: new Date().toISOString(),
+      })
+      .eq("id", nomination.id)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+
+    if (reviewError || !rejectedNomination) {
+      return actionFailure(
+        reviewError ? friendlyReviewWriteError(reviewError) : "该提名已经处理过。",
+      );
     }
   }
 
   revalidatePath("/admin");
+  revalidatePath("/me/nominations");
   revalidateContest(nomination.contest_id);
   return actionSuccess(
     parsed.data.reviewAction === "approve" ? "提名已通过" : "提名已拒绝",
@@ -1256,7 +1290,7 @@ export async function batchReviewNominations(input: unknown) {
   const supabase = await createServerDataClient();
   const { data: nominations, error: nominationError } = await supabase
     .from("nominations")
-    .select("id,contest_id,name,description,status")
+    .select("id,contest_id,name,description,status,image_path")
     .in("id", nominationIds);
 
   if (nominationError) {
@@ -1278,7 +1312,7 @@ export async function batchReviewNominations(input: unknown) {
   if (parsed.data.action === "approve") {
     const { data: contests, error: contestsError } = await supabase
       .from("contests")
-      .select("id,candidate_description_max_length")
+      .select("id,candidate_description_max_length,nomination_image_required")
       .in("id", contestIds);
 
     if (contestsError) {
@@ -1291,8 +1325,23 @@ export async function batchReviewNominations(input: unknown) {
         contest.candidate_description_max_length,
       ]),
     );
+    const imageRequiredByContest = new Map(
+      (contests ?? []).map((contest) => [
+        contest.id,
+        contest.nomination_image_required === true,
+      ]),
+    );
 
     for (const nomination of nominations ?? []) {
+      if (
+        imageRequiredByContest.get(nomination.contest_id) === true &&
+        !nomination.image_path
+      ) {
+        return actionFailure(
+          `${nomination.name}：该活动要求提名图片，请先补充图片后再通过。`,
+        );
+      }
+
       const descriptionLimitError = getDescriptionLimitError(
         nomination.description ?? undefined,
         descriptionLimitByContest.get(nomination.contest_id) ?? null,
@@ -1314,21 +1363,34 @@ export async function batchReviewNominations(input: unknown) {
     if (reviewError) {
       return actionFailure(friendlyReviewWriteError(reviewError));
     }
+
+    await supabase
+      .from("nominations")
+      .update({ rejection_reason: null, rejected_at: null })
+      .in("id", nominationIds);
   } else {
-    const { error: reviewError } = await supabase.rpc(
-      "review_nominations_atomic",
-      {
-        p_nomination_ids: nominationIds,
-        p_action: "reject",
-      },
-    );
+    const { data: rejectedNominations, error: reviewError } = await supabase
+      .from("nominations")
+      .update({
+        status: "rejected",
+        rejection_reason: parsed.data.rejectionReason ?? null,
+        rejected_at: new Date().toISOString(),
+      })
+      .in("id", nominationIds)
+      .eq("status", "pending")
+      .select("id");
 
     if (reviewError) {
       return actionFailure(friendlyReviewWriteError(reviewError));
     }
+
+    if ((rejectedNominations ?? []).length !== nominationIds.length) {
+      return actionFailure("部分提名已经处理过，请刷新后再试。");
+    }
   }
 
   revalidatePath("/admin");
+  revalidatePath("/me/nominations");
   for (const contestId of contestIds) {
     revalidateContest(contestId);
   }

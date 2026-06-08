@@ -20,6 +20,7 @@ type MobileMenuProfile = {
   role: string;
   displayName: string;
   avatarUrl: string | null;
+  hasRejectedNominations: boolean;
 } | null;
 
 export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
@@ -42,7 +43,12 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
     >
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-[#EED8AA]/80 bg-[#FFF8E8] px-3 py-2 text-sm font-medium text-[#6A3E21] shadow-sm transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
         <Menu className="size-4" />
-        菜单
+        <span className="relative">
+          菜单
+          {profile?.hasRejectedNominations ? (
+            <span className="absolute -right-2 -top-1 size-2 rounded-full bg-red-500" />
+          ) : null}
+        </span>
       </summary>
       <div className="absolute right-0 top-full z-50 mt-3 w-[min(86vw,20rem)] rounded-2xl border border-[#EED8AA]/80 bg-[#FFFCF4] p-3 shadow-xl">
         {profile ? (
@@ -74,9 +80,12 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
           </Button>
           {profile ? (
             <Button asChild variant="ghost" className="justify-start">
-              <Link href="/me/nominations" onClick={close}>
+              <Link href="/me/nominations" onClick={close} className="relative">
                 <UserRound className="size-4" />
                 我的提名
+                {profile.hasRejectedNominations ? (
+                  <span className="ml-auto size-2 rounded-full bg-red-500" />
+                ) : null}
               </Link>
             </Button>
           ) : null}

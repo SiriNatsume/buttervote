@@ -80,7 +80,7 @@ export async function createNominationAction(formData: FormData) {
   const { data: contest } = await supabase
     .from("contests")
     .select(
-      "id,status,group_id,max_nominations_per_user,candidate_description_max_length",
+      "id,status,group_id,max_nominations_per_user,candidate_description_max_length,nomination_image_required",
     )
     .eq("id", parsed.data.contestId)
     .maybeSingle();
@@ -124,7 +124,12 @@ export async function createNominationAction(formData: FormData) {
     }
   }
 
-  const nominationStatus = isAdminNomination ? "approved" : "pending";
+  const requiresImage = contest.nomination_image_required === true;
+  const nominationStatus = requiresImage
+    ? "draft"
+    : isAdminNomination
+      ? "approved"
+      : "pending";
   const { data: nomination, error } = await supabase
     .from("nominations")
     .insert({
@@ -142,7 +147,7 @@ export async function createNominationAction(formData: FormData) {
     return { ok: false, error: error?.message ?? "提交提名失败，请稍后再试。" };
   }
 
-  if (isAdminNomination) {
+  if (nominationStatus === "approved") {
     const { error: candidateError } = await supabase.from("candidates").insert({
       contest_id: parsed.data.contestId,
       nomination_id: nomination.id,
@@ -159,10 +164,13 @@ export async function createNominationAction(formData: FormData) {
   revalidatePath(`/contests/${parsed.data.contestId}`);
   revalidatePath(`/contests/${parsed.data.contestId}/vote`);
   revalidatePath(`/contests/${parsed.data.contestId}/results`);
+  revalidatePath("/me/nominations");
   revalidatePath("/admin");
   return {
     ok: true,
-    message: "提名已提交",
+    message: requiresImage
+      ? "提名信息已保存，请上传图片后提交审核"
+      : "提名已提交",
     redirectTo: `/contests/${parsed.data.contestId}/nominate?nominationId=${nomination.id}`,
   };
 }
@@ -191,7 +199,9 @@ export async function updateNominationImageAction(
   const supabase = await createServerDataClient();
   const { data: nomination, error: nominationError } = await supabase
     .from("nominations")
-    .select("id,contest_id,submitter_id,status")
+    .select(
+      "id,contest_id,submitter_id,name,description,status,nominator_display_name,nominator_note",
+    )
     .eq("id", nominationIdParsed.data)
     .maybeSingle();
 
@@ -206,18 +216,38 @@ export async function updateNominationImageAction(
     return { ok: false, error: "你不能修改这个提名。" };
   }
 
-  if (isOwner && !isAdmin && !["pending", "rejected"].includes(nomination.status)) {
+  if (
+    isOwner &&
+    !isAdmin &&
+    !["draft", "pending", "rejected"].includes(nomination.status)
+  ) {
     return { ok: false, error: "已通过审核的提名不能由用户修改图片。" };
   }
 
-  const accessError = await getContestNominationAccessError(
-    nomination.contest_id,
-    user,
-  );
+  const { data: contest } = await supabase
+    .from("contests")
+    .select("id,group_id,status,nomination_image_required")
+    .eq("id", nomination.contest_id)
+    .maybeSingle();
+
+  if (!contest) {
+    return { ok: false, error: "活动不存在或暂时无法读取，请稍后再试。" };
+  }
+
+  const accessError = await getGroupNominationAccessError(contest.group_id, user);
   if (accessError) {
     return { ok: false, error: accessError };
   }
 
+  const shouldSubmitDraft =
+    nomination.status === "draft" && contest.nomination_image_required === true;
+  const statusUpdate = shouldSubmitDraft
+    ? {
+        status: "pending" as const,
+        rejection_reason: null,
+        rejected_at: null,
+      }
+    : {};
   const imageUpdate = {
     image_path: imageMetaParsed.data.imagePath,
     image_width: imageMetaParsed.data.imageWidth,
@@ -227,7 +257,10 @@ export async function updateNominationImageAction(
 
   const { error } = await supabase
     .from("nominations")
-    .update(imageUpdate)
+    .update({
+      ...imageUpdate,
+      ...statusUpdate,
+    })
     .eq("id", nomination.id);
 
   if (error) {
@@ -246,6 +279,7 @@ export async function updateNominationImageAction(
   }
 
   revalidatePath("/admin");
+  revalidatePath("/me/nominations");
   revalidatePath(`/contests/${nomination.contest_id}`);
   revalidatePath(`/contests/${nomination.contest_id}/nominate`);
   revalidatePath(`/contests/${nomination.contest_id}/vote`);
@@ -384,7 +418,7 @@ export async function updateMyNomination(formData: FormData) {
   const supabase = await createServerDataClient();
   const { data: nomination, error: nominationError } = await supabase
     .from("nominations")
-    .select("id,contest_id,submitter_id,status")
+    .select("id,contest_id,submitter_id,status,image_path")
     .eq("id", parsed.data.nominationId)
     .maybeSingle();
 
@@ -395,13 +429,13 @@ export async function updateMyNomination(formData: FormData) {
     };
   }
 
-  if (!["pending", "rejected"].includes(nomination.status)) {
+  if (!["draft", "pending", "rejected"].includes(nomination.status)) {
     return { ok: false, error: "已通过审核的提名不能再修改。" };
   }
 
   const { data: contest } = await supabase
     .from("contests")
-    .select("group_id,candidate_description_max_length")
+    .select("group_id,candidate_description_max_length,nomination_image_required")
     .eq("id", nomination.contest_id)
     .maybeSingle();
 
@@ -423,17 +457,23 @@ export async function updateMyNomination(formData: FormData) {
     return { ok: false, error: descriptionLimitError };
   }
 
+  const nextStatus =
+    contest.nomination_image_required === true && !nomination.image_path
+      ? "draft"
+      : "pending";
   const { error } = await supabase
     .from("nominations")
     .update({
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       nominator_display_name: parsed.data.nominator_display_name ?? null,
-      status: "pending",
+      status: nextStatus,
+      rejection_reason: null,
+      rejected_at: null,
     })
     .eq("id", nomination.id)
     .eq("submitter_id", user.id)
-    .in("status", ["pending", "rejected"]);
+    .in("status", ["draft", "pending", "rejected"]);
 
   if (error) {
     return { ok: false, error: error.message };
@@ -443,5 +483,11 @@ export async function updateMyNomination(formData: FormData) {
   revalidatePath(`/contests/${nomination.contest_id}`);
   revalidatePath(`/contests/${nomination.contest_id}/nominate`);
   revalidatePath("/admin");
-  return { ok: true, message: "已保存并重新提交" };
+  return {
+    ok: true,
+    message:
+      nextStatus === "draft"
+        ? "已保存，请上传图片后提交审核"
+        : "已保存并重新提交",
+  };
 }

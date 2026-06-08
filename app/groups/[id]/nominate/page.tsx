@@ -38,7 +38,7 @@ export default async function GroupNominatePage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,max_nominations_per_user,created_at",
+        "id,title,description,status,max_nominations_per_user,nomination_image_required,created_at",
       )
       .eq("group_id", id)
       .neq("status", "draft")
@@ -92,10 +92,12 @@ export default async function GroupNominatePage({
   const ownNominationCountByContest = new Map<string, number>();
 
   for (const nomination of nominations ?? []) {
-    nominationCountByContest.set(
-      nomination.contest_id,
-      (nominationCountByContest.get(nomination.contest_id) ?? 0) + 1,
-    );
+    if (nomination.status !== "draft") {
+      nominationCountByContest.set(
+        nomination.contest_id,
+        (nominationCountByContest.get(nomination.contest_id) ?? 0) + 1,
+      );
+    }
 
     if (
       profile &&

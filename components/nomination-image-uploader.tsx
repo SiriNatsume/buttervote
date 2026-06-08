@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateNominationImageAction } from "@/lib/actions/nomination-actions";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export function NominationImageUploader({
   showActions?: boolean;
   disabled?: boolean;
 }) {
+  const router = useRouter();
   const [currentValue, setCurrentValue] = useState<ImageValue | undefined>(
     value,
   );
@@ -54,11 +56,12 @@ export function NominationImageUploader({
             imagePath: result.imagePath,
             imageWidth: result.imageWidth,
             imageHeight: result.imageHeight,
-          imageSize: result.imageSize,
-        });
-        setUploaded(true);
-      }}
-    />
+            imageSize: result.imageSize,
+          });
+          setUploaded(true);
+          router.refresh();
+        }}
+      />
       {showActions ? (
         <div className="flex flex-wrap gap-2">
           <Button asChild>

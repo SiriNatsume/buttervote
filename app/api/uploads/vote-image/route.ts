@@ -51,7 +51,7 @@ async function canUploadPath(storagePath: string, profileId: string, isAdmin: bo
 
   return (
     nomination.submitter_id === profileId &&
-    ["pending", "rejected"].includes(nomination.status)
+    ["draft", "pending", "rejected"].includes(nomination.status)
   );
 }
 

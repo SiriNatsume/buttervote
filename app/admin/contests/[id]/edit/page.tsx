@@ -62,7 +62,7 @@ export default async function EditContestPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,max_choices,require_exact_choices,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,image_width,image_height,image_size,created_by,created_at,updated_at",
+        "id,title,description,status,vote_type,max_choices,require_exact_choices,nomination_image_required,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,image_width,image_height,image_size,created_by,created_at,updated_at",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -297,6 +297,18 @@ export default async function EditContestPage({
                     defaultChecked={contest.show_candidate_description !== false}
                   />
                   展示候选项简介
+                </Label>
+                <Label className="flex items-center gap-3 sm:col-span-2">
+                  <Checkbox
+                    name="nomination_image_required"
+                    defaultChecked={contest.nomination_image_required === true}
+                  />
+                  <span>
+                    提名必须上传图片
+                    <span className="block text-xs leading-5 text-muted-foreground">
+                      勾选后，用户上传图片后才会进入待审核。
+                    </span>
+                  </span>
                 </Label>
               </div>
               <FormSubmitButton className="w-full sm:w-auto" loadingText="保存中...">
