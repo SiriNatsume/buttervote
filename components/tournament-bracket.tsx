@@ -1,4 +1,4 @@
-import { Trophy } from "lucide-react";
+import { Crown, Trophy } from "lucide-react";
 import { statusLabel } from "@/lib/contest-rules";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import type {
@@ -8,6 +8,7 @@ import type {
 } from "@/lib/tournament-bracket";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { TournamentBracketShareButton } from "@/components/tournament-bracket-share-button";
 
 function ParticipantRow({
   participant,
@@ -92,6 +93,58 @@ function matchByRoundSlot(bracket: TournamentBracketData) {
   return matches;
 }
 
+function championFromFinal(match: TournamentBracketMatch | null) {
+  if (!match?.resultVisible || !match.winnerEntryId) {
+    return null;
+  }
+
+  return (
+    [match.left, match.right].find(
+      (participant) => participant?.entryId === match.winnerEntryId,
+    ) ?? null
+  );
+}
+
+function ChampionCard({
+  champion,
+  tournamentName,
+}: {
+  champion: TournamentBracketParticipant;
+  tournamentName: string;
+}) {
+  const imageUrl = getPublicImageUrl(champion.imagePath);
+
+  return (
+    <div className="rounded-2xl border border-[#F0C45C] bg-[#FFF4D8] px-4 pb-4 pt-6 text-center shadow-[0_14px_36px_rgba(185,133,76,0.22)]">
+      <div className="mx-auto w-fit">
+        <div className="relative">
+          <Crown
+            className="absolute -top-6 left-1/2 z-10 size-11 -translate-x-1/2 fill-[#F0C45C] text-[#B9854C] drop-shadow"
+            aria-hidden="true"
+          />
+          <div className="flex size-28 items-center justify-center overflow-hidden rounded-2xl border-4 border-[#F0C45C] bg-white shadow-sm">
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt={`${champion.name} 图片`}
+                className="size-full object-cover"
+              />
+            ) : (
+              <Trophy className="size-10 text-[#B9854C]" aria-hidden="true" />
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 break-words text-xl font-bold leading-6 text-[#4A2B1B]">
+        {champion.name}
+      </div>
+      <div className="mt-2 break-words text-sm font-bold leading-5 text-[#B9854C]">
+        {tournamentName}冠军
+      </div>
+    </div>
+  );
+}
+
 function TopologyMatchNode({
   round,
   slot,
@@ -163,6 +216,8 @@ function MatchColumn({
   title,
   matches,
   center = false,
+  champion = null,
+  tournamentName,
 }: {
   title: string;
   matches: Array<{
@@ -171,6 +226,8 @@ function MatchColumn({
     match: TournamentBracketMatch | null;
   }>;
   center?: boolean;
+  champion?: TournamentBracketParticipant | null;
+  tournamentName?: string;
 }) {
   return (
     <div className="flex min-w-0 flex-col justify-around gap-4">
@@ -178,6 +235,9 @@ function MatchColumn({
         {title}
       </div>
       <div className="flex flex-1 flex-col justify-around gap-4">
+        {champion && tournamentName ? (
+          <ChampionCard champion={champion} tournamentName={tournamentName} />
+        ) : null}
         {matches.map((item) => (
           <TopologyMatchNode
             key={`${item.round}-${item.slot}`}
@@ -251,6 +311,7 @@ export function TournamentBracket({
   }
 
   const matches = matchByRoundSlot(bracket);
+  const champion = championFromFinal(matches.get("final:1") ?? null);
   const leftRoundOf16 = [1, 2, 3, 4].map((slot) => ({
     round: "round_of_16",
     slot,
@@ -313,7 +374,10 @@ export function TournamentBracket({
             {bracket.tournament.name}
           </h2>
         </div>
-        <Badge variant="secondary">{bracket.tournament.status}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <TournamentBracketShareButton bracket={bracket} />
+          <Badge variant="secondary">{bracket.tournament.status}</Badge>
+        </div>
       </div>
 
       <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-[#EED8AA]/60 bg-white/35">
@@ -344,6 +408,8 @@ export function TournamentBracket({
               title="中心赛程"
               matches={finalMatches}
               center
+              champion={champion}
+              tournamentName={bracket.tournament.name}
             />
             <StraightConnector />
             <MatchColumn
