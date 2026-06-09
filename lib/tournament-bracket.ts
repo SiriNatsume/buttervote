@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canViewResults } from "@/lib/contest-rules";
+import { createServiceClient } from "@/lib/supabase/service";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
 import type {
@@ -46,6 +47,10 @@ type BracketCandidate = Pick<
 >;
 
 type PublicVoteRow = Pick<Vote, "id" | "contest_id" | "payload" | "created_at">;
+type PublicLoveVoteRow = Pick<
+  LoveVoteAllocation,
+  "vote_id" | "candidate_id" | "contest_id"
+>;
 
 type BracketTournament = Pick<
   Tournament,
@@ -237,6 +242,12 @@ async function tallyVisibleContestScores(
 ) {
   const scores = new Map<string, Map<string, number>>();
   const visibleContests = contests.filter((contest) => canViewResults(contest, null));
+  const visibleContestIds = visibleContests.map((contest) => contest.id);
+
+  if (visibleContestIds.length === 0) {
+    return scores;
+  }
+
   const groupIds = [
     ...new Set(
       visibleContests
@@ -254,6 +265,88 @@ async function tallyVisibleContestScores(
   const loveVoteWeightByGroup = new Map(
     (groups ?? []).map((group) => [group.id, Number(group.love_vote_weight)]),
   );
+  const serviceSupabase = createServiceClient();
+
+  if (serviceSupabase) {
+    const [
+      { data: candidates, error: candidatesError },
+      { data: voteRows, error: voteRowsError },
+      { data: loveRows, error: loveRowsError },
+    ] = await Promise.all([
+      serviceSupabase
+        .from("candidates")
+        .select(
+          "id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at",
+        )
+        .in("contest_id", visibleContestIds)
+        .eq("is_active", true)
+        .order("created_at", { ascending: true }),
+      fetchAllRows<PublicVoteRow>(() =>
+        serviceSupabase
+          .from("votes")
+          .select("id,contest_id,payload,created_at")
+          .in("contest_id", visibleContestIds)
+          .order("created_at", { ascending: true }),
+      ),
+      fetchAllRows<PublicLoveVoteRow>(() =>
+        serviceSupabase
+          .from("love_vote_allocations")
+          .select("vote_id,candidate_id,contest_id")
+          .in("contest_id", visibleContestIds),
+      ),
+    ]);
+
+    if (candidatesError || voteRowsError || loveRowsError) {
+      console.error(
+        "Failed to load tournament bracket scores.",
+        candidatesError?.message ?? voteRowsError?.message ?? loveRowsError?.message,
+      );
+      return scores;
+    }
+
+    const candidatesByContest = new Map<string, BracketCandidate[]>();
+    for (const candidate of (candidates ?? []) as BracketCandidate[]) {
+      const current = candidatesByContest.get(candidate.contest_id) ?? [];
+      current.push(candidate);
+      candidatesByContest.set(candidate.contest_id, current);
+    }
+
+    const votesByContest = new Map<string, PublicVoteRow[]>();
+    for (const vote of (voteRows ?? []) as PublicVoteRow[]) {
+      const current = votesByContest.get(vote.contest_id) ?? [];
+      current.push(vote);
+      votesByContest.set(vote.contest_id, current);
+    }
+
+    const loveRowsByContest = new Map<string, PublicLoveVoteRow[]>();
+    for (const loveRow of (loveRows ?? []) as PublicLoveVoteRow[]) {
+      const current = loveRowsByContest.get(loveRow.contest_id) ?? [];
+      current.push(loveRow);
+      loveRowsByContest.set(loveRow.contest_id, current);
+    }
+
+    for (const contest of visibleContests) {
+      scores.set(
+        contest.id,
+        new Map(
+          tallyVotes({
+            voteType: contest.vote_type,
+            candidates: candidatesByContest.get(contest.id) ?? [],
+            votes: (votesByContest.get(contest.id) ?? []).map((vote) => ({
+              ...vote,
+              voter_id: null,
+            })),
+            loveVoteWeight: contest.group_id
+              ? loveVoteWeightByGroup.get(contest.group_id) ?? null
+              : null,
+            loveAllocations: loveRowsByContest.get(contest.id) ?? [],
+          }).map((result) => [result.candidateId, result.score]),
+        ),
+      );
+    }
+
+    return scores;
+  }
 
   await Promise.all(
     visibleContests.map(async (contest) => {
