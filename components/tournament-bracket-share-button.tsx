@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type MouseEvent } from "react";
+import html2canvas from "html2canvas";
 import { Download, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import logo from "@/img/网站logo.png";
@@ -26,65 +27,6 @@ const MAX_OUTPUT_WIDTH = 3600;
 const CAPTURE_SCALE = 1.5;
 const HEADER_HEIGHT = 112;
 const FOOTER_HEIGHT = 112;
-const STYLE_PROPERTIES = [
-  "align-items",
-  "background",
-  "background-color",
-  "border",
-  "border-bottom",
-  "border-left",
-  "border-radius",
-  "border-right",
-  "border-top",
-  "box-shadow",
-  "box-sizing",
-  "color",
-  "display",
-  "fill",
-  "flex",
-  "flex-direction",
-  "flex-wrap",
-  "font",
-  "font-family",
-  "font-size",
-  "font-style",
-  "font-weight",
-  "gap",
-  "grid-column",
-  "grid-row",
-  "grid-template-columns",
-  "grid-template-rows",
-  "height",
-  "inset",
-  "justify-content",
-  "left",
-  "letter-spacing",
-  "line-height",
-  "margin",
-  "max-height",
-  "max-width",
-  "min-height",
-  "min-width",
-  "object-fit",
-  "opacity",
-  "overflow",
-  "overflow-wrap",
-  "padding",
-  "position",
-  "right",
-  "stroke",
-  "stroke-linecap",
-  "stroke-linejoin",
-  "stroke-width",
-  "text-align",
-  "text-overflow",
-  "top",
-  "transform",
-  "vertical-align",
-  "white-space",
-  "width",
-  "word-break",
-] as const;
 
 function imageSource(src: string | { src: string }) {
   return typeof src === "string" ? src : src.src;
@@ -194,6 +136,14 @@ async function fetchImageAsDataUrl(src: string) {
   return blobToDataUrl(await response.blob());
 }
 
+async function fetchImageAsDataUrlOrNull(src: string) {
+  try {
+    return await fetchImageAsDataUrl(new URL(src, window.location.href).href);
+  } catch {
+    return null;
+  }
+}
+
 function loadImage(src: string) {
   return new Promise<HTMLImageElement | null>((resolve) => {
     const image = new Image();
@@ -203,6 +153,11 @@ function loadImage(src: string) {
     image.onerror = () => resolve(null);
     image.src = src;
   });
+}
+
+async function loadCleanImage(src: string) {
+  const dataUrl = await fetchImageAsDataUrlOrNull(src);
+  return dataUrl ? loadImage(dataUrl) : null;
 }
 
 async function inlineImages(root: HTMLElement) {
@@ -218,11 +173,28 @@ async function inlineImages(root: HTMLElement) {
         return;
       }
 
-      try {
-        image.src = await fetchImageAsDataUrl(new URL(src, window.location.href).href);
-      } catch {
-        image.src = TRANSPARENT_PIXEL;
+      image.src = (await fetchImageAsDataUrlOrNull(src)) ?? TRANSPARENT_PIXEL;
+    }),
+  );
+}
+
+async function waitForImages(root: HTMLElement) {
+  const images = Array.from(root.querySelectorAll("img"));
+  await Promise.all(
+    images.map(async (image) => {
+      if (image.complete) {
+        return;
       }
+
+      if (typeof image.decode === "function") {
+        await image.decode().catch(() => undefined);
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        image.onload = () => resolve();
+        image.onerror = () => resolve();
+      });
     }),
   );
 }
@@ -254,22 +226,6 @@ function expandCloneForFullBracket(clone: HTMLElement, targetWidth: number) {
   }
 }
 
-function inlineComputedStyles(root: HTMLElement) {
-  const elements = [root, ...Array.from(root.querySelectorAll<HTMLElement | SVGElement>("*"))];
-
-  for (const element of elements) {
-    const computed = window.getComputedStyle(element);
-    let cssText = "";
-
-    for (const property of STYLE_PROPERTIES) {
-      cssText += `${property}:${computed.getPropertyValue(property)};`;
-    }
-
-    const inlineStyle = element.getAttribute("style");
-    element.setAttribute("style", inlineStyle ? `${cssText}${inlineStyle}` : cssText);
-  }
-}
-
 async function elementToCanvas(root: HTMLElement, tournamentName: string) {
   const grid = root.querySelector<HTMLElement>("[data-bracket-share-grid]");
   const rootWidth = Math.ceil(root.getBoundingClientRect().width);
@@ -291,30 +247,28 @@ async function elementToCanvas(root: HTMLElement, tournamentName: string) {
   try {
     await document.fonts?.ready;
     await inlineImages(clone);
+    await waitForImages(clone);
     await new Promise((resolve) => requestAnimationFrame(resolve));
-
-    inlineComputedStyles(clone);
 
     const width = Math.ceil(clone.scrollWidth);
     const height = Math.ceil(clone.scrollHeight);
-    const serialized = new XMLSerializer().serializeToString(clone);
-    const svg = [
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
-      `<foreignObject width="100%" height="100%">${serialized}</foreignObject>`,
-      "</svg>",
-    ].join("");
-    const svgUrl = URL.createObjectURL(
-      new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
-    );
-    const svgImage = await loadImage(svgUrl);
-    URL.revokeObjectURL(svgUrl);
-
-    if (!svgImage) {
-      throw new Error("对阵图截图生成失败。");
-    }
+    const scale = Math.min(CAPTURE_SCALE, MAX_OUTPUT_WIDTH / width);
+    const contentCanvas = await html2canvas(clone, {
+      allowTaint: false,
+      backgroundColor: "#FFF8E8",
+      height,
+      ignoreElements: (element) =>
+        element instanceof HTMLElement &&
+        element.hasAttribute("data-bracket-share-control"),
+      logging: false,
+      scale,
+      useCORS: true,
+      width,
+      windowHeight: height,
+      windowWidth: width,
+    });
 
     const canvasHeight = height + HEADER_HEIGHT + FOOTER_HEIGHT;
-    const scale = Math.min(CAPTURE_SCALE, MAX_OUTPUT_WIDTH / width);
     const canvas = document.createElement("canvas");
     canvas.width = Math.ceil(width * scale);
     canvas.height = Math.ceil(canvasHeight * scale);
@@ -323,10 +277,10 @@ async function elementToCanvas(root: HTMLElement, tournamentName: string) {
       throw new Error("当前浏览器不支持图片生成。");
     }
 
-    ctx.scale(scale, scale);
     ctx.fillStyle = "#FFF8E8";
-    ctx.fillRect(0, 0, width, canvasHeight);
-    ctx.drawImage(svgImage, 0, HEADER_HEIGHT, width, height);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(contentCanvas, 0, Math.round(HEADER_HEIGHT * scale));
+    ctx.scale(scale, scale);
     await drawShareMarks(ctx, width, canvasHeight, height, tournamentName);
 
     return canvas;
@@ -342,7 +296,7 @@ async function drawShareMarks(
   contentHeight: number,
   tournamentName: string,
 ) {
-  const logoImage = await loadImage(imageSource(logo));
+  const logoImage = await loadCleanImage(imageSource(logo));
   const logoBox = { x: 24, y: 17, width: 250, height: 78 };
   fillRoundedRect(ctx, logoBox, 24, "#FFFCF4", "#EED8AA", 2);
 
