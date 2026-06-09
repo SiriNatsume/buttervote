@@ -528,18 +528,10 @@ export async function getTournamentBracketsForGroup(
     .from("tournament_matches")
     .select("tournament_id,contest_id")
     .in("contest_id", contestIds);
-  const votingContestIds = new Set(
-    (groupContests ?? [])
-      .filter((contest) => contest.status === "voting")
-      .map((contest) => contest.id),
-  );
   const tournamentIds = [
     ...new Set(
       (matches ?? [])
-        .filter(
-          (match) =>
-            match.contest_id && votingContestIds.has(match.contest_id),
-        )
+        .filter((match) => match.contest_id)
         .map((match) => match.tournament_id),
     ),
   ];
@@ -549,6 +541,6 @@ export async function getTournamentBracketsForGroup(
 
   return brackets.filter(
     (bracket): bracket is TournamentBracketData =>
-      bracket !== null && bracket.rounds.length > 0 && bracket.hasVotingMatch,
+      bracket !== null && bracket.rounds.length > 0,
   );
 }

@@ -82,6 +82,7 @@ type KnockoutRound =
   | "semifinal"
   | "final"
   | "third_place";
+type TerminalKnockoutRound = Extract<KnockoutRound, "final" | "third_place">;
 
 type KnockoutMatchResolutionPayload = {
   matchId: string;
@@ -118,7 +119,7 @@ function actionSuccess<T extends Record<string, unknown> = Record<string, unknow
   return { ok: true, ...(message ? { message } : {}), ...(extra ?? ({} as T)) };
 }
 
-function actionFailure(message: string): ActionResult {
+function actionFailure(message: string): { ok: false; error: string } {
   return { ok: false, error: toUserFacingError(message) };
 }
 
@@ -794,6 +795,158 @@ async function resolveKnockoutSourceMatches(
   }
 
   return { ok: true, matches: sourceMatches, resolutions };
+}
+
+async function finalizeTerminalKnockoutResults(
+  tournamentId: string,
+  existingMatches: TournamentMatch[],
+  seed: string,
+  createdBy: string,
+): Promise<
+  ActionResult<{
+    refresh: boolean;
+    seed: string;
+    finalizedMatches: number;
+    contestIds: string[];
+  }>
+> {
+  const terminalRounds: TerminalKnockoutRound[] = [];
+  if (
+    existingMatches.some(
+      (match) => normalizeKnockoutRound(match.round) === "final",
+    )
+  ) {
+    terminalRounds.push("final");
+  }
+  if (
+    existingMatches.some(
+      (match) => normalizeKnockoutRound(match.round) === "third_place",
+    )
+  ) {
+    terminalRounds.push("third_place");
+  }
+
+  if (!terminalRounds.includes("final")) {
+    return actionFailure("请先生成冠军赛。");
+  }
+
+  const supabase = createRequiredServiceClient();
+  const finalized: Array<{
+    round: TerminalKnockoutRound;
+    match: TournamentMatch;
+    resolution: KnockoutMatchResolutionPayload;
+  }> = [];
+
+  for (const round of terminalRounds) {
+    const source = await resolveKnockoutSourceMatches(
+      tournamentId,
+      round,
+      1,
+      seed,
+    );
+    if (!source.ok) {
+      return actionFailure(source.error);
+    }
+
+    const resolution = source.resolutions[0];
+    const match = source.matches.find((item) => item.id === resolution?.matchId);
+    if (!resolution || !match) {
+      return actionFailure(`${knockoutRoundLabel(round)} 结果不足。`);
+    }
+
+    finalized.push({ round, match, resolution });
+  }
+
+  const finalResolution = finalized.find((item) => item.round === "final");
+  if (!finalResolution) {
+    return actionFailure("冠军赛结果不足。");
+  }
+
+  for (const item of finalized) {
+    const { error } = await supabase
+      .from("tournament_matches")
+      .update({
+        winner_entry_id: item.resolution.winnerEntryId,
+        loser_entry_id: item.resolution.loserEntryId,
+      })
+      .eq("id", item.resolution.matchId)
+      .eq("tournament_id", tournamentId);
+
+    if (error) {
+      return actionFailure(error.message);
+    }
+  }
+
+  const championEntryId = finalResolution.resolution.winnerEntryId;
+  const { error: championError } = await supabase
+    .from("tournament_entries")
+    .update({ status: "champion" })
+    .eq("tournament_id", tournamentId)
+    .eq("id", championEntryId);
+  if (championError) {
+    return actionFailure(championError.message);
+  }
+
+  const { error: eliminatedError } = await supabase
+    .from("tournament_entries")
+    .update({ status: "eliminated" })
+    .eq("tournament_id", tournamentId)
+    .neq("id", championEntryId)
+    .neq("status", "withdrawn");
+  if (eliminatedError) {
+    return actionFailure(eliminatedError.message);
+  }
+
+  const { error: tournamentError } = await supabase
+    .from("tournaments")
+    .update({ status: "completed" })
+    .eq("id", tournamentId);
+  if (tournamentError) {
+    return actionFailure(tournamentError.message);
+  }
+
+  const contestIds = finalized
+    .map((item) => item.match.contest_id)
+    .filter((contestId): contestId is string => Boolean(contestId));
+  const input = {
+    tournamentId,
+    rounds: terminalRounds,
+    matches: finalized.map((item) => ({
+      matchId: item.match.id,
+      round: item.round,
+      slot: item.match.slot,
+      contestId: item.match.contest_id,
+    })),
+  };
+  const output = {
+    finalizedMatches: finalized.map((item) => ({
+      round: item.round,
+      matchId: item.resolution.matchId,
+      slot: item.resolution.slot,
+      winnerEntryId: item.resolution.winnerEntryId,
+      loserEntryId: item.resolution.loserEntryId,
+    })),
+    championEntryId,
+  };
+  const { error: logError } = await supabase.from("tournament_draw_logs").insert({
+    tournament_id: tournamentId,
+    stage_id: finalResolution.match.stage_id,
+    kind: "knockout_finalization",
+    seed,
+    input: input as Json,
+    output: output as Json,
+    created_by: createdBy,
+  });
+  if (logError) {
+    return actionFailure(logError.message);
+  }
+
+  return actionSuccess("正赛最终结果已结算。", {
+    refresh: true,
+    seed,
+    finalizedMatches: finalized.length,
+    contestIds,
+  });
 }
 
 export async function createTournamentAction(
@@ -1594,7 +1747,7 @@ export async function generateNextKnockoutRoundAction(
       await Promise.all([
         supabase
           .from("tournaments")
-          .select("id,name")
+          .select("id,name,status")
           .eq("id", parsed.data.tournamentId)
           .maybeSingle(),
         supabase
@@ -1616,14 +1769,69 @@ export async function generateNextKnockoutRoundAction(
     const existingMatches = await filterActiveMatches(
       (matches ?? []) as TournamentMatch[],
     );
-    const plan = planNextKnockoutRound(existingMatches);
-    if (!plan.ok) {
-      return actionFailure(plan.error);
-    }
-
     const seed =
       parsed.data.seed ??
       `knockout-next:${parsed.data.tournamentId}:${new Date().toISOString()}`;
+    const plan = planNextKnockoutRound(existingMatches);
+    if (!plan.ok) {
+      const hasTerminalMatch = existingMatches.some((match) => {
+        const round = normalizeKnockoutRound(match.round);
+        return round === "final" || round === "third_place";
+      });
+
+      if (hasTerminalMatch) {
+        const terminalMatches = existingMatches.filter((match) => {
+          const round = normalizeKnockoutRound(match.round);
+          return round === "final" || round === "third_place";
+        });
+        const terminalContestIds = terminalMatches
+          .map((match) => match.contest_id)
+          .filter((contestId): contestId is string => Boolean(contestId));
+        const terminalResolved = terminalMatches.every(
+          (match) => match.winner_entry_id && match.loser_entry_id,
+        );
+
+        if (tournament.status === "completed" && terminalResolved) {
+          revalidatePath("/");
+          revalidatePath("/admin/tournaments");
+          for (const contestId of terminalContestIds) {
+            revalidatePath(`/admin/contests/${contestId}/edit`);
+            revalidatePath(`/contests/${contestId}`);
+            revalidatePath(`/contests/${contestId}/results`);
+          }
+
+          return actionSuccess("正赛最终结果已结算。", {
+            refresh: true,
+            seed,
+            finalizedMatches: 0,
+            contestIds: terminalContestIds,
+          });
+        }
+
+        const finalized = await finalizeTerminalKnockoutResults(
+          parsed.data.tournamentId,
+          existingMatches,
+          seed,
+          adminResult.profile.id,
+        );
+        if (!finalized.ok) {
+          return finalized;
+        }
+
+        revalidatePath("/");
+        revalidatePath("/admin/tournaments");
+        for (const contestId of finalized.contestIds) {
+          revalidatePath(`/admin/contests/${contestId}/edit`);
+          revalidatePath(`/contests/${contestId}`);
+          revalidatePath(`/contests/${contestId}/results`);
+        }
+
+        return finalized;
+      }
+
+      return actionFailure(plan.error);
+    }
+
     const source = await resolveKnockoutSourceMatches(
       parsed.data.tournamentId,
       plan.sourceRound,
