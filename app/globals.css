@@ -119,6 +119,18 @@
   ::selection {
     background: rgba(255, 180, 64, 0.36);
   }
+
+  @media (max-width: 640px) {
+    input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not(
+        [type="file"]
+      ):not([type="hidden"]):not([type="image"]):not([type="radio"]):not(
+        [type="range"]
+      ):not([type="reset"]):not([type="submit"]),
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
 }
 
 @layer components {
