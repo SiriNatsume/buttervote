@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, ListChecks, Shuffle } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  ExternalLink,
+  ListChecks,
+  Shuffle,
+} from "lucide-react";
 import {
   CreateTournamentForm,
   GenerateKnockoutForm,
@@ -297,12 +303,17 @@ export default async function AdminTournamentsPage() {
               preliminaryStages.length > 0 && knockoutStages.length === 0;
 
             return (
-              <Card key={preview.tournament.id}>
-                <CardHeader>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <CardTitle>{preview.tournament.name}</CardTitle>
-                      <div className="mt-3 flex flex-wrap gap-2">
+              <Card key={preview.tournament.id} className="overflow-hidden">
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none flex-col gap-3 p-6 transition hover:bg-[#FFF8E8]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[#FFF8E8] [&::-webkit-details-marker]:hidden sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <ChevronRight className="size-5 shrink-0 text-primary transition-transform group-open:rotate-90" />
+                        <CardTitle className="break-words">
+                          {preview.tournament.name}
+                        </CardTitle>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2 pl-7">
                         <Badge variant="secondary">
                           {preview.tournament.status}
                         </Badge>
@@ -314,21 +325,35 @@ export default async function AdminTournamentsPage() {
                             />
                           </>
                         ) : null}
+                        <Badge variant="outline">
+                          晋级 {preview.advancers.length} 名
+                        </Badge>
+                        <Badge variant="outline">
+                          阶段 {preview.stages.length}
+                        </Badge>
+                        <Badge variant="outline">
+                          日志 {preview.logs.length}
+                        </Badge>
                       </div>
                     </div>
+                    <div className="pl-7 text-sm text-muted-foreground sm:pl-0">
+                      <span className="group-open:hidden">展开详情</span>
+                      <span className="hidden group-open:inline">收起详情</span>
+                    </div>
+                  </summary>
+                  <CardContent className="space-y-6 border-t border-[#EED8AA]/70 p-6">
                     {preview.screeningContest ? (
-                      <Button asChild variant="outline" size="sm">
-                        <Link
-                          href={`/contests/${preview.screeningContest.id}/results`}
-                        >
-                          <ExternalLink className="size-4" />
-                          海选结果
-                        </Link>
-                      </Button>
+                      <div className="flex justify-end">
+                        <Button asChild variant="outline" size="sm">
+                          <Link
+                            href={`/contests/${preview.screeningContest.id}/results`}
+                          >
+                            <ExternalLink className="size-4" />
+                            海选结果
+                          </Link>
+                        </Button>
+                      </div>
                     ) : null}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
                   {preview.error ? (
                     <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
                       {preview.error}
@@ -568,6 +593,7 @@ export default async function AdminTournamentsPage() {
                     </div>
                   ) : null}
                 </CardContent>
+                </details>
               </Card>
             );
           })
