@@ -549,7 +549,12 @@ export async function getTournamentBracket(
   supabase: BracketClient,
   tournamentId: string,
 ) {
-  return loadTournamentBracket(supabase, tournamentId);
+  try {
+    return await loadTournamentBracket(supabase, tournamentId);
+  } catch (error) {
+    console.error("Failed to load tournament bracket.", error);
+    return null;
+  }
 }
 
 export async function getTournamentBracketsForGroup(
@@ -578,9 +583,11 @@ export async function getTournamentBracketsForGroup(
         .map((match) => match.tournament_id),
     ),
   ];
-  const brackets = await Promise.all(
-    tournamentIds.map((tournamentId) => loadTournamentBracket(supabase, tournamentId)),
-  );
+  const brackets: Array<TournamentBracketData | null> = [];
+  for (const tournamentId of tournamentIds) {
+    const bracket = await getTournamentBracket(supabase, tournamentId);
+    brackets.push(bracket);
+  }
 
   return brackets.filter(
     (bracket): bracket is TournamentBracketData =>

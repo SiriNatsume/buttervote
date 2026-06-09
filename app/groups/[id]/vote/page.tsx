@@ -130,7 +130,7 @@ export default async function GroupVotePage({
       </div>
 
       {tournamentBrackets.length > 0 ? (
-        <div className="mb-8 space-y-5">
+        <div className="mb-8 min-w-0 space-y-5">
           {tournamentBrackets.map((bracket) => (
             <TournamentBracket
               key={bracket.tournament.id}

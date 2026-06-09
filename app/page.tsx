@@ -52,6 +52,7 @@ export default async function HomePage() {
         : null;
   let hero: Hero | null = null;
   let featuredBracket: TournamentBracketData | null = null;
+  let heroTournamentBracket: TournamentBracketData | null = null;
 
   if (heroValue?.featuredType === "group" && heroValue.featuredId) {
     const { data: group } = await supabase
@@ -94,6 +95,7 @@ export default async function HomePage() {
 
   if (heroValue?.featuredType === "tournament" && heroValue.featuredId) {
     const bracket = await getTournamentBracket(supabase, heroValue.featuredId);
+    heroTournamentBracket = bracket;
 
     if (bracket) {
       hero = {
@@ -113,7 +115,10 @@ export default async function HomePage() {
   }
 
   if (bracketTournamentId) {
-    const bracket = await getTournamentBracket(supabase, bracketTournamentId);
+    const bracket =
+      heroTournamentBracket && bracketTournamentId === heroValue?.featuredId
+        ? heroTournamentBracket
+        : await getTournamentBracket(supabase, bracketTournamentId);
     featuredBracket = bracket && bracket.rounds.length > 0 ? bracket : null;
   }
 
@@ -178,7 +183,7 @@ export default async function HomePage() {
       </section>
 
       {featuredBracket ? (
-        <div id="featured-tournament-bracket" className="mb-10 scroll-mt-24">
+        <div id="featured-tournament-bracket" className="mb-10 min-w-0 scroll-mt-24">
           <TournamentBracket bracket={featuredBracket} />
         </div>
       ) : null}

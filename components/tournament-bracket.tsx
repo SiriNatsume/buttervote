@@ -29,7 +29,7 @@ function ParticipantRow({
   return (
     <div
       className={cn(
-        "flex min-h-[72px] items-center gap-3 rounded-xl border px-3 py-2.5",
+        "flex min-h-[76px] items-center gap-3 rounded-xl border px-3 py-2.5",
         participant.isWinner && resultVisible
           ? "border-[#65A96E] bg-[#ECF8E9] shadow-[inset_3px_0_0_#3C8B4F]"
           : "border-[#EED8AA]/70 bg-white/65",
@@ -47,7 +47,7 @@ function ParticipantRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="break-words text-sm font-semibold leading-5 text-[#4A2B1B]">
+        <div className="break-words text-[15px] font-semibold leading-5 text-[#4A2B1B]">
           {participant.name}
         </div>
         {participant.seedLabel ? (
@@ -200,30 +200,30 @@ function MergeConnector({
   direction: "right" | "left";
 }) {
   return (
-    <div className="flex w-10 flex-col justify-around py-12">
+    <div className="flex w-12 flex-col justify-around py-12">
       {Array.from({ length: groups }, (_, index) => (
         <div key={index} className="relative min-h-[120px] flex-1">
           <span
             className={cn(
-              "absolute top-[28%] border-t-2 border-[#B9854C]",
+              "absolute top-[28%] border-t-4 border-[#9A6A35]",
               direction === "right" ? "left-0 right-1/2" : "left-1/2 right-0",
             )}
           />
           <span
             className={cn(
-              "absolute bottom-[28%] border-t-2 border-[#B9854C]",
+              "absolute bottom-[28%] border-t-4 border-[#9A6A35]",
               direction === "right" ? "left-0 right-1/2" : "left-1/2 right-0",
             )}
           />
           <span
             className={cn(
-              "absolute bottom-[28%] top-[28%] border-l-2 border-[#B9854C]",
+              "absolute bottom-[28%] top-[28%] border-l-4 border-[#9A6A35]",
               direction === "right" ? "right-1/2" : "left-1/2",
             )}
           />
           <span
             className={cn(
-              "absolute top-1/2 border-t-2 border-[#B9854C]",
+              "absolute top-1/2 border-t-4 border-[#9A6A35]",
               direction === "right" ? "left-1/2 right-0" : "left-0 right-1/2",
             )}
           />
@@ -235,8 +235,8 @@ function MergeConnector({
 
 function StraightConnector() {
   return (
-    <div className="relative w-10 py-12">
-      <span className="absolute left-0 right-0 top-1/2 border-t-2 border-[#B9854C]" />
+    <div className="relative w-12 py-12">
+      <span className="absolute left-0 right-0 top-1/2 border-t-4 border-[#9A6A35]" />
     </div>
   );
 }
@@ -302,7 +302,7 @@ export function TournamentBracket({
   }));
 
   return (
-    <section className="max-w-full overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4 shadow-sm sm:p-5">
+    <section className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/70 px-3 py-1 text-sm font-medium text-[#8A5525]">
@@ -316,49 +316,51 @@ export function TournamentBracket({
         <Badge variant="secondary">{bracket.tournament.status}</Badge>
       </div>
 
-      <div className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2">
-        <div
-          className="grid min-h-[620px] w-[1576px] max-w-none gap-0 rounded-2xl border border-[#EED8AA]/60 bg-white/35 p-4"
-          style={{
-            gridTemplateColumns:
-              "192px 40px 192px 40px 192px 40px 216px 40px 192px 40px 192px 40px 192px",
-          }}
-        >
-          <MatchColumn
-            title="左半区 16 强"
-            matches={leftRoundOf16}
-          />
-          <MergeConnector groups={2} direction="right" />
-          <MatchColumn
-            title="左半区 8 强"
-            matches={leftQuarterfinal}
-          />
-          <MergeConnector groups={1} direction="right" />
-          <MatchColumn
-            title="左半区半决赛"
-            matches={leftSemifinal}
-          />
-          <StraightConnector />
-          <MatchColumn
-            title="中心赛程"
-            matches={finalMatches}
-            center
-          />
-          <StraightConnector />
-          <MatchColumn
-            title="右半区半决赛"
-            matches={rightSemifinal}
-          />
-          <MergeConnector groups={1} direction="left" />
-          <MatchColumn
-            title="右半区 8 强"
-            matches={rightQuarterfinal}
-          />
-          <MergeConnector groups={2} direction="left" />
-          <MatchColumn
-            title="右半区 16 强"
-            matches={rightRoundOf16}
-          />
+      <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-[#EED8AA]/60 bg-white/35">
+        <div className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2">
+          <div
+            className="grid min-h-[620px] w-max max-w-none gap-0 p-4"
+            style={{
+              gridTemplateColumns:
+                "280px 48px 280px 48px 280px 48px 320px 48px 280px 48px 280px 48px 280px",
+            }}
+          >
+            <MatchColumn
+              title="左半区 16 强"
+              matches={leftRoundOf16}
+            />
+            <MergeConnector groups={2} direction="right" />
+            <MatchColumn
+              title="左半区 8 强"
+              matches={leftQuarterfinal}
+            />
+            <MergeConnector groups={1} direction="right" />
+            <MatchColumn
+              title="左半区半决赛"
+              matches={leftSemifinal}
+            />
+            <StraightConnector />
+            <MatchColumn
+              title="中心赛程"
+              matches={finalMatches}
+              center
+            />
+            <StraightConnector />
+            <MatchColumn
+              title="右半区半决赛"
+              matches={rightSemifinal}
+            />
+            <MergeConnector groups={1} direction="left" />
+            <MatchColumn
+              title="右半区 8 强"
+              matches={rightQuarterfinal}
+            />
+            <MergeConnector groups={2} direction="left" />
+            <MatchColumn
+              title="右半区 16 强"
+              matches={rightRoundOf16}
+            />
+          </div>
         </div>
       </div>
     </section>

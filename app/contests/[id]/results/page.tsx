@@ -146,43 +146,47 @@ export default async function ResultsPage({
         : Promise.resolve({ data: [], error: null }),
     ]);
     if (voteRowsError || loveRowsError) {
-      throw new Error(voteRowsError?.message ?? loveRowsError?.message);
-    }
-
-    const voterIds = [
-      ...new Set(
-        (voteRows ?? [])
-          .map((vote) => vote.voter_id)
-          .filter((voterId): voterId is string => Boolean(voterId)),
-      ),
-    ];
-    const voterProfiles: VoteProfile[] = [];
-    for (let index = 0; index < voterIds.length; index += 500) {
-      const voterIdChunk = voterIds.slice(index, index + 500);
-      const { data, error } = await fetchAllRows<VoteProfile>(() =>
-        dataClient
-          .from("profiles")
-          .select("id,display_name,email,qq_nickname,qq_user_id,login_provider")
-          .in("id", voterIdChunk),
+      console.error(
+        "Failed to load contest result votes.",
+        voteRowsError?.message ?? loveRowsError?.message,
       );
-      if (error) {
-        throw new Error(error.message);
+    } else {
+      const voterIds = [
+        ...new Set(
+          (voteRows ?? [])
+            .map((vote) => vote.voter_id)
+            .filter((voterId): voterId is string => Boolean(voterId)),
+        ),
+      ];
+      const voterProfiles: VoteProfile[] = [];
+      for (let index = 0; index < voterIds.length; index += 500) {
+        const voterIdChunk = voterIds.slice(index, index + 500);
+        const { data, error } = await fetchAllRows<VoteProfile>(() =>
+          dataClient
+            .from("profiles")
+            .select("id,display_name,email,qq_nickname,qq_user_id,login_provider")
+            .in("id", voterIdChunk),
+        );
+        if (error) {
+          console.error("Failed to load contest voter profiles.", error.message);
+          continue;
+        }
+        voterProfiles.push(...data);
       }
-      voterProfiles.push(...data);
-    }
-    const profileById = new Map(
-      voterProfiles.map((voterProfile) => [
-        voterProfile.id,
-        voterProfile,
-      ]),
-    );
+      const profileById = new Map(
+        voterProfiles.map((voterProfile) => [
+          voterProfile.id,
+          voterProfile,
+        ]),
+      );
 
-    adminVoteRows = (voteRows ?? []).map((vote) => ({
-      ...vote,
-      profile: vote.voter_id ? profileById.get(vote.voter_id) ?? null : null,
-    }));
-    votes = adminVoteRows;
-    loveAllocations = loveRows ?? [];
+      adminVoteRows = (voteRows ?? []).map((vote) => ({
+        ...vote,
+        profile: vote.voter_id ? profileById.get(vote.voter_id) ?? null : null,
+      }));
+      votes = adminVoteRows;
+      loveAllocations = loveRows ?? [];
+    }
   } else if (canReadAllVotes) {
     const [
       { data: voteRows, error: voteRowsError },
@@ -203,14 +207,17 @@ export default async function ResultsPage({
         : Promise.resolve({ data: [], error: null }),
     ]);
     if (voteRowsError || loveRowsError) {
-      throw new Error(voteRowsError?.message ?? loveRowsError?.message);
+      console.error(
+        "Failed to load public contest result votes.",
+        voteRowsError?.message ?? loveRowsError?.message,
+      );
+    } else {
+      votes = (voteRows ?? []).map((vote) => ({
+        ...vote,
+        voter_id: null,
+      }));
+      loveAllocations = loveRows ?? [];
     }
-
-    votes = (voteRows ?? []).map((vote) => ({
-      ...vote,
-      voter_id: null,
-    }));
-    loveAllocations = loveRows ?? [];
   }
 
   const results = tallyVotes({
