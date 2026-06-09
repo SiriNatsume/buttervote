@@ -175,10 +175,15 @@ function candidateForEntry(
     return null;
   }
 
+  const orderedCandidates = [
+    entry.current_candidate_id ? candidates.get(entry.current_candidate_id) : null,
+    entry.source_candidate_id ? candidates.get(entry.source_candidate_id) : null,
+    candidates.get(entry.root_candidate_id) ?? null,
+  ].filter((candidate): candidate is BracketCandidate => Boolean(candidate));
+
   return (
-    candidates.get(entry.root_candidate_id) ??
-    (entry.source_candidate_id ? candidates.get(entry.source_candidate_id) : null) ??
-    (entry.current_candidate_id ? candidates.get(entry.current_candidate_id) : null) ??
+    orderedCandidates.find((candidate) => Boolean(candidate.image_path)) ??
+    orderedCandidates[0] ??
     null
   );
 }
@@ -267,142 +272,87 @@ async function tallyVisibleContestScores(
   );
   const serviceSupabase = createServiceClient();
 
-  if (serviceSupabase) {
-    const [
-      { data: candidates, error: candidatesError },
-      { data: voteRows, error: voteRowsError },
-      { data: loveRows, error: loveRowsError },
-    ] = await Promise.all([
-      serviceSupabase
-        .from("candidates")
-        .select(
-          "id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at",
-        )
-        .in("contest_id", visibleContestIds)
-        .eq("is_active", true)
-        .order("created_at", { ascending: true }),
-      fetchAllRows<PublicVoteRow>(() =>
-        serviceSupabase
-          .from("votes")
-          .select("id,contest_id,payload,created_at")
-          .in("contest_id", visibleContestIds)
-          .order("created_at", { ascending: true }),
-      ),
-      fetchAllRows<PublicLoveVoteRow>(() =>
-        serviceSupabase
-          .from("love_vote_allocations")
-          .select("vote_id,candidate_id,contest_id")
-          .in("contest_id", visibleContestIds),
-      ),
-    ]);
-
-    if (candidatesError || voteRowsError || loveRowsError) {
-      console.error(
-        "Failed to load tournament bracket scores.",
-        candidatesError?.message ?? voteRowsError?.message ?? loveRowsError?.message,
-      );
-      return scores;
-    }
-
-    const candidatesByContest = new Map<string, BracketCandidate[]>();
-    for (const candidate of (candidates ?? []) as BracketCandidate[]) {
-      const current = candidatesByContest.get(candidate.contest_id) ?? [];
-      current.push(candidate);
-      candidatesByContest.set(candidate.contest_id, current);
-    }
-
-    const votesByContest = new Map<string, PublicVoteRow[]>();
-    for (const vote of (voteRows ?? []) as PublicVoteRow[]) {
-      const current = votesByContest.get(vote.contest_id) ?? [];
-      current.push(vote);
-      votesByContest.set(vote.contest_id, current);
-    }
-
-    const loveRowsByContest = new Map<string, PublicLoveVoteRow[]>();
-    for (const loveRow of (loveRows ?? []) as PublicLoveVoteRow[]) {
-      const current = loveRowsByContest.get(loveRow.contest_id) ?? [];
-      current.push(loveRow);
-      loveRowsByContest.set(loveRow.contest_id, current);
-    }
-
-    for (const contest of visibleContests) {
-      scores.set(
-        contest.id,
-        new Map(
-          tallyVotes({
-            voteType: contest.vote_type,
-            candidates: candidatesByContest.get(contest.id) ?? [],
-            votes: (votesByContest.get(contest.id) ?? []).map((vote) => ({
-              ...vote,
-              voter_id: null,
-            })),
-            loveVoteWeight: contest.group_id
-              ? loveVoteWeightByGroup.get(contest.group_id) ?? null
-              : null,
-            loveAllocations: loveRowsByContest.get(contest.id) ?? [],
-          }).map((result) => [result.candidateId, result.score]),
-        ),
-      );
-    }
-
+  if (!serviceSupabase) {
+    console.error("Tournament bracket scores require the service client.");
     return scores;
   }
 
-  await Promise.all(
-    visibleContests.map(async (contest) => {
-      const [
-        { data: candidates },
-        { data: voteRows, error: voteRowsError },
-        { data: loveRows, error: loveRowsError },
-      ] = await Promise.all([
-        supabase
-          .from("candidates")
-          .select(
-            "id,name,description,image_path,nominator_display_name,is_active,created_at",
-          )
-          .eq("contest_id", contest.id)
-          .eq("is_active", true)
-          .order("created_at", { ascending: true }),
-        fetchAllRows<PublicVoteRow>(() =>
-          supabase.rpc("get_contest_vote_payloads", {
-            p_contest_id: contest.id,
-          }),
-        ),
-        contest.group_id
-          ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
-              () =>
-                supabase.rpc("get_contest_love_vote_allocations", {
-                  p_contest_id: contest.id,
-                }),
-            )
-          : Promise.resolve({ data: [], error: null }),
-      ]);
+  const [
+    { data: candidates, error: candidatesError },
+    { data: voteRows, error: voteRowsError },
+    { data: loveRows, error: loveRowsError },
+  ] = await Promise.all([
+    serviceSupabase
+      .from("candidates")
+      .select(
+        "id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at",
+      )
+      .in("contest_id", visibleContestIds)
+      .eq("is_active", true)
+      .order("created_at", { ascending: true }),
+    fetchAllRows<PublicVoteRow>(() =>
+      serviceSupabase
+        .from("votes")
+        .select("id,contest_id,payload,created_at")
+        .in("contest_id", visibleContestIds)
+        .order("created_at", { ascending: true }),
+    ),
+    fetchAllRows<PublicLoveVoteRow>(() =>
+      serviceSupabase
+        .from("love_vote_allocations")
+        .select("vote_id,candidate_id,contest_id")
+        .in("contest_id", visibleContestIds),
+    ),
+  ]);
 
-      if (voteRowsError || loveRowsError) {
-        throw new Error(voteRowsError?.message ?? loveRowsError?.message);
-      }
+  if (candidatesError || voteRowsError || loveRowsError) {
+    console.error(
+      "Failed to load tournament bracket scores.",
+      candidatesError?.message ?? voteRowsError?.message ?? loveRowsError?.message,
+    );
+    return scores;
+  }
 
-      const resultByCandidate = new Map(
+  const candidatesByContest = new Map<string, BracketCandidate[]>();
+  for (const candidate of (candidates ?? []) as BracketCandidate[]) {
+    const current = candidatesByContest.get(candidate.contest_id) ?? [];
+    current.push(candidate);
+    candidatesByContest.set(candidate.contest_id, current);
+  }
+
+  const votesByContest = new Map<string, PublicVoteRow[]>();
+  for (const vote of (voteRows ?? []) as PublicVoteRow[]) {
+    const current = votesByContest.get(vote.contest_id) ?? [];
+    current.push(vote);
+    votesByContest.set(vote.contest_id, current);
+  }
+
+  const loveRowsByContest = new Map<string, PublicLoveVoteRow[]>();
+  for (const loveRow of (loveRows ?? []) as PublicLoveVoteRow[]) {
+    const current = loveRowsByContest.get(loveRow.contest_id) ?? [];
+    current.push(loveRow);
+    loveRowsByContest.set(loveRow.contest_id, current);
+  }
+
+  for (const contest of visibleContests) {
+    scores.set(
+      contest.id,
+      new Map(
         tallyVotes({
           voteType: contest.vote_type,
-          candidates: candidates ?? [],
-          votes: ((voteRows ?? []) as Vote[]).map((vote) => ({
+          candidates: candidatesByContest.get(contest.id) ?? [],
+          votes: (votesByContest.get(contest.id) ?? []).map((vote) => ({
             ...vote,
             voter_id: null,
           })),
           loveVoteWeight: contest.group_id
             ? loveVoteWeightByGroup.get(contest.group_id) ?? null
             : null,
-          loveAllocations:
-            (loveRows ?? []) as Array<
-              Pick<LoveVoteAllocation, "vote_id" | "candidate_id">
-            >,
+          loveAllocations: loveRowsByContest.get(contest.id) ?? [],
         }).map((result) => [result.candidateId, result.score]),
-      );
-
-      scores.set(contest.id, resultByCandidate);
-    }),
-  );
+      ),
+    );
+  }
 
   return scores;
 }

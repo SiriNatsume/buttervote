@@ -1,8 +1,6 @@
-import Link from "next/link";
-import { CalendarClock, Trophy } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { statusLabel } from "@/lib/contest-rules";
 import { getPublicImageUrl } from "@/lib/image/image-url";
-import { formatDateTime } from "@/lib/time";
 import type {
   TournamentBracketData,
   TournamentBracketMatch,
@@ -10,46 +8,6 @@ import type {
 } from "@/lib/tournament-bracket";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-
-function matchHref(
-  match: TournamentBracketMatch,
-  contestHrefById?: Record<string, string>,
-) {
-  if (!match.contest) {
-    return null;
-  }
-
-  if (contestHrefById?.[match.contest.id]) {
-    return contestHrefById[match.contest.id];
-  }
-
-  if (match.contest.status === "voting") {
-    return `/contests/${match.contest.id}/vote`;
-  }
-
-  if (match.resultVisible) {
-    return `/contests/${match.contest.id}/results`;
-  }
-
-  return `/contests/${match.contest.id}`;
-}
-
-function actionLabel(match: TournamentBracketMatch) {
-  if (!match.contest) {
-    return "待生成";
-  }
-
-  if (match.contest.status === "voting") {
-    return "去投票";
-  }
-
-  if (match.resultVisible) {
-    return "看结果";
-  }
-
-  return "比赛详情";
-}
 
 function ParticipantRow({
   participant,
@@ -71,13 +29,13 @@ function ParticipantRow({
   return (
     <div
       className={cn(
-        "flex min-h-[58px] items-center gap-3 rounded-xl border px-3 py-2",
+        "flex min-h-[72px] items-center gap-3 rounded-xl border px-3 py-2.5",
         participant.isWinner && resultVisible
-          ? "border-[#FFB347] bg-[#FFF3D0]"
+          ? "border-[#65A96E] bg-[#ECF8E9] shadow-[inset_3px_0_0_#3C8B4F]"
           : "border-[#EED8AA]/70 bg-white/65",
       )}
     >
-      <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
+      <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -89,15 +47,22 @@ function ParticipantRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{participant.name}</div>
+        <div className="break-words text-sm font-semibold leading-5 text-[#4A2B1B]">
+          {participant.name}
+        </div>
         {participant.seedLabel ? (
-          <div className="mt-1 truncate text-xs text-muted-foreground">
+          <div className="mt-1 break-words text-xs leading-4 text-muted-foreground">
             {participant.seedLabel}
           </div>
         ) : null}
       </div>
       {resultVisible && participant.score !== null ? (
-        <div className="min-w-7 text-right text-base font-semibold text-[#5C321E]">
+        <div
+          className={cn(
+            "min-w-7 text-right text-base font-semibold text-[#5C321E]",
+            participant.isWinner && "text-[#2F7A42]",
+          )}
+        >
           {participant.score}
         </div>
       ) : null}
@@ -131,41 +96,35 @@ function TopologyMatchNode({
   round,
   slot,
   match,
-  contestHrefById,
   center = false,
 }: {
   round: string;
   slot: number;
   match: TournamentBracketMatch | null;
-  contestHrefById?: Record<string, string>;
   center?: boolean;
 }) {
-  const href = match ? matchHref(match, contestHrefById) : null;
   const resultVisible = match?.resultVisible ?? false;
 
   return (
     <div
       className={cn(
-        "relative rounded-2xl border bg-[#FFFCF4]/95 p-3 shadow-sm",
+        "relative min-w-0 rounded-2xl border bg-[#FFFCF4]/95 p-3 shadow-sm",
         match
           ? "border-[#EED8AA]/80"
           : "border-dashed border-[#EED8AA]/70 bg-[#FFF8E8]/60",
-        center && "border-[#FFB347]/80 bg-[#FFF5D6]",
+        center && "border-[#74B87A]/80 bg-[#F1FAEF]",
       )}
     >
       <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-xs font-medium text-muted-foreground">
             {roundLabel(round)} · 第 {slot} 场
-          </div>
-          <div className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-[#5C321E]">
-            {match?.contest?.title ?? "比赛待生成"}
           </div>
         </div>
         {match?.contest ? (
           <Badge
             variant={match.contest.status === "voting" ? "love" : "outline"}
-            className="shrink-0"
+            className="max-w-[96px] shrink-0 whitespace-normal text-center leading-4"
           >
             {statusLabel[match.contest.status]}
           </Badge>
@@ -184,32 +143,11 @@ function TopologyMatchNode({
       </div>
 
       {match ? (
-        <div className="mt-3 space-y-3">
-          {match.contest?.voting_starts_at || match.contest?.voting_ends_at ? (
-            <div className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
-              <CalendarClock className="mt-0.5 size-4 shrink-0" />
-              <span>
-                {match.contest.voting_starts_at
-                  ? formatDateTime(match.contest.voting_starts_at)
-                  : "未设置开始时间"}
-                {" - "}
-                {match.contest.voting_ends_at
-                  ? formatDateTime(match.contest.voting_ends_at)
-                  : "未设置结束时间"}
-              </span>
-            </div>
-          ) : null}
-
+        <div className="mt-3">
           {match.contest && !match.resultVisible && match.contest.status === "closed" ? (
             <div className="rounded-xl border border-[#EED8AA]/70 bg-[#FFF8E8]/70 px-3 py-2 text-xs text-muted-foreground">
               结果待公开
             </div>
-          ) : null}
-
-          {href ? (
-            <Button asChild size="sm" variant="outline" className="w-full">
-              <Link href={href}>{actionLabel(match)}</Link>
-            </Button>
           ) : null}
         </div>
       ) : (
@@ -225,7 +163,6 @@ function MatchColumn({
   title,
   matches,
   center = false,
-  contestHrefById,
 }: {
   title: string;
   matches: Array<{
@@ -234,10 +171,9 @@ function MatchColumn({
     match: TournamentBracketMatch | null;
   }>;
   center?: boolean;
-  contestHrefById?: Record<string, string>;
 }) {
   return (
-    <div className="flex min-w-[190px] flex-col justify-around gap-4">
+    <div className="flex min-w-0 flex-col justify-around gap-4">
       <div className="rounded-full border border-[#EED8AA]/70 bg-white/80 px-3 py-1 text-center text-sm font-medium text-[#5C321E]">
         {title}
       </div>
@@ -248,7 +184,6 @@ function MatchColumn({
             round={item.round}
             slot={item.slot}
             match={item.match}
-            contestHrefById={contestHrefById}
             center={center}
           />
         ))}
@@ -265,30 +200,30 @@ function MergeConnector({
   direction: "right" | "left";
 }) {
   return (
-    <div className="flex w-12 flex-col justify-around py-12">
+    <div className="flex w-10 flex-col justify-around py-12">
       {Array.from({ length: groups }, (_, index) => (
         <div key={index} className="relative min-h-[120px] flex-1">
           <span
             className={cn(
-              "absolute top-[28%] border-t border-[#D9A85C]",
+              "absolute top-[28%] border-t-2 border-[#B9854C]",
               direction === "right" ? "left-0 right-1/2" : "left-1/2 right-0",
             )}
           />
           <span
             className={cn(
-              "absolute bottom-[28%] border-t border-[#D9A85C]",
+              "absolute bottom-[28%] border-t-2 border-[#B9854C]",
               direction === "right" ? "left-0 right-1/2" : "left-1/2 right-0",
             )}
           />
           <span
             className={cn(
-              "absolute bottom-[28%] top-[28%] border-l border-[#D9A85C]",
+              "absolute bottom-[28%] top-[28%] border-l-2 border-[#B9854C]",
               direction === "right" ? "right-1/2" : "left-1/2",
             )}
           />
           <span
             className={cn(
-              "absolute top-1/2 border-t border-[#D9A85C]",
+              "absolute top-1/2 border-t-2 border-[#B9854C]",
               direction === "right" ? "left-1/2 right-0" : "left-0 right-1/2",
             )}
           />
@@ -300,18 +235,16 @@ function MergeConnector({
 
 function StraightConnector() {
   return (
-    <div className="relative w-12 py-12">
-      <span className="absolute left-0 right-0 top-1/2 border-t border-[#D9A85C]" />
+    <div className="relative w-10 py-12">
+      <span className="absolute left-0 right-0 top-1/2 border-t-2 border-[#B9854C]" />
     </div>
   );
 }
 
 export function TournamentBracket({
   bracket,
-  contestHrefById,
 }: {
   bracket: TournamentBracketData;
-  contestHrefById?: Record<string, string>;
 }) {
   if (bracket.rounds.length === 0) {
     return null;
@@ -369,7 +302,7 @@ export function TournamentBracket({
   }));
 
   return (
-    <section className="rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4 shadow-sm sm:p-5">
+    <section className="max-w-full overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/70 px-3 py-1 text-sm font-medium text-[#8A5525]">
@@ -383,55 +316,48 @@ export function TournamentBracket({
         <Badge variant="secondary">{bracket.tournament.status}</Badge>
       </div>
 
-      <div className="overflow-x-auto pb-2">
+      <div className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2">
         <div
-          className="grid min-h-[680px] min-w-[1180px] gap-0 rounded-2xl border border-[#EED8AA]/60 bg-white/35 p-4"
+          className="grid min-h-[620px] w-[1576px] max-w-none gap-0 rounded-2xl border border-[#EED8AA]/60 bg-white/35 p-4"
           style={{
             gridTemplateColumns:
-              "minmax(190px,1fr) 48px minmax(190px,1fr) 48px minmax(190px,1fr) 48px minmax(210px,1.08fr) 48px minmax(190px,1fr) 48px minmax(190px,1fr) 48px minmax(190px,1fr)",
+              "192px 40px 192px 40px 192px 40px 216px 40px 192px 40px 192px 40px 192px",
           }}
         >
           <MatchColumn
             title="左半区 16 强"
             matches={leftRoundOf16}
-            contestHrefById={contestHrefById}
           />
           <MergeConnector groups={2} direction="right" />
           <MatchColumn
             title="左半区 8 强"
             matches={leftQuarterfinal}
-            contestHrefById={contestHrefById}
           />
           <MergeConnector groups={1} direction="right" />
           <MatchColumn
             title="左半区半决赛"
             matches={leftSemifinal}
-            contestHrefById={contestHrefById}
           />
           <StraightConnector />
           <MatchColumn
             title="中心赛程"
             matches={finalMatches}
-            contestHrefById={contestHrefById}
             center
           />
           <StraightConnector />
           <MatchColumn
             title="右半区半决赛"
             matches={rightSemifinal}
-            contestHrefById={contestHrefById}
           />
           <MergeConnector groups={1} direction="left" />
           <MatchColumn
             title="右半区 8 强"
             matches={rightQuarterfinal}
-            contestHrefById={contestHrefById}
           />
           <MergeConnector groups={2} direction="left" />
           <MatchColumn
             title="右半区 16 强"
             matches={rightRoundOf16}
-            contestHrefById={contestHrefById}
           />
         </div>
       </div>

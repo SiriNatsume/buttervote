@@ -242,3 +242,9 @@ npm run build
 - 结果未公开时普通用户不可见票数，公开后可见。
 - 普通用户不能访问管理后台和管理操作。
 - 定时任务能正常执行状态转换。
+
+## Cloudflare Worker SSR 原则
+
+- 首页、活动组联合投票页、结果页、对阵图等公开 Server Component 不能在渲染期按比赛/候选逐项 fan-out 发起大量 Supabase 请求；需要优先批量查询、分页聚合或复用已有结果，避免触发 Cloudflare Worker SSR subrequest/运行时限制。
+- 对阵图等可选展示模块遇到比分或辅助数据加载失败时，必须降级为不展示该辅助信息，但仍保持页面可渲染，不能抛出导致 `Application error` / digest 的服务端异常。
+- 上线后验证不能只看 HTTP 200；涉及 Server Component 流式渲染的页面，需要检查 HTML/RSC 中没有 Next error digest，并确认关键模块内容实际渲染出来。

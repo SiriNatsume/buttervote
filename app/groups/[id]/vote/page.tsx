@@ -93,12 +93,6 @@ export default async function GroupVotePage({
     existingVoteId: voteByContest.get(contest.id) ?? null,
   }));
   const tournamentBrackets = await getTournamentBracketsForGroup(supabase, id);
-  const contestHrefById = Object.fromEntries(
-    contestIds.map((contestId) => [
-      contestId,
-      `#group-vote-contest-${contestId}`,
-    ]),
-  );
   const coverUrl = getPublicImageUrl(group.cover_image_path);
 
   return (
@@ -141,7 +135,6 @@ export default async function GroupVotePage({
             <TournamentBracket
               key={bracket.tournament.id}
               bracket={bracket}
-              contestHrefById={contestHrefById}
             />
           ))}
         </div>
