@@ -11,6 +11,7 @@ import { getCurrentProfile } from "@/lib/auth";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
@@ -28,6 +29,8 @@ type VoteProfile = {
 type AdminVoteRow = Vote & {
   profile?: VoteProfile | null;
 };
+
+type PublicVoteRow = Pick<Vote, "id" | "contest_id" | "payload" | "created_at">;
 
 type TournamentDrawLogInfo = {
   id: string;
@@ -121,19 +124,31 @@ export default async function ResultsPage({
     [];
 
   if (isAdmin) {
-    const [{ data: voteRows }, { data: loveRows }] = await Promise.all([
-      dataClient
-        .from("votes")
-        .select("id,contest_id,voter_id,payload,created_at")
-        .eq("contest_id", id)
-        .order("created_at", { ascending: true }),
+    const [
+      { data: voteRows, error: voteRowsError },
+      { data: loveRows, error: loveRowsError },
+    ] = await Promise.all([
+      fetchAllRows<Vote>(() =>
+        dataClient
+          .from("votes")
+          .select("id,contest_id,voter_id,payload,created_at")
+          .eq("contest_id", id)
+          .order("created_at", { ascending: true }),
+      ),
       contest.group_id
-        ? dataClient
-            .from("love_vote_allocations")
-            .select("vote_id,candidate_id")
-            .eq("contest_id", id)
-        : Promise.resolve({ data: [] }),
+        ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
+            () =>
+              dataClient
+                .from("love_vote_allocations")
+                .select("vote_id,candidate_id")
+                .eq("contest_id", id),
+          )
+        : Promise.resolve({ data: [], error: null }),
     ]);
+    if (voteRowsError || loveRowsError) {
+      throw new Error(voteRowsError?.message ?? loveRowsError?.message);
+    }
+
     const voterIds = [
       ...new Set(
         (voteRows ?? [])
@@ -141,15 +156,22 @@ export default async function ResultsPage({
           .filter((voterId): voterId is string => Boolean(voterId)),
       ),
     ];
-    const { data: voterProfiles } =
-      voterIds.length > 0
-        ? await dataClient
-            .from("profiles")
-            .select("id,display_name,email,qq_nickname,qq_user_id,login_provider")
-            .in("id", voterIds)
-        : { data: [] };
+    const voterProfiles: VoteProfile[] = [];
+    for (let index = 0; index < voterIds.length; index += 500) {
+      const voterIdChunk = voterIds.slice(index, index + 500);
+      const { data, error } = await fetchAllRows<VoteProfile>(() =>
+        dataClient
+          .from("profiles")
+          .select("id,display_name,email,qq_nickname,qq_user_id,login_provider")
+          .in("id", voterIdChunk),
+      );
+      if (error) {
+        throw new Error(error.message);
+      }
+      voterProfiles.push(...data);
+    }
     const profileById = new Map(
-      (voterProfiles ?? []).map((voterProfile) => [
+      voterProfiles.map((voterProfile) => [
         voterProfile.id,
         voterProfile,
       ]),
@@ -162,16 +184,28 @@ export default async function ResultsPage({
     votes = adminVoteRows;
     loveAllocations = loveRows ?? [];
   } else if (canReadAllVotes) {
-    const [{ data: voteRows }, { data: loveRows }] = await Promise.all([
-      supabase.rpc("get_contest_vote_payloads", {
-        p_contest_id: id,
-      }),
+    const [
+      { data: voteRows, error: voteRowsError },
+      { data: loveRows, error: loveRowsError },
+    ] = await Promise.all([
+      fetchAllRows<PublicVoteRow>(() =>
+        supabase.rpc("get_contest_vote_payloads", {
+          p_contest_id: id,
+        }),
+      ),
       contest.group_id
-        ? supabase.rpc("get_contest_love_vote_allocations", {
-            p_contest_id: id,
-          })
-        : Promise.resolve({ data: [] }),
+        ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
+            () =>
+              supabase.rpc("get_contest_love_vote_allocations", {
+                p_contest_id: id,
+              }),
+          )
+        : Promise.resolve({ data: [], error: null }),
     ]);
+    if (voteRowsError || loveRowsError) {
+      throw new Error(voteRowsError?.message ?? loveRowsError?.message);
+    }
+
     votes = (voteRows ?? []).map((vote) => ({
       ...vote,
       voter_id: null,

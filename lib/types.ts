@@ -212,6 +212,10 @@ export type HomepageHeroValue = {
   imagePath?: string;
 };
 
+export type HomepageBracketValue = {
+  tournamentId?: string | null;
+};
+
 export type SiteSetting = {
   key: string;
   value: Json;

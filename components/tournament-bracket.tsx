@@ -60,7 +60,7 @@ function ParticipantRow({
 }) {
   if (!participant) {
     return (
-      <div className="rounded-xl border border-dashed border-[#EED8AA] bg-white/45 px-3 py-3 text-sm text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-[#EED8AA] bg-white/45 px-3 py-2 text-sm text-muted-foreground">
         待定
       </div>
     );
@@ -71,13 +71,13 @@ function ParticipantRow({
   return (
     <div
       className={cn(
-        "flex min-h-[72px] items-center gap-3 rounded-xl border px-3 py-2",
+        "flex min-h-[58px] items-center gap-3 rounded-xl border px-3 py-2",
         participant.isWinner && resultVisible
           ? "border-[#FFB347] bg-[#FFF3D0]"
           : "border-[#EED8AA]/70 bg-white/65",
       )}
     >
-      <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
+      <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -85,11 +85,11 @@ function ParticipantRow({
             className="size-full object-cover"
           />
         ) : (
-          <Trophy className="size-5 text-[#B9854C]" aria-hidden="true" />
+          <Trophy className="size-4 text-[#B9854C]" aria-hidden="true" />
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{participant.name}</div>
+        <div className="truncate text-sm font-medium">{participant.name}</div>
         {participant.seedLabel ? (
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {participant.seedLabel}
@@ -97,7 +97,7 @@ function ParticipantRow({
         ) : null}
       </div>
       {resultVisible && participant.score !== null ? (
-        <div className="min-w-8 text-right text-lg font-semibold text-[#5C321E]">
+        <div className="min-w-7 text-right text-base font-semibold text-[#5C321E]">
           {participant.score}
         </div>
       ) : null}
@@ -105,28 +105,68 @@ function ParticipantRow({
   );
 }
 
-function MatchCard({
+const ROUND_LABEL: Record<string, string> = {
+  round_of_16: "16 强",
+  quarterfinal: "8 强",
+  semifinal: "半决赛",
+  final: "冠军赛",
+  third_place: "季军赛",
+};
+
+function roundLabel(round: string) {
+  return ROUND_LABEL[round] ?? "正赛";
+}
+
+function matchByRoundSlot(bracket: TournamentBracketData) {
+  const matches = new Map<string, TournamentBracketMatch>();
+  for (const round of bracket.rounds) {
+    for (const match of round.matches) {
+      matches.set(`${match.round}:${match.slot}`, match);
+    }
+  }
+  return matches;
+}
+
+function TopologyMatchNode({
+  round,
+  slot,
   match,
   contestHrefById,
+  center = false,
 }: {
-  match: TournamentBracketMatch;
+  round: string;
+  slot: number;
+  match: TournamentBracketMatch | null;
   contestHrefById?: Record<string, string>;
+  center?: boolean;
 }) {
-  const href = matchHref(match, contestHrefById);
+  const href = match ? matchHref(match, contestHrefById) : null;
+  const resultVisible = match?.resultVisible ?? false;
 
   return (
-    <div className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFFCF4]/90 p-3 shadow-sm">
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <div
+      className={cn(
+        "relative rounded-2xl border bg-[#FFFCF4]/95 p-3 shadow-sm",
+        match
+          ? "border-[#EED8AA]/80"
+          : "border-dashed border-[#EED8AA]/70 bg-[#FFF8E8]/60",
+        center && "border-[#FFB347]/80 bg-[#FFF5D6]",
+      )}
+    >
+      <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs font-medium text-muted-foreground">
-            第 {match.slot} 场
+            {roundLabel(round)} · 第 {slot} 场
           </div>
-          <div className="mt-1 truncate text-sm font-semibold">
-            {match.contest?.title ?? "比赛待生成"}
+          <div className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-[#5C321E]">
+            {match?.contest?.title ?? "比赛待生成"}
           </div>
         </div>
-        {match.contest ? (
-          <Badge variant={match.contest.status === "voting" ? "love" : "outline"}>
+        {match?.contest ? (
+          <Badge
+            variant={match.contest.status === "voting" ? "love" : "outline"}
+            className="shrink-0"
+          >
             {statusLabel[match.contest.status]}
           </Badge>
         ) : null}
@@ -134,43 +174,134 @@ function MatchCard({
 
       <div className="space-y-2">
         <ParticipantRow
-          participant={match.left}
-          resultVisible={match.resultVisible}
+          participant={match?.left ?? null}
+          resultVisible={resultVisible}
         />
         <ParticipantRow
-          participant={match.right}
-          resultVisible={match.resultVisible}
+          participant={match?.right ?? null}
+          resultVisible={resultVisible}
         />
       </div>
 
-      <div className="mt-3 space-y-3">
-        {match.contest?.voting_starts_at || match.contest?.voting_ends_at ? (
-          <div className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
-            <CalendarClock className="mt-0.5 size-4 shrink-0" />
-            <span>
-              {match.contest.voting_starts_at
-                ? formatDateTime(match.contest.voting_starts_at)
-                : "未设置开始时间"}
-              {" - "}
-              {match.contest.voting_ends_at
-                ? formatDateTime(match.contest.voting_ends_at)
-                : "未设置结束时间"}
-            </span>
-          </div>
-        ) : null}
+      {match ? (
+        <div className="mt-3 space-y-3">
+          {match.contest?.voting_starts_at || match.contest?.voting_ends_at ? (
+            <div className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+              <CalendarClock className="mt-0.5 size-4 shrink-0" />
+              <span>
+                {match.contest.voting_starts_at
+                  ? formatDateTime(match.contest.voting_starts_at)
+                  : "未设置开始时间"}
+                {" - "}
+                {match.contest.voting_ends_at
+                  ? formatDateTime(match.contest.voting_ends_at)
+                  : "未设置结束时间"}
+              </span>
+            </div>
+          ) : null}
 
-        {match.contest && !match.resultVisible && match.contest.status === "closed" ? (
-          <div className="rounded-xl border border-[#EED8AA]/70 bg-[#FFF8E8]/70 px-3 py-2 text-xs text-muted-foreground">
-            结果待公开
-          </div>
-        ) : null}
+          {match.contest && !match.resultVisible && match.contest.status === "closed" ? (
+            <div className="rounded-xl border border-[#EED8AA]/70 bg-[#FFF8E8]/70 px-3 py-2 text-xs text-muted-foreground">
+              结果待公开
+            </div>
+          ) : null}
 
-        {href ? (
-          <Button asChild size="sm" variant="outline" className="w-full">
-            <Link href={href}>{actionLabel(match)}</Link>
-          </Button>
-        ) : null}
+          {href ? (
+            <Button asChild size="sm" variant="outline" className="w-full">
+              <Link href={href}>{actionLabel(match)}</Link>
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border border-[#EED8AA]/70 bg-white/50 px-3 py-2 text-center text-xs text-muted-foreground">
+          等待上一轮结束后生成
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MatchColumn({
+  title,
+  matches,
+  center = false,
+  contestHrefById,
+}: {
+  title: string;
+  matches: Array<{
+    round: string;
+    slot: number;
+    match: TournamentBracketMatch | null;
+  }>;
+  center?: boolean;
+  contestHrefById?: Record<string, string>;
+}) {
+  return (
+    <div className="flex min-w-[190px] flex-col justify-around gap-4">
+      <div className="rounded-full border border-[#EED8AA]/70 bg-white/80 px-3 py-1 text-center text-sm font-medium text-[#5C321E]">
+        {title}
       </div>
+      <div className="flex flex-1 flex-col justify-around gap-4">
+        {matches.map((item) => (
+          <TopologyMatchNode
+            key={`${item.round}-${item.slot}`}
+            round={item.round}
+            slot={item.slot}
+            match={item.match}
+            contestHrefById={contestHrefById}
+            center={center}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MergeConnector({
+  groups,
+  direction,
+}: {
+  groups: number;
+  direction: "right" | "left";
+}) {
+  return (
+    <div className="flex w-12 flex-col justify-around py-12">
+      {Array.from({ length: groups }, (_, index) => (
+        <div key={index} className="relative min-h-[120px] flex-1">
+          <span
+            className={cn(
+              "absolute top-[28%] border-t border-[#D9A85C]",
+              direction === "right" ? "left-0 right-1/2" : "left-1/2 right-0",
+            )}
+          />
+          <span
+            className={cn(
+              "absolute bottom-[28%] border-t border-[#D9A85C]",
+              direction === "right" ? "left-0 right-1/2" : "left-1/2 right-0",
+            )}
+          />
+          <span
+            className={cn(
+              "absolute bottom-[28%] top-[28%] border-l border-[#D9A85C]",
+              direction === "right" ? "right-1/2" : "left-1/2",
+            )}
+          />
+          <span
+            className={cn(
+              "absolute top-1/2 border-t border-[#D9A85C]",
+              direction === "right" ? "left-1/2 right-0" : "left-0 right-1/2",
+            )}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StraightConnector() {
+  return (
+    <div className="relative w-12 py-12">
+      <span className="absolute left-0 right-0 top-1/2 border-t border-[#D9A85C]" />
     </div>
   );
 }
@@ -185,6 +316,57 @@ export function TournamentBracket({
   if (bracket.rounds.length === 0) {
     return null;
   }
+
+  const matches = matchByRoundSlot(bracket);
+  const leftRoundOf16 = [1, 2, 3, 4].map((slot) => ({
+    round: "round_of_16",
+    slot,
+    match: matches.get(`round_of_16:${slot}`) ?? null,
+  }));
+  const leftQuarterfinal = [1, 2].map((slot) => ({
+    round: "quarterfinal",
+    slot,
+    match: matches.get(`quarterfinal:${slot}`) ?? null,
+  }));
+  const leftSemifinal = [
+    {
+      round: "semifinal",
+      slot: 1,
+      match: matches.get("semifinal:1") ?? null,
+    },
+  ];
+  const finalMatches = [
+    {
+      round: "final",
+      slot: 1,
+      match: matches.get("final:1") ?? null,
+    },
+  ];
+  const thirdPlace = matches.get("third_place:1");
+  if (thirdPlace) {
+    finalMatches.push({
+      round: "third_place",
+      slot: 1,
+      match: thirdPlace,
+    });
+  }
+  const rightSemifinal = [
+    {
+      round: "semifinal",
+      slot: 2,
+      match: matches.get("semifinal:2") ?? null,
+    },
+  ];
+  const rightQuarterfinal = [3, 4].map((slot) => ({
+    round: "quarterfinal",
+    slot,
+    match: matches.get(`quarterfinal:${slot}`) ?? null,
+  }));
+  const rightRoundOf16 = [5, 6, 7, 8].map((slot) => ({
+    round: "round_of_16",
+    slot,
+    match: matches.get(`round_of_16:${slot}`) ?? null,
+  }));
 
   return (
     <section className="rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4 shadow-sm sm:p-5">
@@ -201,23 +383,57 @@ export function TournamentBracket({
         <Badge variant="secondary">{bracket.tournament.status}</Badge>
       </div>
 
-      <div className="grid gap-4 lg:grid-flow-col lg:auto-cols-[minmax(220px,1fr)]">
-        {bracket.rounds.map((round) => (
-          <div key={round.key} className="min-w-0">
-            <div className="mb-3 rounded-full border border-[#EED8AA]/70 bg-white/70 px-3 py-1 text-center text-sm font-medium text-[#5C321E] whitespace-nowrap">
-              {round.label}
-            </div>
-            <div className="space-y-3">
-              {round.matches.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  contestHrefById={contestHrefById}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+      <div className="overflow-x-auto pb-2">
+        <div
+          className="grid min-h-[680px] min-w-[1180px] gap-0 rounded-2xl border border-[#EED8AA]/60 bg-white/35 p-4"
+          style={{
+            gridTemplateColumns:
+              "minmax(190px,1fr) 48px minmax(190px,1fr) 48px minmax(190px,1fr) 48px minmax(210px,1.08fr) 48px minmax(190px,1fr) 48px minmax(190px,1fr) 48px minmax(190px,1fr)",
+          }}
+        >
+          <MatchColumn
+            title="左半区 16 强"
+            matches={leftRoundOf16}
+            contestHrefById={contestHrefById}
+          />
+          <MergeConnector groups={2} direction="right" />
+          <MatchColumn
+            title="左半区 8 强"
+            matches={leftQuarterfinal}
+            contestHrefById={contestHrefById}
+          />
+          <MergeConnector groups={1} direction="right" />
+          <MatchColumn
+            title="左半区半决赛"
+            matches={leftSemifinal}
+            contestHrefById={contestHrefById}
+          />
+          <StraightConnector />
+          <MatchColumn
+            title="中心赛程"
+            matches={finalMatches}
+            contestHrefById={contestHrefById}
+            center
+          />
+          <StraightConnector />
+          <MatchColumn
+            title="右半区半决赛"
+            matches={rightSemifinal}
+            contestHrefById={contestHrefById}
+          />
+          <MergeConnector groups={1} direction="left" />
+          <MatchColumn
+            title="右半区 8 强"
+            matches={rightQuarterfinal}
+            contestHrefById={contestHrefById}
+          />
+          <MergeConnector groups={2} direction="left" />
+          <MatchColumn
+            title="右半区 16 强"
+            matches={rightRoundOf16}
+            contestHrefById={contestHrefById}
+          />
+        </div>
       </div>
     </section>
   );

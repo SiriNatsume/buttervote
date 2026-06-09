@@ -14,6 +14,7 @@ import { createServerDataClient } from "@/lib/supabase/server-data";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 import type {
   ContestStatus,
+  HomepageBracketValue,
   HomepageHeroValue,
   Json,
   ScheduledTransitionTarget,
@@ -86,6 +87,10 @@ const homepageHeroSchema = z.object({
   featuredId: z.string().uuid(),
   title: z.string().trim().max(160).optional(),
   description: z.string().trim().max(1000).optional(),
+});
+
+const homepageBracketSchema = z.object({
+  tournamentId: z.union([z.string().uuid(), z.literal("none")]),
 });
 
 const candidateSchema = z.object({
@@ -1863,6 +1868,53 @@ export async function updateHomepageHeroAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/admin/homepage");
   return actionSuccess("首页 Hero 已保存");
+}
+
+export async function updateHomepageBracketAction(formData: FormData) {
+  const adminResult = await getActionAdmin();
+  if (!adminResult.ok) {
+    return actionFailure(adminResult.error);
+  }
+
+  const parsed = homepageBracketSchema.safeParse({
+    tournamentId: formData.get("tournamentId"),
+  });
+
+  if (!parsed.success) {
+    return actionFailure("首页对阵图配置无效。");
+  }
+
+  const supabase = await createServerDataClient();
+  const value: HomepageBracketValue =
+    parsed.data.tournamentId === "none"
+      ? { tournamentId: null }
+      : { tournamentId: parsed.data.tournamentId };
+
+  if (value.tournamentId) {
+    const { data: tournament } = await supabase
+      .from("tournaments")
+      .select("id")
+      .eq("id", value.tournamentId)
+      .neq("status", "archived")
+      .maybeSingle();
+
+    if (!tournament) {
+      return actionFailure("赛事不存在或已归档。");
+    }
+  }
+
+  const { error } = await supabase.from("site_settings").upsert({
+    key: "homepage_bracket",
+    value: value as Json,
+  });
+
+  if (error) {
+    return actionFailure(error.message);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/admin/homepage");
+  return actionSuccess("首页对阵图已保存");
 }
 
 export async function updateHomepageHeroImageAction(imageMeta: unknown) {

@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes, type TallyResult } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import {
@@ -80,11 +81,13 @@ async function tallyContest(contest: ContestOption) {
       .eq("contest_id", contest.id)
       .eq("is_active", true)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("votes")
-      .select("id,contest_id,voter_id,payload,created_at")
-      .eq("contest_id", contest.id)
-      .order("created_at", { ascending: true }),
+    fetchAllRows<Vote>(() =>
+      supabase
+        .from("votes")
+        .select("id,contest_id,voter_id,payload,created_at")
+        .eq("contest_id", contest.id)
+        .order("created_at", { ascending: true }),
+    ),
     contest.group_id
       ? supabase
           .from("contest_groups")
@@ -93,10 +96,12 @@ async function tallyContest(contest: ContestOption) {
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     contest.group_id
-      ? supabase
-          .from("love_vote_allocations")
-          .select("vote_id,candidate_id")
-          .eq("contest_id", contest.id)
+      ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(() =>
+          supabase
+            .from("love_vote_allocations")
+            .select("vote_id,candidate_id")
+            .eq("contest_id", contest.id),
+        )
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -112,7 +117,7 @@ async function tallyContest(contest: ContestOption) {
   return tallyVotes({
     voteType: contest.vote_type,
     candidates: candidates ?? [],
-    votes: (votes ?? []) as Vote[],
+    votes: votes ?? [],
     loveVoteWeight: group ? Number(group.love_vote_weight) : null,
     loveAllocations:
       (loveRows ?? []) as Array<
@@ -303,9 +308,9 @@ export default async function AdminTournamentsPage() {
               preliminaryStages.length > 0 && knockoutStages.length === 0;
 
             return (
-              <Card key={preview.tournament.id} className="overflow-hidden">
-                <details className="group">
-                  <summary className="flex cursor-pointer list-none flex-col gap-3 p-6 transition hover:bg-[#FFF8E8]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[#FFF8E8] [&::-webkit-details-marker]:hidden sm:flex-row sm:items-start sm:justify-between">
+              <Card key={preview.tournament.id} className="min-w-0 overflow-hidden">
+                <details className="group min-w-0">
+                  <summary className="flex cursor-pointer list-none flex-col gap-3 p-4 transition hover:bg-[#FFF8E8]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[#FFF8E8] [&::-webkit-details-marker]:hidden sm:flex-row sm:items-start sm:justify-between sm:p-6">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <ChevronRight className="size-5 shrink-0 text-primary transition-transform group-open:rotate-90" />
@@ -341,9 +346,9 @@ export default async function AdminTournamentsPage() {
                       <span className="hidden group-open:inline">收起详情</span>
                     </div>
                   </summary>
-                  <CardContent className="space-y-6 border-t border-[#EED8AA]/70 p-6">
+                  <CardContent className="min-w-0 space-y-6 overflow-x-hidden border-t border-[#EED8AA]/70 p-4 sm:p-6">
                     {preview.screeningContest ? (
-                      <div className="flex justify-end">
+                      <div className="flex min-w-0 justify-end">
                         <Button asChild variant="outline" size="sm">
                           <Link
                             href={`/contests/${preview.screeningContest.id}/results`}
@@ -368,8 +373,8 @@ export default async function AdminTournamentsPage() {
                     </div>
                   ) : null}
 
-                  <div className="grid gap-4 md:grid-cols-[1fr_0.9fr]">
-                    <div className="rounded-2xl border border-[#EED8AA]/70">
+                  <div className="grid min-w-0 gap-4 md:grid-cols-[1fr_0.9fr]">
+                    <div className="min-w-0 rounded-2xl border border-[#EED8AA]/70">
                       <div className="flex items-center justify-between border-b border-[#EED8AA]/70 px-4 py-3">
                         <div className="flex items-center gap-2 font-medium">
                           <ListChecks className="size-4 text-[#B9854C]" />
@@ -379,7 +384,7 @@ export default async function AdminTournamentsPage() {
                           {preview.advancers.length} 名
                         </Badge>
                       </div>
-                      <div className="max-h-[460px] overflow-auto">
+                      <div className="max-h-[460px] max-w-full overflow-auto">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -412,8 +417,8 @@ export default async function AdminTournamentsPage() {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                    <div className="min-w-0 space-y-4">
+                      <div className="min-w-0 rounded-2xl border border-[#EED8AA]/70 p-4">
                         <div className="mb-3 flex items-center gap-2 font-medium">
                           <Shuffle className="size-4 text-[#B9854C]" />
                           生成预赛
@@ -430,7 +435,7 @@ export default async function AdminTournamentsPage() {
                         />
                       </div>
 
-                      <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                      <div className="min-w-0 rounded-2xl border border-[#EED8AA]/70 p-4">
                         <div className="mb-3 flex items-center gap-2 font-medium">
                           <Shuffle className="size-4 text-[#B9854C]" />
                           生成加赛
@@ -447,7 +452,7 @@ export default async function AdminTournamentsPage() {
                         />
                       </div>
 
-                      <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                      <div className="min-w-0 rounded-2xl border border-[#EED8AA]/70 p-4">
                         <div className="mb-3 flex items-center gap-2 font-medium">
                           <Shuffle className="size-4 text-[#B9854C]" />
                           生成正赛
@@ -464,7 +469,7 @@ export default async function AdminTournamentsPage() {
                         />
                       </div>
 
-                      <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                      <div className="min-w-0 rounded-2xl border border-[#EED8AA]/70 p-4">
                         <div className="mb-3 flex items-center gap-2 font-medium">
                           <Shuffle className="size-4 text-[#B9854C]" />
                           生成下一轮正赛
@@ -477,7 +482,7 @@ export default async function AdminTournamentsPage() {
                       </div>
 
                       {preliminaryStages.length > 0 ? (
-                        <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                        <div className="min-w-0 rounded-2xl border border-[#EED8AA]/70 p-4">
                           <div className="mb-3 font-medium">预赛活动</div>
                           <div className="space-y-2">
                             {preliminaryStages.map((stage) => {
@@ -488,7 +493,7 @@ export default async function AdminTournamentsPage() {
                               return (
                                 <div
                                   key={stage.id}
-                                  className="flex items-center justify-between gap-3 rounded-xl bg-[#FFF8E8]/60 px-3 py-2 text-sm"
+                                  className="flex min-w-0 flex-col items-stretch gap-2 rounded-xl bg-[#FFF8E8]/60 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                                 >
                                   <span className="min-w-0 truncate">
                                     {String(
@@ -498,7 +503,7 @@ export default async function AdminTournamentsPage() {
                                     组：{contest?.title ?? "活动已删除"}
                                   </span>
                                   {stage.contest_id ? (
-                                    <Button asChild size="sm" variant="outline">
+                                    <Button asChild size="sm" variant="outline" className="shrink-0">
                                       <Link
                                         href={`/admin/contests/${stage.contest_id}/edit`}
                                       >
@@ -514,7 +519,7 @@ export default async function AdminTournamentsPage() {
                       ) : null}
 
                       {tiebreakerStages.length > 0 || knockoutStages.length > 0 ? (
-                        <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                        <div className="min-w-0 rounded-2xl border border-[#EED8AA]/70 p-4">
                           <div className="mb-3 font-medium">加赛 / 正赛活动</div>
                           <div className="space-y-2">
                             {[...tiebreakerStages, ...knockoutStages].map((stage) => {
@@ -542,13 +547,13 @@ export default async function AdminTournamentsPage() {
                               return (
                                 <div
                                   key={stage.id}
-                                  className="flex items-center justify-between gap-3 rounded-xl bg-[#FFF8E8]/60 px-3 py-2 text-sm"
+                                  className="flex min-w-0 flex-col items-stretch gap-2 rounded-xl bg-[#FFF8E8]/60 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                                 >
                                   <span className="min-w-0 truncate">
                                     {label}：{contest?.title ?? "活动已删除"}
                                   </span>
                                   {stage.contest_id ? (
-                                    <Button asChild size="sm" variant="outline">
+                                    <Button asChild size="sm" variant="outline" className="shrink-0">
                                       <Link
                                         href={`/admin/contests/${stage.contest_id}/edit`}
                                       >
@@ -573,18 +578,18 @@ export default async function AdminTournamentsPage() {
                           key={log.id}
                           className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFFCF4]/80 p-4"
                         >
-                          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                          <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2 text-sm">
                             <Badge variant="outline">{log.kind}</Badge>
                             <Badge variant="secondary">seed：{log.seed}</Badge>
                             <span className="text-muted-foreground">
                               {formatDateTime(log.created_at)}
                             </span>
                           </div>
-                          <div className="grid gap-3 lg:grid-cols-2">
-                            <pre className="max-h-72 overflow-auto rounded-xl bg-[#2B2118] p-3 text-xs leading-5 text-[#FFF8E8]">
+                          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+                            <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[#2B2118] p-3 text-xs leading-5 text-[#FFF8E8]">
                               {formatJson(log.input)}
                             </pre>
-                            <pre className="max-h-72 overflow-auto rounded-xl bg-[#2B2118] p-3 text-xs leading-5 text-[#FFF8E8]">
+                            <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[#2B2118] p-3 text-xs leading-5 text-[#FFF8E8]">
                               {formatJson(log.output)}
                             </pre>
                           </div>

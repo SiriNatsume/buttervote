@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canViewResults } from "@/lib/contest-rules";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
 import type {
   Candidate,
@@ -43,6 +44,8 @@ type BracketCandidate = Pick<
   | "is_active"
   | "created_at"
 >;
+
+type PublicVoteRow = Pick<Vote, "id" | "contest_id" | "payload" | "created_at">;
 
 type BracketTournament = Pick<
   Tournament,
@@ -254,25 +257,37 @@ async function tallyVisibleContestScores(
 
   await Promise.all(
     visibleContests.map(async (contest) => {
-      const [{ data: candidates }, { data: voteRows }, { data: loveRows }] =
-        await Promise.all([
-          supabase
-            .from("candidates")
-            .select(
-              "id,name,description,image_path,nominator_display_name,is_active,created_at",
-            )
-            .eq("contest_id", contest.id)
-            .eq("is_active", true)
-            .order("created_at", { ascending: true }),
+      const [
+        { data: candidates },
+        { data: voteRows, error: voteRowsError },
+        { data: loveRows, error: loveRowsError },
+      ] = await Promise.all([
+        supabase
+          .from("candidates")
+          .select(
+            "id,name,description,image_path,nominator_display_name,is_active,created_at",
+          )
+          .eq("contest_id", contest.id)
+          .eq("is_active", true)
+          .order("created_at", { ascending: true }),
+        fetchAllRows<PublicVoteRow>(() =>
           supabase.rpc("get_contest_vote_payloads", {
             p_contest_id: contest.id,
           }),
-          contest.group_id
-            ? supabase.rpc("get_contest_love_vote_allocations", {
-                p_contest_id: contest.id,
-              })
-            : Promise.resolve({ data: [] }),
-        ]);
+        ),
+        contest.group_id
+          ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
+              () =>
+                supabase.rpc("get_contest_love_vote_allocations", {
+                  p_contest_id: contest.id,
+                }),
+            )
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (voteRowsError || loveRowsError) {
+        throw new Error(voteRowsError?.message ?? loveRowsError?.message);
+      }
 
       const resultByCandidate = new Map(
         tallyVotes({

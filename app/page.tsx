@@ -9,7 +9,7 @@ import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { getTournamentBracket } from "@/lib/tournament-bracket";
 import type { TournamentBracketData } from "@/lib/tournament-bracket";
-import type { HomepageHeroValue } from "@/lib/types";
+import type { HomepageBracketValue, HomepageHeroValue } from "@/lib/types";
 import logo from "@/img/网站logo.png";
 
 type Hero = {
@@ -23,20 +23,33 @@ type Hero = {
 export default async function HomePage() {
   await applyScheduledTransitions({ revalidate: false });
   const supabase = await createClient();
-  const [{ data: contests }, { data: heroSetting }] = await Promise.all([
-    supabase
-      .from("contests")
-      .select("id,title,description,status,vote_type,image_path")
-      .is("archived_at", null)
-      .neq("status", "draft")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("site_settings")
-      .select("value")
-      .eq("key", "homepage_hero")
-      .maybeSingle(),
-  ]);
+  const [{ data: contests }, { data: heroSetting }, { data: bracketSetting }] =
+    await Promise.all([
+      supabase
+        .from("contests")
+        .select("id,title,description,status,vote_type,image_path")
+        .is("archived_at", null)
+        .neq("status", "draft")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "homepage_hero")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "homepage_bracket")
+        .maybeSingle(),
+    ]);
   const heroValue = (heroSetting?.value ?? null) as HomepageHeroValue | null;
+  const bracketValue = (bracketSetting?.value ?? null) as HomepageBracketValue | null;
+  const bracketTournamentId =
+    bracketSetting !== null
+      ? bracketValue?.tournamentId ?? null
+      : heroValue?.featuredType === "tournament"
+        ? heroValue.featuredId ?? null
+        : null;
   let hero: Hero | null = null;
   let featuredBracket: TournamentBracketData | null = null;
 
@@ -83,15 +96,25 @@ export default async function HomePage() {
     const bracket = await getTournamentBracket(supabase, heroValue.featuredId);
 
     if (bracket) {
-      featuredBracket = bracket.rounds.length > 0 ? bracket : null;
       hero = {
         title: heroValue.title || bracket.tournament.name,
         description: heroValue.description || "查看正赛赛程、投票进度和公开结果。",
         imagePath: heroValue.imagePath,
-        href: featuredBracket ? "#featured-tournament-bracket" : "#public-contests",
-        cta: featuredBracket ? "查看对阵" : "查看活动",
+        href:
+          bracketTournamentId === heroValue.featuredId && bracket.rounds.length > 0
+            ? "#featured-tournament-bracket"
+            : "#public-contests",
+        cta:
+          bracketTournamentId === heroValue.featuredId && bracket.rounds.length > 0
+            ? "查看对阵"
+            : "查看活动",
       };
     }
+  }
+
+  if (bracketTournamentId) {
+    const bracket = await getTournamentBracket(supabase, bracketTournamentId);
+    featuredBracket = bracket && bracket.rounds.length > 0 ? bracket : null;
   }
 
   const heroImageUrl = getPublicImageUrl(hero?.imagePath);

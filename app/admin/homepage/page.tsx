@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HomepageBracketForm } from "@/components/homepage-bracket-form";
 import { HomepageHeroForm } from "@/components/homepage-hero-form";
 import { HomepageHeroUploader } from "@/components/homepage-hero-uploader";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth";
 import { createServerDataClient } from "@/lib/supabase/server-data";
-import type { HomepageHeroValue } from "@/lib/types";
+import type { HomepageBracketValue, HomepageHeroValue } from "@/lib/types";
 
 export default async function AdminHomepagePage({
   searchParams,
@@ -24,7 +25,8 @@ export default async function AdminHomepagePage({
     { data: groups },
     { data: contests },
     { data: tournaments },
-    { data: setting },
+    { data: heroSetting },
+    { data: bracketSetting },
   ] =
     await Promise.all([
       supabase
@@ -47,8 +49,18 @@ export default async function AdminHomepagePage({
         .select("value")
         .eq("key", "homepage_hero")
         .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "homepage_bracket")
+        .maybeSingle(),
     ]);
-  const heroValue = (setting?.value ?? null) as HomepageHeroValue | null;
+  const heroValue = (heroSetting?.value ?? null) as HomepageHeroValue | null;
+  const bracketValue = (bracketSetting?.value ?? null) as HomepageBracketValue | null;
+  const tournamentOptions = (tournaments ?? []).map((tournament) => ({
+    id: tournament.id,
+    label: tournament.name,
+  }));
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
@@ -93,10 +105,7 @@ export default async function AdminHomepagePage({
                 id: contest.id,
                 label: contest.title,
               }))}
-              tournaments={(tournaments ?? []).map((tournament) => ({
-                id: tournament.id,
-                label: tournament.name,
-              }))}
+              tournaments={tournamentOptions}
               value={heroValue}
             />
           </CardContent>
@@ -118,6 +127,18 @@ export default async function AdminHomepagePage({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-6">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle>首页对阵图</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          <HomepageBracketForm
+            tournaments={tournamentOptions}
+            value={bracketValue}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

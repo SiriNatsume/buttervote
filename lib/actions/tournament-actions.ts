@@ -16,6 +16,7 @@ import {
   type PreliminaryGroupResolution,
 } from "@/lib/tournament-rules";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes, type TallyResult } from "@/lib/tally";
 import type {
   Json,
@@ -181,11 +182,13 @@ async function getContestResults(contestId: string) {
       .eq("contest_id", contestId)
       .eq("is_active", true)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("votes")
-      .select("id,contest_id,voter_id,payload,created_at")
-      .eq("contest_id", contestId)
-      .order("created_at", { ascending: true }),
+    fetchAllRows<Vote>(() =>
+      supabase
+        .from("votes")
+        .select("id,contest_id,voter_id,payload,created_at")
+        .eq("contest_id", contestId)
+        .order("created_at", { ascending: true }),
+    ),
     contest.group_id
       ? supabase
           .from("contest_groups")
@@ -194,10 +197,12 @@ async function getContestResults(contestId: string) {
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     contest.group_id
-      ? supabase
-          .from("love_vote_allocations")
-          .select("vote_id,candidate_id")
-          .eq("contest_id", contestId)
+      ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(() =>
+          supabase
+            .from("love_vote_allocations")
+            .select("vote_id,candidate_id")
+            .eq("contest_id", contestId),
+        )
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -215,7 +220,7 @@ async function getContestResults(contestId: string) {
   const results = tallyVotes({
     voteType: contest.vote_type,
     candidates: candidates ?? [],
-    votes: (votes ?? []) as Vote[],
+    votes: votes ?? [],
     loveVoteWeight: group ? Number(group.love_vote_weight) : null,
     loveAllocations:
       (loveRows ?? []) as Array<
