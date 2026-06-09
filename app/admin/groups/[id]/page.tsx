@@ -239,7 +239,7 @@ export default async function AdminGroupDetailPage({
                         </TableCell>
                         <TableCell>{contest.max_choices}</TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex flex-wrap justify-end gap-2">
                             <Button asChild size="sm" variant="outline">
                               <Link href={`/admin/contests/${contest.id}/edit`}>
                                 编辑

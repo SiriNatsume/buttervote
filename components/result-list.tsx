@@ -79,11 +79,18 @@ export function ResultList({
                     </div>
                   ) : null}
                   {showLoveBreakdown ? (
-                    <p className="mt-2 inline-flex flex-wrap items-center gap-1 rounded-full border border-[#FFB3C1] bg-[#FFE4EA] px-2.5 py-1 text-xs text-[#C73555]">
-                      <Heart className="size-3 fill-current" />
-                      普通得分 {result.normalScore} / 真爱票得分{" "}
-                      {result.loveScore} / 真爱票 {result.loveVoteCount} 张
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#C73555]">
+                      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[#FFB3C1] bg-[#FFE4EA] px-2.5 py-1">
+                        <Heart className="size-3 fill-current" />
+                        普通得分 {result.normalScore}
+                      </span>
+                      <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#FFB3C1] bg-[#FFE4EA] px-2.5 py-1">
+                        真爱票得分 {result.loveScore}
+                      </span>
+                      <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#FFB3C1] bg-[#FFE4EA] px-2.5 py-1">
+                        真爱票 {result.loveVoteCount} 张
+                      </span>
+                    </div>
                   ) : null}
                   {result.lastVoteAt ? (
                     <p className="mt-2 text-xs text-muted-foreground">

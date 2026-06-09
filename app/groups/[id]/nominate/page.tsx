@@ -159,7 +159,7 @@ export default async function GroupNominatePage({
               {group.description || "暂无简介。"}
             </p>
             {!profile ? (
-              <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#EED8AA] bg-white/70 px-3 py-1 text-sm text-muted-foreground">
+              <p className="mt-3 inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/70 px-3 py-1 text-sm text-muted-foreground">
                 <LogIn className="size-4" />
                 提交提名需要登录。
               </p>

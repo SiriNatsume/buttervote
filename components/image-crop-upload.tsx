@@ -294,7 +294,7 @@ export function ImageCropUpload({
                   onValueChange={(value) => setZoom(value[0] ?? 1)}
                 />
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"

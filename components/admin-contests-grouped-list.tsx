@@ -251,7 +251,7 @@ function MobileContestCard({
           />
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <ContestActions contest={contest} onArchived={onArchived} />
       </div>
     </div>
@@ -474,7 +474,7 @@ export function AdminContestsGroupedList({
                               <VoteTypeBadge voteType={contest.vote_type} />
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-3">
+                              <div className="flex flex-wrap items-center gap-3">
                                 <StatusBadge status={contest.status} />
                                 <ContestStatusSelect
                                   contestId={contest.id}
@@ -484,7 +484,7 @@ export function AdminContestsGroupedList({
                             </TableCell>
                             <TableCell>{contest.max_choices}</TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
+                              <div className="flex flex-wrap justify-end gap-2">
                                 <ContestActions
                                   contest={contest}
                                   onArchived={archiveContest}

@@ -229,7 +229,7 @@ export default async function AdminUserGroupDetailPage({
                             <Badge variant={meta.variant}>{meta.label}</Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="flex justify-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2">
                               <TransitionActionForm
                                 action={renewUserGroupMember}
                                 successMessage="成员权限已续期"

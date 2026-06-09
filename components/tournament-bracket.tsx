@@ -190,7 +190,7 @@ export function TournamentBracket({
     <section className="rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#EED8AA] bg-white/70 px-3 py-1 text-sm font-medium text-[#8A5525]">
+          <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/70 px-3 py-1 text-sm font-medium text-[#8A5525]">
             <Trophy className="size-4" />
             正赛对阵
           </div>
@@ -204,7 +204,7 @@ export function TournamentBracket({
       <div className="grid gap-4 lg:grid-flow-col lg:auto-cols-[minmax(220px,1fr)]">
         {bracket.rounds.map((round) => (
           <div key={round.key} className="min-w-0">
-            <div className="mb-3 rounded-full border border-[#EED8AA]/70 bg-white/70 px-3 py-1 text-center text-sm font-medium text-[#5C321E]">
+            <div className="mb-3 rounded-full border border-[#EED8AA]/70 bg-white/70 px-3 py-1 text-center text-sm font-medium text-[#5C321E] whitespace-nowrap">
               {round.label}
             </div>
             <div className="space-y-3">

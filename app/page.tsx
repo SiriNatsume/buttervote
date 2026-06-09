@@ -132,7 +132,7 @@ export default async function HomePage() {
 
         <div className="relative flex min-h-[390px] flex-col justify-end p-6 sm:p-10">
           <div className="max-w-3xl py-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/65 px-3 py-1 text-sm font-medium text-orange-700 shadow-sm">
+            <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-orange-200 bg-white/65 px-3 py-1 text-sm font-medium text-orange-700 shadow-sm">
               <Heart className="size-4 fill-current" />
               Butter Vote 社区投票
             </div>

@@ -219,7 +219,7 @@ export function VoteForm({
     return (
       <div
         className={cn(
-          "mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm",
+          "mt-3 inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm",
           checked
             ? "border-[#FFB3C1] bg-[#FFE4EA] text-[#C73555]"
             : "border-[#F1D6A1] bg-white/50 text-muted-foreground",

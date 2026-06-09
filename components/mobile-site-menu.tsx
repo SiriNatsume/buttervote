@@ -42,7 +42,7 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
       onToggle={(event) => setOpen(event.currentTarget.open)}
       className="relative md:hidden"
     >
-      <summary className="relative flex cursor-pointer list-none items-center gap-2 rounded-full border border-[#EED8AA]/80 bg-[#FFF8E8] px-3 py-2 text-sm font-medium text-[#6A3E21] shadow-sm transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
+      <summary className="relative flex shrink-0 cursor-pointer list-none items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA]/80 bg-[#FFF8E8] px-3 py-2 text-sm font-medium text-[#6A3E21] shadow-sm transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
         <Menu className="size-4" />
         <span>菜单</span>
         {hasRejectedNominations ? (

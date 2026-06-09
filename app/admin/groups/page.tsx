@@ -112,7 +112,7 @@ export default async function AdminGroupsPage({
                     </Badge>
                     <Badge variant="outline">额度 {group.love_vote_quota}</Badge>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     <Button asChild size="sm" className="w-full">
                       <Link href={`/admin/groups/${group.id}`}>打开</Link>
                     </Button>
