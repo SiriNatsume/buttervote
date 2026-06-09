@@ -205,7 +205,7 @@ export type LoveVoteAllocation = {
 } & Record<string, unknown>;
 
 export type HomepageHeroValue = {
-  featuredType?: "group" | "contest";
+  featuredType?: "group" | "contest" | "tournament";
   featuredId?: string;
   title?: string;
   description?: string;

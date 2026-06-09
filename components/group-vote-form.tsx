@@ -452,7 +452,14 @@ export function GroupVoteForm({
         const selectedRanking = selection.ranking.filter(Boolean);
 
         return (
-          <Card key={contest.id} className={isSubmitting ? "pointer-events-none" : ""}>
+          <Card
+            key={contest.id}
+            id={`group-vote-contest-${contest.id}`}
+            className={cn(
+              "scroll-mt-24",
+              isSubmitting ? "pointer-events-none" : "",
+            )}
+          >
             <CardHeader>
               <div className="mb-2 flex flex-wrap gap-2">
                 <StatusBadge status={contest.status} />

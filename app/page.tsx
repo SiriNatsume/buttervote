@@ -2,10 +2,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Heart } from "lucide-react";
 import { ContestCard } from "@/components/contest-card";
+import { TournamentBracket } from "@/components/tournament-bracket";
 import { Button } from "@/components/ui/button";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
+import { getTournamentBracket } from "@/lib/tournament-bracket";
+import type { TournamentBracketData } from "@/lib/tournament-bracket";
 import type { HomepageHeroValue } from "@/lib/types";
 import logo from "@/img/网站logo.png";
 
@@ -35,6 +38,7 @@ export default async function HomePage() {
   ]);
   const heroValue = (heroSetting?.value ?? null) as HomepageHeroValue | null;
   let hero: Hero | null = null;
+  let featuredBracket: TournamentBracketData | null = null;
 
   if (heroValue?.featuredType === "group" && heroValue.featuredId) {
     const { data: group } = await supabase
@@ -71,6 +75,21 @@ export default async function HomePage() {
         imagePath: heroValue.imagePath || contest.image_path,
         href: `/contests/${contest.id}`,
         cta: "打开活动",
+      };
+    }
+  }
+
+  if (heroValue?.featuredType === "tournament" && heroValue.featuredId) {
+    const bracket = await getTournamentBracket(supabase, heroValue.featuredId);
+
+    if (bracket) {
+      featuredBracket = bracket.rounds.length > 0 ? bracket : null;
+      hero = {
+        title: heroValue.title || bracket.tournament.name,
+        description: heroValue.description || "查看正赛赛程、投票进度和公开结果。",
+        imagePath: heroValue.imagePath,
+        href: featuredBracket ? "#featured-tournament-bracket" : "#public-contests",
+        cta: featuredBracket ? "查看对阵" : "查看活动",
       };
     }
   }
@@ -134,6 +153,12 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {featuredBracket ? (
+        <div id="featured-tournament-bracket" className="mb-10 scroll-mt-24">
+          <TournamentBracket bracket={featuredBracket} />
+        </div>
+      ) : null}
 
       <div id="public-contests" className="mb-5 flex items-center justify-between">
         <h2 className="text-xl font-semibold">公开活动</h2>

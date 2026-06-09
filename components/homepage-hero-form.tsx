@@ -25,20 +25,32 @@ type Option = {
 export function HomepageHeroForm({
   groups,
   contests,
+  tournaments,
   value,
 }: {
   groups: Option[];
   contests: Option[];
+  tournaments: Option[];
   value?: HomepageHeroValue | null;
 }) {
   const initialType =
-    value?.featuredType ?? (groups.length > 0 ? "group" : "contest");
-  const [featuredType, setFeaturedType] = useState<"group" | "contest">(
-    initialType,
-  );
+    value?.featuredType ??
+    (groups.length > 0
+      ? "group"
+      : contests.length > 0
+        ? "contest"
+        : "tournament");
+  const [featuredType, setFeaturedType] = useState<
+    "group" | "contest" | "tournament"
+  >(initialType);
   const options = useMemo(
-    () => (featuredType === "group" ? groups : contests),
-    [contests, featuredType, groups],
+    () =>
+      featuredType === "group"
+        ? groups
+        : featuredType === "contest"
+          ? contests
+          : tournaments,
+    [contests, featuredType, groups, tournaments],
   );
   const preferredId =
     value?.featuredType === initialType ? value?.featuredId : undefined;
@@ -48,9 +60,14 @@ export function HomepageHeroForm({
       : options[0]?.id ?? "";
   const [featuredId, setFeaturedId] = useState(initialId);
 
-  function handleTypeChange(nextType: "group" | "contest") {
+  function handleTypeChange(nextType: "group" | "contest" | "tournament") {
     setFeaturedType(nextType);
-    const nextOptions = nextType === "group" ? groups : contests;
+    const nextOptions =
+      nextType === "group"
+        ? groups
+        : nextType === "contest"
+          ? contests
+          : tournaments;
     setFeaturedId(nextOptions[0]?.id ?? "");
   }
 
@@ -67,7 +84,7 @@ export function HomepageHeroForm({
               name="featuredType"
               value={featuredType}
               onValueChange={(nextValue) =>
-                handleTypeChange(nextValue as "group" | "contest")
+                handleTypeChange(nextValue as "group" | "contest" | "tournament")
               }
             >
               <SelectTrigger>
@@ -76,6 +93,7 @@ export function HomepageHeroForm({
               <SelectContent>
                 <SelectItem value="group">活动组</SelectItem>
                 <SelectItem value="contest">活动</SelectItem>
+                <SelectItem value="tournament">赛事对阵图</SelectItem>
               </SelectContent>
             </Select>
           </div>

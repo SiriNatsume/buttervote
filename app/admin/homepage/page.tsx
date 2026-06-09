@@ -20,7 +20,12 @@ export default async function AdminHomepagePage({
   await requireAdmin();
   const query = await searchParams;
   const supabase = await createServerDataClient();
-  const [{ data: groups }, { data: contests }, { data: setting }] =
+  const [
+    { data: groups },
+    { data: contests },
+    { data: tournaments },
+    { data: setting },
+  ] =
     await Promise.all([
       supabase
         .from("contest_groups")
@@ -31,6 +36,11 @@ export default async function AdminHomepagePage({
         .select("id,title")
         .is("archived_at", null)
         .neq("status", "draft")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("tournaments")
+        .select("id,name")
+        .neq("status", "archived")
         .order("created_at", { ascending: false }),
       supabase
         .from("site_settings")
@@ -46,7 +56,7 @@ export default async function AdminHomepagePage({
         <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-normal">首页</h1>
           <p className="mt-3 text-muted-foreground">
-            选择首页 Hero 推荐展示的活动或活动组。
+            选择首页 Hero 推荐展示的活动、活动组或赛事对阵图。
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
@@ -82,6 +92,10 @@ export default async function AdminHomepagePage({
               contests={(contests ?? []).map((contest) => ({
                 id: contest.id,
                 label: contest.title,
+              }))}
+              tournaments={(tournaments ?? []).map((tournament) => ({
+                id: tournament.id,
+                label: tournament.name,
               }))}
               value={heroValue}
             />

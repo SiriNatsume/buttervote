@@ -82,7 +82,7 @@ const inheritSchema = z.object({
 });
 
 const homepageHeroSchema = z.object({
-  featuredType: z.enum(["group", "contest"]),
+  featuredType: z.enum(["group", "contest", "tournament"]),
   featuredId: z.string().uuid(),
   title: z.string().trim().max(160).optional(),
   description: z.string().trim().max(1000).optional(),
@@ -1804,16 +1804,26 @@ export async function updateHomepageHeroAction(formData: FormData) {
   }
 
   const supabase = await createServerDataClient();
-  const table =
-    parsed.data.featuredType === "group" ? "contest_groups" : "contests";
-  const featuredQuery = supabase
-    .from(table)
-    .select("id")
-    .eq("id", parsed.data.featuredId);
   const { data: featured } =
-    parsed.data.featuredType === "contest"
-      ? await featuredQuery.is("archived_at", null).maybeSingle()
-      : await featuredQuery.maybeSingle();
+    parsed.data.featuredType === "group"
+      ? await supabase
+          .from("contest_groups")
+          .select("id")
+          .eq("id", parsed.data.featuredId)
+          .maybeSingle()
+      : parsed.data.featuredType === "contest"
+        ? await supabase
+            .from("contests")
+            .select("id")
+            .eq("id", parsed.data.featuredId)
+            .is("archived_at", null)
+            .maybeSingle()
+        : await supabase
+            .from("tournaments")
+            .select("id")
+            .eq("id", parsed.data.featuredId)
+            .neq("status", "archived")
+            .maybeSingle();
 
   if (!featured) {
     return actionFailure("推荐对象不存在。");

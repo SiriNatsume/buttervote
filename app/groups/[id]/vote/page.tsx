@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import { ImageIcon } from "lucide-react";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
 import { GroupVoteForm } from "@/components/group-vote-form";
+import { TournamentBracket } from "@/components/tournament-bracket";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { getTournamentBracketsForGroup } from "@/lib/tournament-bracket";
 
 export default async function GroupVotePage({
   params,
@@ -90,6 +92,13 @@ export default async function GroupVotePage({
     candidates: candidatesByContest.get(contest.id) ?? [],
     existingVoteId: voteByContest.get(contest.id) ?? null,
   }));
+  const tournamentBrackets = await getTournamentBracketsForGroup(supabase, id);
+  const contestHrefById = Object.fromEntries(
+    contestIds.map((contestId) => [
+      contestId,
+      `#group-vote-contest-${contestId}`,
+    ]),
+  );
   const coverUrl = getPublicImageUrl(group.cover_image_path);
 
   return (
@@ -125,6 +134,18 @@ export default async function GroupVotePage({
           </Button>
         </div>
       </div>
+
+      {tournamentBrackets.length > 0 ? (
+        <div className="mb-8 space-y-5">
+          {tournamentBrackets.map((bracket) => (
+            <TournamentBracket
+              key={bracket.tournament.id}
+              bracket={bracket}
+              contestHrefById={contestHrefById}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {contestsWithCandidates.length > 0 ? (
         <GroupVoteForm
