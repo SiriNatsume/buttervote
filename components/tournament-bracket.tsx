@@ -363,7 +363,10 @@ export function TournamentBracket({
   }));
 
   return (
-    <section className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4 shadow-sm sm:p-5">
+    <section
+      className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4 shadow-sm sm:p-5"
+      data-bracket-share-root
+    >
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/70 px-3 py-1 text-sm font-medium text-[#8A5525]">
@@ -380,10 +383,17 @@ export function TournamentBracket({
         </div>
       </div>
 
-      <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-[#EED8AA]/60 bg-white/35">
-        <div className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2">
+      <div
+        className="w-full min-w-0 overflow-hidden rounded-2xl border border-[#EED8AA]/60 bg-white/35"
+        data-bracket-share-frame
+      >
+        <div
+          className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2"
+          data-bracket-share-scroll
+        >
           <div
             className="grid min-h-[620px] w-max max-w-none gap-0 p-4"
+            data-bracket-share-grid
             style={{
               gridTemplateColumns:
                 "280px 48px 280px 48px 280px 48px 320px 48px 280px 48px 280px 48px 280px",
