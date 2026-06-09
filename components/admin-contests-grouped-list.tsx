@@ -163,7 +163,13 @@ function ContestCover({ contest }: { contest: AdminContestItem }) {
   );
 }
 
-function ContestActions({ contest }: { contest: AdminContestItem }) {
+function ContestActions({
+  contest,
+  onArchived,
+}: {
+  contest: AdminContestItem;
+  onArchived: (contestId: string) => void;
+}) {
   return (
     <>
       <Button asChild size="sm" variant="outline" className="w-full md:w-auto">
@@ -184,6 +190,8 @@ function ContestActions({ contest }: { contest: AdminContestItem }) {
       <ArchiveContestDialog
         contestId={contest.id}
         contestTitle={contest.title}
+        onArchived={onArchived}
+        refreshOnSuccess={false}
         triggerSize="sm"
         triggerClassName="w-full md:w-auto"
       />
@@ -194,9 +202,11 @@ function ContestActions({ contest }: { contest: AdminContestItem }) {
 function MobileContestCard({
   contest,
   groupName,
+  onArchived,
 }: {
   contest: AdminContestItem;
   groupName: string;
+  onArchived: (contestId: string) => void;
 }) {
   const imageUrl = getPublicImageUrl(contest.image_path);
 
@@ -242,7 +252,7 @@ function MobileContestCard({
         </div>
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <ContestActions contest={contest} />
+        <ContestActions contest={contest} onArchived={onArchived} />
       </div>
     </div>
   );
@@ -256,9 +266,16 @@ export function AdminContestsGroupedList({
   groups: AdminGroupItem[];
 }) {
   const [search, setSearch] = useState("");
+  const [archivedContestIds, setArchivedContestIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const visibleContests = useMemo(
+    () => contests.filter((contest) => !archivedContestIds.has(contest.id)),
+    [archivedContestIds, contests],
+  );
   const groupedSections = useMemo(
-    () => groupContestsByGroup(contests, groups),
-    [contests, groups],
+    () => groupContestsByGroup(visibleContests, groups),
+    [visibleContests, groups],
   );
   const defaultOpenKeys = useMemo(() => {
     const activeStatuses = new Set<ContestStatus>([
@@ -334,7 +351,15 @@ export function AdminContestsGroupedList({
     setOpenGroupIds(new Set());
   }
 
-  if (contests.length === 0) {
+  function archiveContest(contestId: string) {
+    setArchivedContestIds((current) => {
+      const next = new Set(current);
+      next.add(contestId);
+      return next;
+    });
+  }
+
+  if (visibleContests.length === 0) {
     return (
       <div className="rounded-2xl border p-6 text-sm text-muted-foreground">
         暂无活动。创建活动后，可以在这里编辑状态、候选项和活动组。
@@ -416,6 +441,7 @@ export function AdminContestsGroupedList({
                         key={contest.id}
                         contest={contest}
                         groupName={getContestGroupName(contest, groupNameById)}
+                        onArchived={archiveContest}
                       />
                     ))}
                   </div>
@@ -459,7 +485,10 @@ export function AdminContestsGroupedList({
                             <TableCell>{contest.max_choices}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
-                                <ContestActions contest={contest} />
+                                <ContestActions
+                                  contest={contest}
+                                  onArchived={archiveContest}
+                                />
                               </div>
                             </TableCell>
                           </TableRow>

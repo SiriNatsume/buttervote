@@ -678,9 +678,7 @@ export async function archiveContestAction(formData: FormData) {
     revalidateGroup(groupId);
   }
 
-  return actionSuccess("活动已归档", {
-    redirectTo: groupId ? `/admin/groups/${groupId}` : "/admin",
-  });
+  return actionSuccess("活动已归档");
 }
 
 export async function updateContestImageAction(

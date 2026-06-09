@@ -52,6 +52,7 @@ export function TransitionActionForm({
   action,
   children,
   className,
+  onSuccess,
   successMessage = "保存成功",
   refresh = true,
   resetOnSuccess = false,
@@ -59,6 +60,7 @@ export function TransitionActionForm({
   action: TransitionAction;
   children: ReactNode;
   className?: string;
+  onSuccess?: (result: TransitionActionResult) => void;
   successMessage?: string;
   refresh?: boolean;
   resetOnSuccess?: boolean;
@@ -88,6 +90,8 @@ export function TransitionActionForm({
         if (resetOnSuccess) {
           formRef.current?.reset();
         }
+
+        onSuccess?.(result);
 
         if (result?.redirectTo) {
           router.push(result.redirectTo);

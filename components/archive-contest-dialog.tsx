@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Archive } from "lucide-react";
 import { archiveContestAction } from "@/lib/actions/admin-actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -18,16 +19,22 @@ import {
 export function ArchiveContestDialog({
   contestId,
   contestTitle,
+  onArchived,
+  refreshOnSuccess = true,
   triggerClassName,
   triggerSize,
 }: {
   contestId: string;
   contestTitle: string;
+  onArchived?: (contestId: string) => void;
+  refreshOnSuccess?: boolean;
   triggerClassName?: string;
   triggerSize?: ButtonProps["size"];
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
           type="button"
@@ -55,7 +62,12 @@ export function ArchiveContestDialog({
           </DialogClose>
           <TransitionActionForm
             action={archiveContestAction}
+            refresh={refreshOnSuccess}
             successMessage="活动已归档"
+            onSuccess={() => {
+              setOpen(false);
+              onArchived?.(contestId);
+            }}
           >
             <input type="hidden" name="contestId" value={contestId} />
             <FormSubmitButton
