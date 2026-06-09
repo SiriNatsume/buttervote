@@ -62,12 +62,12 @@ const ROUND_LABEL: Record<string, string> = {
   third_place: "季军赛",
 };
 
-const CANVAS_WIDTH = 2400;
-const CANVAS_HEIGHT = 1400;
-const NODE_WIDTH = 260;
-const CENTER_WIDTH = 300;
-const NODE_HEIGHT = 132;
-const PARTICIPANT_HEIGHT = 46;
+const CANVAS_WIDTH = 3200;
+const CANVAS_HEIGHT = 1800;
+const NODE_WIDTH = 360;
+const CENTER_WIDTH = 420;
+const NODE_HEIGHT = 224;
+const PARTICIPANT_HEIGHT = 74;
 
 function imageSource(src: string | { src: string }) {
   return typeof src === "string" ? src : src.src;
@@ -128,13 +128,37 @@ function fillRoundedRect(
   }
 }
 
-function drawTextLines(
+function ellipsizeText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
+  if (ctx.measureText(text).width <= maxWidth) {
+    return text;
+  }
+
+  let current = text;
+  while (current.length > 0 && ctx.measureText(`${current}...`).width > maxWidth) {
+    current = current.slice(0, -1);
+  }
+
+  return current ? `${current}...` : "...";
+}
+
+function drawSingleLine(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,
   y: number,
   maxWidth: number,
-  lineHeight: number,
+) {
+  ctx.fillText(ellipsizeText(ctx, text, maxWidth), x, y);
+}
+
+function splitTextLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
   maxLines: number,
 ) {
   const chars = Array.from(text);
@@ -162,13 +186,25 @@ function drawTextLines(
   const visibleLines = lines.slice(0, maxLines);
   if (chars.join("").length > visibleLines.join("").length && visibleLines.length > 0) {
     let lastLine = visibleLines[visibleLines.length - 1];
-    while (lastLine.length > 0 && ctx.measureText(`${lastLine}…`).width > maxWidth) {
+    while (lastLine.length > 0 && ctx.measureText(`${lastLine}...`).width > maxWidth) {
       lastLine = lastLine.slice(0, -1);
     }
-    visibleLines[visibleLines.length - 1] = `${lastLine}…`;
+    visibleLines[visibleLines.length - 1] = `${lastLine}...`;
   }
 
-  visibleLines.forEach((line, index) => {
+  return visibleLines;
+}
+
+function drawTextLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines: number,
+) {
+  splitTextLines(ctx, text, maxWidth, maxLines).forEach((line, index) => {
     ctx.fillText(line, x, y + index * lineHeight);
   });
 }
@@ -213,6 +249,34 @@ function drawImageCover(
     height,
   );
   ctx.restore();
+}
+
+function drawImageContain(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const targetRatio = width / height;
+  let targetWidth = width;
+  let targetHeight = height;
+
+  if (imageRatio > targetRatio) {
+    targetHeight = width / imageRatio;
+  } else {
+    targetWidth = height * imageRatio;
+  }
+
+  ctx.drawImage(
+    image,
+    x + (width - targetWidth) / 2,
+    y + (height - targetHeight) / 2,
+    targetWidth,
+    targetHeight,
+  );
 }
 
 function drawPlaceholderIcon(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
@@ -388,11 +452,11 @@ function drawParticipant(
   images: Map<string, HTMLImageElement | null>,
 ) {
   if (!participant) {
-    fillRoundedRect(ctx, rect, 18, "#FFFFFFAA", "#EED8AA", 3);
+    fillRoundedRect(ctx, rect, 20, "#FFFFFFAA", "#EED8AA", 3);
     ctx.fillStyle = "#8A6A45";
     ctx.font = "24px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("待定", rect.x + rect.width / 2, rect.y + 30);
+    ctx.fillText("待定", rect.x + rect.width / 2, rect.y + 45);
     return;
   }
 
@@ -400,23 +464,23 @@ function drawParticipant(
   fillRoundedRect(
     ctx,
     rect,
-    18,
+    20,
     isWinner ? "#ECF8E9" : "#FFFFFFD9",
-    isWinner ? "#65A96E" : "#EED8AA",
+    isWinner ? "#3C8B4F" : "#EED8AA",
     isWinner ? 5 : 3,
   );
 
   if (isWinner) {
     ctx.fillStyle = "#3C8B4F";
-    roundedRect(ctx, rect.x + 4, rect.y + 6, 8, rect.height - 12, 5);
+    roundedRect(ctx, rect.x + 5, rect.y + 8, 9, rect.height - 16, 6);
     ctx.fill();
   }
 
   const imageRect = {
-    x: rect.x + 18,
-    y: rect.y + 8,
-    width: 56,
-    height: rect.height - 16,
+    x: rect.x + 22,
+    y: rect.y + 10,
+    width: 54,
+    height: 54,
   };
   fillRoundedRect(ctx, imageRect, 14, "#F1E4C8", undefined);
 
@@ -425,27 +489,42 @@ function drawParticipant(
   if (image) {
     drawImageCover(ctx, image, imageRect.x, imageRect.y, imageRect.width, imageRect.height, 14);
   } else {
-    drawPlaceholderIcon(ctx, imageRect.x + 10, imageRect.y + 8, 36);
+    drawPlaceholderIcon(ctx, imageRect.x + 9, imageRect.y + 8, 36);
   }
 
-  const textX = rect.x + 88;
-  const scoreWidth = resultVisible && participant.score !== null ? 42 : 0;
+  const scoreWidth = resultVisible && participant.score !== null ? 88 : 0;
+  const textX = rect.x + 92;
+  const textMaxWidth = rect.width - 116 - scoreWidth;
   ctx.textAlign = "left";
   ctx.fillStyle = "#4A2B1B";
-  ctx.font = "700 22px sans-serif";
-  drawTextLines(ctx, participant.name, textX, rect.y + 25, rect.width - 104 - scoreWidth, 24, 2);
+  ctx.font = "700 23px sans-serif";
+  drawSingleLine(ctx, participant.name, textX, rect.y + 30, textMaxWidth);
 
   if (participant.seedLabel) {
     ctx.fillStyle = "#8A6A45";
     ctx.font = "18px sans-serif";
-    drawTextLines(ctx, participant.seedLabel, textX, rect.y + 73, rect.width - 104, 22, 1);
+    drawSingleLine(ctx, participant.seedLabel, textX, rect.y + 58, rect.width - 116);
   }
 
   if (resultVisible && participant.score !== null) {
-    ctx.fillStyle = isWinner ? "#2F7A42" : "#5C321E";
-    ctx.font = "700 26px sans-serif";
-    ctx.textAlign = "right";
-    ctx.fillText(String(participant.score), rect.x + rect.width - 18, rect.y + 38);
+    const badge = {
+      x: rect.x + rect.width - 84,
+      y: rect.y + 18,
+      width: 64,
+      height: 38,
+    };
+    fillRoundedRect(
+      ctx,
+      badge,
+      19,
+      isWinner ? "#2F7A42" : "#F3E7CF",
+      isWinner ? "#2F7A42" : "#EED8AA",
+      2,
+    );
+    ctx.fillStyle = isWinner ? "#FFFFFF" : "#6A4A2B";
+    ctx.font = "700 22px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(isWinner ? `胜 ${participant.score}` : String(participant.score), badge.x + badge.width / 2, badge.y + 26);
   }
 }
 
@@ -469,15 +548,35 @@ function drawMatch(
 
   ctx.textAlign = "left";
   ctx.fillStyle = "#8A6A45";
-  ctx.font = "700 18px sans-serif";
-  ctx.fillText(`${ROUND_LABEL[round] ?? "正赛"} · 第 ${slot} 场`, rect.x + 18, rect.y + 28);
+  ctx.font = "700 20px sans-serif";
+  drawSingleLine(
+    ctx,
+    `${ROUND_LABEL[round] ?? "正赛"} · 第 ${slot} 场`,
+    rect.x + 20,
+    rect.y + 32,
+    rect.width - 118,
+  );
 
   if (match?.contest) {
     const statusText = STATUS_LABEL[match.contest.status] ?? match.contest.status;
-    ctx.textAlign = "right";
+    const statusRect = {
+      x: rect.x + rect.width - 96,
+      y: rect.y + 14,
+      width: 76,
+      height: 30,
+    };
+    fillRoundedRect(
+      ctx,
+      statusRect,
+      15,
+      match.contest.status === "voting" ? "#FFE4EA" : "#FFF3D0",
+      match.contest.status === "voting" ? "#FFB3C1" : "#EED8AA",
+      2,
+    );
+    ctx.textAlign = "center";
     ctx.fillStyle = match.contest.status === "voting" ? "#B55335" : "#8A6A45";
-    ctx.font = "700 18px sans-serif";
-    ctx.fillText(statusText, rect.x + rect.width - 18, rect.y + 28);
+    ctx.font = "700 16px sans-serif";
+    drawSingleLine(ctx, statusText, statusRect.x + statusRect.width / 2, statusRect.y + 21, statusRect.width - 12);
   }
 
   const resultVisible = match?.resultVisible ?? false;
@@ -486,7 +585,7 @@ function drawMatch(
     match?.left ?? null,
     {
       x: rect.x + 14,
-      y: rect.y + 44,
+      y: rect.y + 56,
       width: rect.width - 28,
       height: PARTICIPANT_HEIGHT,
     },
@@ -498,7 +597,7 @@ function drawMatch(
     match?.right ?? null,
     {
       x: rect.x + 14,
-      y: rect.y + 94,
+      y: rect.y + 136,
       width: rect.width - 28,
       height: PARTICIPANT_HEIGHT,
     },
@@ -515,13 +614,13 @@ function drawChampionCard(
   images: Map<string, HTMLImageElement | null>,
 ) {
   fillRoundedRect(ctx, rect, 28, "#FFF4D8", "#F0C45C", 5);
-  drawCrown(ctx, rect.x + rect.width / 2 - 46, rect.y + 18, 92, 58);
+  drawCrown(ctx, rect.x + rect.width / 2 - 54, rect.y + 22, 108, 66);
 
-  const imageX = rect.x + rect.width / 2 - 62;
-  const imageY = rect.y + 70;
+  const imageX = rect.x + rect.width / 2 - 72;
+  const imageY = rect.y + 90;
   fillRoundedRect(
     ctx,
-    { x: imageX, y: imageY, width: 124, height: 124 },
+    { x: imageX, y: imageY, width: 144, height: 144 },
     24,
     "#FFFFFF",
     "#F0C45C",
@@ -531,24 +630,24 @@ function drawChampionCard(
   const imageUrl = publicVoteImageUrl(champion.imagePath);
   const image = imageUrl ? images.get(imageUrl) : null;
   if (image) {
-    drawImageCover(ctx, image, imageX + 4, imageY + 4, 116, 116, 20);
+    drawImageCover(ctx, image, imageX + 5, imageY + 5, 134, 134, 20);
   } else {
-    drawPlaceholderIcon(ctx, imageX + 36, imageY + 34, 54);
+    drawPlaceholderIcon(ctx, imageX + 45, imageY + 42, 56);
   }
 
   ctx.textAlign = "center";
   ctx.fillStyle = "#4A2B1B";
-  ctx.font = "700 32px sans-serif";
-  drawTextLines(ctx, champion.name, rect.x + rect.width / 2, rect.y + 228, rect.width - 36, 36, 2);
+  ctx.font = "700 34px sans-serif";
+  drawTextLines(ctx, champion.name, rect.x + rect.width / 2, rect.y + 280, rect.width - 48, 40, 2);
   ctx.fillStyle = "#B9854C";
-  ctx.font = "700 23px sans-serif";
+  ctx.font = "700 24px sans-serif";
   drawTextLines(
     ctx,
     `${tournamentName}冠军`,
     rect.x + rect.width / 2,
-    rect.y + 302,
-    rect.width - 36,
-    28,
+    rect.y + 370,
+    rect.width - 52,
+    30,
     2,
   );
 }
@@ -561,24 +660,26 @@ function drawWatermark(
 ) {
   const logoUrl = imageSource(logo);
   const logoImage = images.get(logoUrl);
-  const box = { x: 1510, y: 1252, width: 790, height: 92 };
-  fillRoundedRect(ctx, box, 28, "#FFF8E8E6", "#EED8AA", 3);
+  const box = { x: 90, y: 1600, width: 3020, height: 120 };
+  fillRoundedRect(ctx, box, 34, "#FFF8E8E8", "#EED8AA", 3);
 
   if (logoImage) {
-    drawImageCover(ctx, logoImage, box.x + 22, box.y + 16, 62, 62, 16);
+    drawImageContain(ctx, logoImage, box.x + box.width - 475, box.y + 30, 210, 60);
   }
 
   ctx.textAlign = "left";
   ctx.fillStyle = "#5C321E";
-  ctx.font = "700 25px sans-serif";
-  drawTextLines(ctx, bracket.tournament.name, box.x + 106, box.y + 34, 450, 28, 1);
+  ctx.font = "700 30px sans-serif";
+  drawSingleLine(ctx, bracket.tournament.name, box.x + 36, box.y + 45, 1120);
   ctx.fillStyle = "#8A5525";
-  ctx.font = "700 21px sans-serif";
-  ctx.fillText(`当前赛事阶段：${stageLabel}`, box.x + 106, box.y + 66);
+  ctx.font = "700 23px sans-serif";
+  ctx.fillText(`当前赛事阶段：${stageLabel}`, box.x + 36, box.y + 82);
   ctx.textAlign = "right";
   ctx.fillStyle = "#B9854C";
+  ctx.font = "700 28px sans-serif";
+  ctx.fillText("Butter Vote", box.x + box.width - 36, box.y + 48);
   ctx.font = "700 23px sans-serif";
-  ctx.fillText("Butter Vote  @SiriNatsume", box.x + box.width - 24, box.y + 56);
+  ctx.fillText("@SiriNatsume", box.x + box.width - 36, box.y + 84);
 }
 
 function drawBracketImage(
@@ -602,20 +703,23 @@ function drawBracketImage(
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   ctx.fillStyle = "#FFF3D0";
   ctx.beginPath();
-  ctx.ellipse(2050, 120, 480, 220, 0, 0, Math.PI * 2);
+  ctx.ellipse(2750, 140, 580, 260, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#FFE4B8";
   ctx.beginPath();
-  ctx.ellipse(220, 1220, 520, 260, 0, 0, Math.PI * 2);
+  ctx.ellipse(260, 1500, 620, 300, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.textAlign = "left";
   ctx.fillStyle = "#5C321E";
-  ctx.font = "700 48px sans-serif";
-  drawTextLines(ctx, bracket.tournament.name, 80, 82, 1320, 56, 1);
+  ctx.font = "700 58px sans-serif";
+  drawSingleLine(ctx, bracket.tournament.name, 90, 92, 1660);
   ctx.fillStyle = "#8A5525";
-  ctx.font = "700 28px sans-serif";
-  ctx.fillText(`正赛对阵 · ${stageLabel}`, 80, 130);
+  ctx.font = "700 31px sans-serif";
+  ctx.fillText(`正赛对阵 · ${stageLabel}`, 90, 148);
+  ctx.fillStyle = "#2F7A42";
+  ctx.font = "700 24px sans-serif";
+  ctx.fillText("绿色与“胜”标记代表本场胜者", 90, 190);
 
   ctx.strokeStyle = "#9A6A35";
   ctx.lineWidth = 8;
@@ -623,21 +727,21 @@ function drawBracketImage(
   ctx.lineJoin = "round";
 
   const columns = {
-    left16: 80,
-    left8: 410,
-    leftSemi: 740,
-    center: 1060,
-    rightSemi: 1400,
-    right8: 1730,
-    right16: 2060,
+    left16: 90,
+    left8: 535,
+    leftSemi: 980,
+    center: 1395,
+    rightSemi: 1830,
+    right8: 2275,
+    right16: 2720,
   };
   const y = {
-    round16: [230, 460, 690, 920],
-    qf: [345, 805],
-    semi: 575,
-    champion: 210,
-    final: champion ? 560 : 470,
-    third: champion ? 790 : 720,
+    round16: [250, 570, 890, 1210],
+    qf: [410, 1050],
+    semi: 730,
+    champion: 190,
+    final: 700,
+    third: 990,
   };
   const centers = {
     round16: y.round16.map((value) => value + NODE_HEIGHT / 2),
@@ -730,7 +834,7 @@ function drawBracketImage(
       ctx,
       champion,
       bracket.tournament.name,
-      { x: columns.center, y: y.champion, width: CENTER_WIDTH, height: 340 },
+      { x: columns.center, y: y.champion, width: CENTER_WIDTH, height: 430 },
       images,
     );
   }
