@@ -5,18 +5,90 @@ import { z } from "zod";
 import { getActionAdmin } from "@/lib/auth";
 import { toUserFacingError } from "@/lib/action-error";
 import {
+  buildKnockoutBracket,
   buildPreliminaryPools,
   drawPreliminaryGroups,
+  resolveKnockoutMatch,
+  resolvePreliminaryGroup,
   resolveScreeningAdvancers,
+  resolveTiebreaker,
   type PreliminaryGroupKey,
+  type PreliminaryGroupResolution,
 } from "@/lib/tournament-rules";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 import { tallyVotes, type TallyResult } from "@/lib/tally";
-import type { Json, LoveVoteAllocation, Vote } from "@/lib/types";
+import type {
+  Json,
+  LoveVoteAllocation,
+  TournamentEntry,
+  TournamentMatch,
+  TournamentStage,
+  Vote,
+} from "@/lib/types";
 
 type ActionResult<T extends Record<string, unknown> = Record<string, unknown>> =
   | ({ ok: true; message?: string } & T)
   | { ok: false; error: string };
+
+type ResultCandidate = {
+  id: string;
+  name: string;
+  description: string | null;
+  image_path: string | null;
+  nominator_display_name: string | null;
+  is_active: boolean;
+  inherited_from_candidate_id: string | null;
+  created_at: string;
+};
+
+type ContestResultBundle = {
+  contest: {
+    id: string;
+    title: string;
+    status: string;
+    vote_type: "single" | "multiple" | "ranked";
+    group_id: string | null;
+  };
+  candidates: ResultCandidate[];
+  results: TallyResult[];
+};
+
+type PreliminaryResolutionBundle = {
+  group: PreliminaryGroupKey;
+  stage: TournamentStage;
+  contest: ContestResultBundle["contest"];
+  candidates: ResultCandidate[];
+  results: TallyResult[];
+  resolution: PreliminaryGroupResolution<TallyResult>;
+};
+
+type KnockoutEntrySeed = {
+  candidateId: string;
+  entryId: string;
+  currentCandidateId: string;
+  preliminaryGroup: PreliminaryGroupKey;
+  preliminaryRank: number;
+  isGroupWinner: boolean;
+  score: number;
+  lastVoteAt: string | null;
+  name: string;
+};
+
+type KnockoutRound =
+  | "round_of_16"
+  | "quarterfinal"
+  | "semifinal"
+  | "final"
+  | "third_place";
+
+type KnockoutMatchResolutionPayload = {
+  matchId: string;
+  slot: number;
+  winnerEntryId: string;
+  loserEntryId: string;
+  winnerCandidateId: string;
+  loserCandidateId: string;
+};
 
 const createTournamentSchema = z.object({
   name: z.string().trim().min(1, "赛事名称不能为空").max(160),
@@ -24,6 +96,12 @@ const createTournamentSchema = z.object({
 });
 
 const generatePreliminarySchema = z.object({
+  tournamentId: z.string().uuid(),
+  targetGroupId: z.string().uuid().nullable(),
+  seed: z.string().trim().max(160).optional(),
+});
+
+const generateFollowupStageSchema = z.object({
   tournamentId: z.string().uuid(),
   targetGroupId: z.string().uuid().nullable(),
   seed: z.string().trim().max(160).optional(),
@@ -64,7 +142,7 @@ function extractStringArray(value: unknown, key: string) {
     : [];
 }
 
-async function getScreeningResults(contestId: string) {
+async function getContestResults(contestId: string) {
   const supabase = createRequiredServiceClient();
   const { data: contest, error: contestError } = await supabase
     .from("contests")
@@ -75,7 +153,7 @@ async function getScreeningResults(contestId: string) {
   if (contestError || !contest) {
     return {
       ok: false as const,
-      error: contestError?.message ?? "海选活动不存在。",
+      error: contestError?.message ?? "活动不存在。",
     };
   }
 
@@ -88,7 +166,7 @@ async function getScreeningResults(contestId: string) {
     supabase
       .from("candidates")
       .select(
-        "id,name,description,image_path,nominator_display_name,is_active,created_at",
+        "id,name,description,image_path,nominator_display_name,is_active,inherited_from_candidate_id,created_at",
       )
       .eq("contest_id", contestId)
       .eq("is_active", true)
@@ -138,6 +216,7 @@ async function getScreeningResults(contestId: string) {
   return {
     ok: true as const,
     contest,
+    candidates: (candidates ?? []) as ResultCandidate[],
     results,
   };
 }
@@ -151,6 +230,428 @@ function toCandidatePayload(result: TallyResult) {
     rank: result.rank,
     position: result.position,
   };
+}
+
+function stagePreliminaryGroup(stage: Pick<TournamentStage, "metadata">) {
+  const metadata = isRecord(stage.metadata) ? stage.metadata : {};
+  const group = metadata.preliminaryGroup;
+  return group === "A" || group === "B" || group === "C" || group === "D"
+    ? group
+    : null;
+}
+
+function entryMapByCandidateId(entries: TournamentEntry[]) {
+  const map = new Map<string, TournamentEntry>();
+
+  for (const entry of entries) {
+    for (const candidateId of [
+      entry.current_candidate_id,
+      entry.source_candidate_id,
+      entry.root_candidate_id,
+    ]) {
+      if (candidateId) {
+        map.set(candidateId, entry);
+      }
+    }
+  }
+
+  return map;
+}
+
+function preliminaryRankByCandidate(entries: TournamentEntry[]) {
+  const ranks = new Map<string, number>();
+
+  for (const entry of entries) {
+    if (typeof entry.screening_rank !== "number") {
+      continue;
+    }
+
+    for (const candidateId of [
+      entry.current_candidate_id,
+      entry.source_candidate_id,
+      entry.root_candidate_id,
+    ]) {
+      if (candidateId) {
+        ranks.set(candidateId, entry.screening_rank);
+      }
+    }
+  }
+
+  return ranks;
+}
+
+async function getTournamentEntries(tournamentId: string) {
+  const supabase = createRequiredServiceClient();
+  const { data, error } = await supabase
+    .from("tournament_entries")
+    .select(
+      "id,tournament_id,root_candidate_id,current_candidate_id,source_candidate_id,screening_rank,preliminary_group,preliminary_rank,is_group_winner,status,created_at,updated_at",
+    )
+    .eq("tournament_id", tournamentId);
+
+  if (error) {
+    return { ok: false as const, error: error.message };
+  }
+
+  return { ok: true as const, entries: (data ?? []) as TournamentEntry[] };
+}
+
+async function getPreliminaryResolutionBundles(
+  tournamentId: string,
+): Promise<
+  | { ok: true; bundles: PreliminaryResolutionBundle[]; entries: TournamentEntry[] }
+  | { ok: false; error: string }
+> {
+  const supabase = createRequiredServiceClient();
+  const [{ data: stages, error: stagesError }, entriesResult] =
+    await Promise.all([
+      supabase
+        .from("tournament_stages")
+        .select("*")
+        .eq("tournament_id", tournamentId)
+        .eq("kind", "preliminary")
+        .order("sequence", { ascending: true }),
+      getTournamentEntries(tournamentId),
+    ]);
+
+  if (stagesError) {
+    return { ok: false, error: stagesError.message };
+  }
+
+  if (!entriesResult.ok) {
+    return entriesResult;
+  }
+
+  const preliminaryStages = (stages ?? []) as TournamentStage[];
+  if (preliminaryStages.length === 0) {
+    return { ok: false, error: "请先生成预赛。" };
+  }
+
+  const rankLookup = preliminaryRankByCandidate(entriesResult.entries);
+  const bundles: PreliminaryResolutionBundle[] = [];
+
+  for (const stage of preliminaryStages) {
+    const group = stagePreliminaryGroup(stage);
+    if (!group || !stage.contest_id) {
+      return { ok: false, error: "预赛阶段数据不完整。" };
+    }
+
+    const contestResults = await getContestResults(stage.contest_id);
+    if (!contestResults.ok) {
+      return { ok: false, error: contestResults.error };
+    }
+
+    bundles.push({
+      group,
+      stage,
+      contest: contestResults.contest,
+      candidates: contestResults.candidates,
+      results: contestResults.results,
+      resolution: resolvePreliminaryGroup(contestResults.results, rankLookup),
+    });
+  }
+
+  return { ok: true, bundles, entries: entriesResult.entries };
+}
+
+function toSourceTiebreakerResults(
+  bundle: ContestResultBundle,
+): Array<TallyResult & { tiebreakerCandidateId: string }> {
+  const sourceByCandidateId = new Map(
+    bundle.candidates.map((candidate) => [
+      candidate.id,
+      candidate.inherited_from_candidate_id ?? candidate.id,
+    ]),
+  );
+
+  return bundle.results.map((result) => ({
+    ...result,
+    tiebreakerCandidateId: result.candidateId,
+    candidateId: sourceByCandidateId.get(result.candidateId) ?? result.candidateId,
+  }));
+}
+
+function resultByCandidateId(results: TallyResult[]) {
+  return new Map(results.map((result) => [result.candidateId, result]));
+}
+
+function assertClosedContest(contest: Pick<ContestResultBundle["contest"], "status">) {
+  return ["closed", "published"].includes(contest.status);
+}
+
+function normalizeKnockoutRound(value: unknown): KnockoutRound | null {
+  return value === "round_of_16" ||
+    value === "quarterfinal" ||
+    value === "semifinal" ||
+    value === "final" ||
+    value === "third_place"
+    ? value
+    : null;
+}
+
+function knockoutRoundLabel(round: KnockoutRound) {
+  switch (round) {
+    case "round_of_16":
+      return "16 强";
+    case "quarterfinal":
+      return "8 强";
+    case "semifinal":
+      return "半决赛";
+    case "final":
+      return "冠军赛";
+    case "third_place":
+      return "季军赛";
+  }
+}
+
+function getSameGroupHeadToHeadWinner(
+  leftEntry: TournamentEntry,
+  rightEntry: TournamentEntry,
+  candidateIdByEntryId: ReadonlyMap<string, string>,
+) {
+  if (
+    !leftEntry.preliminary_group ||
+    leftEntry.preliminary_group !== rightEntry.preliminary_group ||
+    typeof leftEntry.preliminary_rank !== "number" ||
+    typeof rightEntry.preliminary_rank !== "number" ||
+    leftEntry.preliminary_rank === rightEntry.preliminary_rank
+  ) {
+    return null;
+  }
+
+  const winnerEntry =
+    leftEntry.preliminary_rank < rightEntry.preliminary_rank
+      ? leftEntry
+      : rightEntry;
+  return candidateIdByEntryId.get(winnerEntry.id) ?? null;
+}
+
+function planNextKnockoutRound(matches: TournamentMatch[]) {
+  const rounds = new Set(
+    matches
+      .map((match) => normalizeKnockoutRound(match.round))
+      .filter((round): round is KnockoutRound => Boolean(round)),
+  );
+
+  if (!rounds.has("round_of_16")) {
+    return { ok: false as const, error: "请先生成正赛 16 强。" };
+  }
+
+  if (!rounds.has("quarterfinal")) {
+    return {
+      ok: true as const,
+      sourceRound: "round_of_16" as const,
+      expectedSourceCount: 8,
+      targetMatches: [
+        { round: "quarterfinal" as const, slot: 1, sourceSlots: [1, 2] },
+        { round: "quarterfinal" as const, slot: 2, sourceSlots: [3, 4] },
+        { round: "quarterfinal" as const, slot: 3, sourceSlots: [5, 6] },
+        { round: "quarterfinal" as const, slot: 4, sourceSlots: [7, 8] },
+      ],
+    };
+  }
+
+  if (!rounds.has("semifinal")) {
+    return {
+      ok: true as const,
+      sourceRound: "quarterfinal" as const,
+      expectedSourceCount: 4,
+      targetMatches: [
+        { round: "semifinal" as const, slot: 1, sourceSlots: [1, 2] },
+        { round: "semifinal" as const, slot: 2, sourceSlots: [3, 4] },
+      ],
+    };
+  }
+
+  if (!rounds.has("final") && !rounds.has("third_place")) {
+    return {
+      ok: true as const,
+      sourceRound: "semifinal" as const,
+      expectedSourceCount: 2,
+      targetMatches: [
+        {
+          round: "final" as const,
+          slot: 1,
+          sourceSlots: [1, 2],
+          participant: "winner" as const,
+        },
+        {
+          round: "third_place" as const,
+          slot: 1,
+          sourceSlots: [1, 2],
+          participant: "loser" as const,
+        },
+      ],
+    };
+  }
+
+  return { ok: false as const, error: "正赛 contest 已全部生成。" };
+}
+
+async function resolveKnockoutSourceMatches(
+  tournamentId: string,
+  sourceRound: KnockoutRound,
+  expectedCount: number,
+  seed: string,
+): Promise<
+  | {
+      ok: true;
+      matches: TournamentMatch[];
+      resolutions: KnockoutMatchResolutionPayload[];
+    }
+  | { ok: false; error: string }
+> {
+  const supabase = createRequiredServiceClient();
+  const [{ data: matches, error: matchesError }, entriesResult] =
+    await Promise.all([
+      supabase
+        .from("tournament_matches")
+        .select(
+          "id,tournament_id,stage_id,contest_id,round,slot,left_entry_id,right_entry_id,winner_entry_id,loser_entry_id,metadata,created_at,updated_at",
+        )
+        .eq("tournament_id", tournamentId)
+        .eq("round", sourceRound)
+        .order("slot", { ascending: true }),
+      getTournamentEntries(tournamentId),
+    ]);
+
+  if (matchesError) {
+    return { ok: false, error: matchesError.message };
+  }
+  if (!entriesResult.ok) {
+    return entriesResult;
+  }
+
+  const sourceMatches = (matches ?? []) as TournamentMatch[];
+  if (sourceMatches.length !== expectedCount) {
+    return {
+      ok: false,
+      error: `${knockoutRoundLabel(sourceRound)} 数据不完整。`,
+    };
+  }
+
+  const entryById = new Map(entriesResult.entries.map((entry) => [entry.id, entry]));
+  const resolutions: KnockoutMatchResolutionPayload[] = [];
+
+  for (const match of sourceMatches) {
+    if (match.winner_entry_id && match.loser_entry_id) {
+      resolutions.push({
+        matchId: match.id,
+        slot: match.slot,
+        winnerEntryId: match.winner_entry_id,
+        loserEntryId: match.loser_entry_id,
+        winnerCandidateId: match.winner_entry_id,
+        loserCandidateId: match.loser_entry_id,
+      });
+      continue;
+    }
+
+    if (!match.contest_id || !match.left_entry_id || !match.right_entry_id) {
+      return {
+        ok: false,
+        error: `${knockoutRoundLabel(sourceRound)} 第 ${match.slot} 场数据不完整。`,
+      };
+    }
+
+    const leftEntry = entryById.get(match.left_entry_id);
+    const rightEntry = entryById.get(match.right_entry_id);
+    if (
+      !leftEntry?.current_candidate_id ||
+      !rightEntry?.current_candidate_id
+    ) {
+      return {
+        ok: false,
+        error: `${knockoutRoundLabel(sourceRound)} 第 ${match.slot} 场选手数据不完整。`,
+      };
+    }
+
+    const contestResults = await getContestResults(match.contest_id);
+    if (!contestResults.ok) {
+      return { ok: false, error: contestResults.error };
+    }
+    if (!assertClosedContest(contestResults.contest)) {
+      return {
+        ok: false,
+        error: `${knockoutRoundLabel(sourceRound)} 第 ${match.slot} 场尚未结束。`,
+      };
+    }
+
+    const entryIdByCandidateId = new Map<string, string>();
+    for (const candidate of contestResults.candidates) {
+      if (
+        candidate.id === leftEntry.current_candidate_id ||
+        candidate.inherited_from_candidate_id === leftEntry.current_candidate_id
+      ) {
+        entryIdByCandidateId.set(candidate.id, leftEntry.id);
+      }
+      if (
+        candidate.id === rightEntry.current_candidate_id ||
+        candidate.inherited_from_candidate_id === rightEntry.current_candidate_id
+      ) {
+        entryIdByCandidateId.set(candidate.id, rightEntry.id);
+      }
+    }
+
+    const candidateIdByEntryId = new Map(
+      Array.from(entryIdByCandidateId.entries()).map(([candidateId, entryId]) => [
+        entryId,
+        candidateId,
+      ]),
+    );
+    const matchResults = contestResults.results
+      .map((result) => {
+        const entryId = entryIdByCandidateId.get(result.candidateId);
+        return entryId ? { ...result, entryId } : null;
+      })
+      .filter(
+        (result): result is TallyResult & { entryId: string } =>
+          result !== null,
+      );
+
+    if (matchResults.length !== 2) {
+      return {
+        ok: false,
+        error: `${knockoutRoundLabel(sourceRound)} 第 ${match.slot} 场候选映射不完整。`,
+      };
+    }
+
+    const screeningRankByCandidate = new Map<string, number>();
+    for (const result of matchResults) {
+      const entry = entryById.get(result.entryId);
+      if (typeof entry?.screening_rank === "number") {
+        screeningRankByCandidate.set(result.candidateId, entry.screening_rank);
+      }
+    }
+
+    const headToHeadWinnerId = getSameGroupHeadToHeadWinner(
+      leftEntry,
+      rightEntry,
+      candidateIdByEntryId,
+    );
+    const resolution = resolveKnockoutMatch(matchResults, {
+      headToHeadWinnerId,
+      screeningRankByCandidate,
+      seed: `${seed}:${sourceRound}:${match.slot}`,
+    });
+
+    if (!resolution.winner || !resolution.loser) {
+      return {
+        ok: false,
+        error: `${knockoutRoundLabel(sourceRound)} 第 ${match.slot} 场结果不足。`,
+      };
+    }
+
+    resolutions.push({
+      matchId: match.id,
+      slot: match.slot,
+      winnerEntryId: resolution.winner.entryId,
+      loserEntryId: resolution.loser.entryId,
+      winnerCandidateId: resolution.winner.candidateId,
+      loserCandidateId: resolution.loser.candidateId,
+    });
+  }
+
+  return { ok: true, matches: sourceMatches, resolutions };
 }
 
 export async function createTournamentAction(
@@ -257,7 +758,7 @@ export async function generatePreliminaryStageAction(
       return actionFailure(screeningStageError?.message ?? "赛事尚未关联海选活动。");
     }
 
-    const screening = await getScreeningResults(screeningStage.contest_id);
+    const screening = await getContestResults(screeningStage.contest_id);
     if (!screening.ok) {
       return actionFailure(screening.error);
     }
@@ -364,5 +865,579 @@ export async function generatePreliminaryStageAction(
     );
   } catch (error) {
     return actionFailure(error instanceof Error ? error.message : "生成预赛失败。");
+  }
+}
+
+export async function generatePreliminaryTiebreakersAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  const adminResult = await getActionAdmin();
+  if (!adminResult.ok) {
+    return actionFailure(adminResult.error);
+  }
+
+  const parsed = generateFollowupStageSchema.safeParse({
+    tournamentId: formData.get("tournamentId"),
+    targetGroupId: optionalUuidFromForm(formData.get("targetGroupId")),
+    seed: String(formData.get("seed") ?? "").trim() || undefined,
+  });
+
+  if (!parsed.success) {
+    return actionFailure(parsed.error.issues[0]?.message ?? "加赛生成请求无效。");
+  }
+
+  try {
+    const supabase = createRequiredServiceClient();
+    const [{ data: tournament }, { data: existingTiebreakers }] =
+      await Promise.all([
+        supabase
+          .from("tournaments")
+          .select("id,name")
+          .eq("id", parsed.data.tournamentId)
+          .maybeSingle(),
+        supabase
+          .from("tournament_stages")
+          .select("id")
+          .eq("tournament_id", parsed.data.tournamentId)
+          .eq("kind", "tiebreaker")
+          .limit(1),
+      ]);
+
+    if (!tournament) {
+      return actionFailure("赛事不存在。");
+    }
+
+    if ((existingTiebreakers ?? []).length > 0) {
+      return actionFailure("该赛事已经生成过预赛加赛。");
+    }
+
+    const preliminary = await getPreliminaryResolutionBundles(
+      parsed.data.tournamentId,
+    );
+    if (!preliminary.ok) {
+      return actionFailure(preliminary.error);
+    }
+
+    const pendingContests = preliminary.bundles.filter(
+      (bundle) => !assertClosedContest(bundle.contest),
+    );
+    if (pendingContests.length > 0) {
+      return actionFailure("请先结束所有预赛活动，再生成加赛。");
+    }
+
+    const tiebreakerBundles = preliminary.bundles.filter(
+      (bundle) => bundle.resolution.needsTiebreaker,
+    );
+    if (tiebreakerBundles.length === 0) {
+      return actionSuccess("当前预赛结果不需要加赛", { refresh: true });
+    }
+
+    const seed =
+      parsed.data.seed ??
+      `tiebreaker:${parsed.data.tournamentId}:${new Date().toISOString()}`;
+    const tiebreakers = tiebreakerBundles.map((bundle) => ({
+      preliminaryGroup: bundle.group,
+      sourceStageId: bundle.stage.id,
+      sourceContestId: bundle.stage.contest_id,
+      candidates: bundle.resolution.tiebreakerCandidates.map((candidate) => ({
+        candidateId: candidate.candidateId,
+        score: candidate.score,
+        lastVoteAt: candidate.lastVoteAt,
+      })),
+      metadata: {
+        preliminaryGroup: bundle.group,
+        sourceStageId: bundle.stage.id,
+        sourceContestId: bundle.stage.contest_id,
+        advancementTie: bundle.resolution.advancementTie
+          ? {
+              score: bundle.resolution.advancementTie.score,
+              remainingSlots: bundle.resolution.advancementTie.remainingSlots,
+              candidateIds: bundle.resolution.advancementTie.candidates.map(
+                (candidate) => candidate.candidateId,
+              ),
+            }
+          : null,
+        groupFirstTie: bundle.resolution.groupFirstTie
+          ? {
+              score: bundle.resolution.groupFirstTie.score,
+              candidateIds: bundle.resolution.groupFirstTie.candidates.map(
+                (candidate) => candidate.candidateId,
+              ),
+            }
+          : null,
+      },
+    }));
+    const input = {
+      tournamentId: parsed.data.tournamentId,
+      preliminaryGroups: tiebreakerBundles.map((bundle) => ({
+        group: bundle.group,
+        contestId: bundle.stage.contest_id,
+        ordered: bundle.resolution.ordered.map(toCandidatePayload),
+        advancementTie: bundle.resolution.advancementTie
+          ? {
+              remainingSlots: bundle.resolution.advancementTie.remainingSlots,
+              candidates: bundle.resolution.advancementTie.candidates.map(
+                toCandidatePayload,
+              ),
+            }
+          : null,
+        groupFirstTie: bundle.resolution.groupFirstTie
+          ? bundle.resolution.groupFirstTie.candidates.map(toCandidatePayload)
+          : null,
+      })),
+    };
+    const output = {
+      tiebreakers: tiebreakers.map((item) => ({
+        preliminaryGroup: item.preliminaryGroup,
+        candidates: item.candidates,
+        metadata: item.metadata,
+      })),
+    };
+
+    const { data, error } = await supabase.rpc(
+      "create_preliminary_tiebreakers_atomic",
+      {
+        p_tournament_id: parsed.data.tournamentId,
+        p_target_group_id: parsed.data.targetGroupId,
+        p_seed: seed,
+        p_input: input as Json,
+        p_output: output as Json,
+        p_tiebreakers: tiebreakers as Json,
+        p_created_by: adminResult.profile.id,
+      },
+    );
+
+    if (error) {
+      return actionFailure(error.message);
+    }
+
+    const contestIds = extractStringArray(data, "contestIds");
+    revalidatePath("/admin/tournaments");
+    for (const contestId of contestIds) {
+      revalidatePath(`/admin/contests/${contestId}/edit`);
+      revalidatePath(`/contests/${contestId}`);
+      revalidatePath(`/contests/${contestId}/results`);
+    }
+    if (parsed.data.targetGroupId) {
+      revalidatePath(`/admin/groups/${parsed.data.targetGroupId}`);
+      revalidatePath(`/groups/${parsed.data.targetGroupId}`);
+    }
+
+    return actionSuccess(`已生成 ${contestIds.length} 场预赛加赛`, {
+      refresh: true,
+      seed,
+    });
+  } catch (error) {
+    return actionFailure(error instanceof Error ? error.message : "生成加赛失败。");
+  }
+}
+
+export async function generateKnockoutStageAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  const adminResult = await getActionAdmin();
+  if (!adminResult.ok) {
+    return actionFailure(adminResult.error);
+  }
+
+  const parsed = generateFollowupStageSchema.safeParse({
+    tournamentId: formData.get("tournamentId"),
+    targetGroupId: optionalUuidFromForm(formData.get("targetGroupId")),
+    seed: String(formData.get("seed") ?? "").trim() || undefined,
+  });
+
+  if (!parsed.success) {
+    return actionFailure(parsed.error.issues[0]?.message ?? "正赛生成请求无效。");
+  }
+
+  try {
+    const supabase = createRequiredServiceClient();
+    const [{ data: tournament }, { data: existingKnockout }] =
+      await Promise.all([
+        supabase
+          .from("tournaments")
+          .select("id,name")
+          .eq("id", parsed.data.tournamentId)
+          .maybeSingle(),
+        supabase
+          .from("tournament_stages")
+          .select("id")
+          .eq("tournament_id", parsed.data.tournamentId)
+          .eq("kind", "knockout")
+          .limit(1),
+      ]);
+
+    if (!tournament) {
+      return actionFailure("赛事不存在。");
+    }
+
+    if ((existingKnockout ?? []).length > 0) {
+      return actionFailure("该赛事已经生成过正赛。");
+    }
+
+    const preliminary = await getPreliminaryResolutionBundles(
+      parsed.data.tournamentId,
+    );
+    if (!preliminary.ok) {
+      return actionFailure(preliminary.error);
+    }
+    if (preliminary.bundles.length !== 4) {
+      return actionFailure("正赛需要 A/B/C/D 四个预赛组。");
+    }
+
+    const pendingPreliminary = preliminary.bundles.filter(
+      (bundle) => !assertClosedContest(bundle.contest),
+    );
+    if (pendingPreliminary.length > 0) {
+      return actionFailure("请先结束所有预赛活动，再生成正赛。");
+    }
+
+    const { data: tiebreakerStages } = await supabase
+      .from("tournament_stages")
+      .select("*")
+      .eq("tournament_id", parsed.data.tournamentId)
+      .eq("kind", "tiebreaker")
+      .order("sequence", { ascending: true });
+    const tiebreakerStageByGroup = new Map(
+      ((tiebreakerStages ?? []) as TournamentStage[])
+        .map((stage) => [stagePreliminaryGroup(stage), stage] as const)
+        .filter(
+          (item): item is readonly [PreliminaryGroupKey, TournamentStage] =>
+            Boolean(item[0]),
+        ),
+    );
+    const entryByCandidate = entryMapByCandidateId(preliminary.entries);
+    const selectedEntries: KnockoutEntrySeed[] = [];
+
+    for (const bundle of preliminary.bundles) {
+      const preliminaryResultById = resultByCandidateId(bundle.results);
+      let advancerSourceIds = bundle.resolution.advancers.map(
+        (candidate) => candidate.candidateId,
+      );
+      let groupWinnerSourceId = bundle.resolution.ordered[0]?.candidateId ?? null;
+
+      if (bundle.resolution.needsTiebreaker) {
+        const tiebreakerStage = tiebreakerStageByGroup.get(bundle.group);
+        if (!tiebreakerStage?.contest_id) {
+          return actionFailure(
+            `${bundle.group} 组仍需要加赛，请先生成并结束加赛。`,
+          );
+        }
+
+        const tiebreaker = await getContestResults(tiebreakerStage.contest_id);
+        if (!tiebreaker.ok) {
+          return actionFailure(tiebreaker.error);
+        }
+        if (!assertClosedContest(tiebreaker.contest)) {
+          return actionFailure(`${bundle.group} 组加赛尚未结束。`);
+        }
+
+        const sourceResults = toSourceTiebreakerResults(tiebreaker);
+
+        if (bundle.resolution.advancementTie) {
+          const advancementCandidateIds = new Set(
+            bundle.resolution.advancementTie.candidates.map(
+              (candidate) => candidate.candidateId,
+            ),
+          );
+          const advancementResults = sourceResults.filter((result) =>
+            advancementCandidateIds.has(result.candidateId),
+          );
+          const selected = resolveTiebreaker(
+            advancementResults,
+            bundle.resolution.advancementTie.remainingSlots,
+            `${parsed.data.seed ?? "knockout"}:${bundle.group}:advancement`,
+          ).selected;
+          advancerSourceIds = [
+            ...bundle.resolution.lockedAdvancers.map(
+              (candidate) => candidate.candidateId,
+            ),
+            ...selected.map((candidate) => candidate.candidateId),
+          ];
+        }
+
+        if (bundle.resolution.groupFirstTie) {
+          const groupFirstCandidateIds = new Set(
+            bundle.resolution.groupFirstTie.candidates.map(
+              (candidate) => candidate.candidateId,
+            ),
+          );
+          const groupFirstResults = sourceResults.filter((result) =>
+            groupFirstCandidateIds.has(result.candidateId),
+          );
+          groupWinnerSourceId =
+            resolveTiebreaker(
+              groupFirstResults,
+              1,
+              `${parsed.data.seed ?? "knockout"}:${bundle.group}:group-first`,
+            ).selected[0]?.candidateId ?? groupWinnerSourceId;
+        }
+      }
+
+      if (advancerSourceIds.length !== 4 || !groupWinnerSourceId) {
+        return actionFailure(`${bundle.group} 组晋级结果不足 4 名。`);
+      }
+
+      advancerSourceIds = [
+        groupWinnerSourceId,
+        ...advancerSourceIds.filter(
+          (candidateId) => candidateId !== groupWinnerSourceId,
+        ),
+      ];
+
+      advancerSourceIds.forEach((candidateId, index) => {
+        const entry = entryByCandidate.get(candidateId);
+        const preliminaryResult = preliminaryResultById.get(candidateId);
+        if (!entry?.current_candidate_id || !preliminaryResult) {
+          throw new Error(`${bundle.group} 组晋级者赛事登记不完整。`);
+        }
+
+        selectedEntries.push({
+          candidateId: entry.id,
+          entryId: entry.id,
+          currentCandidateId: entry.current_candidate_id,
+          preliminaryGroup: bundle.group,
+          preliminaryRank: index + 1,
+          isGroupWinner: candidateId === groupWinnerSourceId,
+          score: preliminaryResult.score,
+          lastVoteAt: preliminaryResult.lastVoteAt,
+          name: preliminaryResult.name,
+        });
+      });
+    }
+
+    if (selectedEntries.length !== 16) {
+      return actionFailure("正赛需要 16 名晋级者。");
+    }
+
+    const groupWinners = Object.fromEntries(
+      selectedEntries
+        .filter((entry) => entry.isGroupWinner)
+        .map((entry) => [entry.preliminaryGroup, entry]),
+    ) as Partial<Record<PreliminaryGroupKey, KnockoutEntrySeed>>;
+    const otherAdvancers = selectedEntries.filter((entry) => !entry.isGroupWinner);
+
+    if (Object.keys(groupWinners).length !== 4 || otherAdvancers.length !== 12) {
+      return actionFailure("正赛需要 4 名小组第一和 12 名其他晋级者。");
+    }
+
+    const seed =
+      parsed.data.seed ??
+      `knockout:${parsed.data.tournamentId}:${new Date().toISOString()}`;
+    const bracket = buildKnockoutBracket(groupWinners, otherAdvancers, seed);
+    const entriesPayload = selectedEntries.map((entry) => ({
+      entryId: entry.entryId,
+      preliminaryGroup: entry.preliminaryGroup,
+      preliminaryRank: entry.preliminaryRank,
+      isGroupWinner: entry.isGroupWinner,
+    }));
+    const matchesPayload = bracket.matches.map((match) => ({
+      slot: match.slot,
+      leftSlot: match.leftSlot,
+      rightSlot: match.rightSlot,
+      leftEntryId: match.left?.entryId ?? null,
+      rightEntryId: match.right?.entryId ?? null,
+    }));
+    const input = {
+      tournamentId: parsed.data.tournamentId,
+      finalists: selectedEntries.map((entry) => ({
+        entryId: entry.entryId,
+        currentCandidateId: entry.currentCandidateId,
+        preliminaryGroup: entry.preliminaryGroup,
+        preliminaryRank: entry.preliminaryRank,
+        isGroupWinner: entry.isGroupWinner,
+        name: entry.name,
+      })),
+    };
+    const output = {
+      slots: bracket.slots.map((slot) => ({
+        slot: slot.slot,
+        entryId: slot.entry?.entryId ?? null,
+        fixedGroupWinner: slot.fixedGroupWinner ?? null,
+      })),
+      matches: matchesPayload,
+    };
+
+    const { data, error } = await supabase.rpc("create_knockout_stage_atomic", {
+      p_tournament_id: parsed.data.tournamentId,
+      p_target_group_id: parsed.data.targetGroupId,
+      p_seed: seed,
+      p_input: input as Json,
+      p_output: output as Json,
+      p_entries: entriesPayload as Json,
+      p_matches: matchesPayload as Json,
+      p_created_by: adminResult.profile.id,
+    });
+
+    if (error) {
+      return actionFailure(error.message);
+    }
+
+    const contestIds = extractStringArray(data, "contestIds");
+    revalidatePath("/admin/tournaments");
+    for (const contestId of contestIds) {
+      revalidatePath(`/admin/contests/${contestId}/edit`);
+      revalidatePath(`/contests/${contestId}`);
+      revalidatePath(`/contests/${contestId}/results`);
+    }
+    if (parsed.data.targetGroupId) {
+      revalidatePath(`/admin/groups/${parsed.data.targetGroupId}`);
+      revalidatePath(`/groups/${parsed.data.targetGroupId}`);
+    }
+
+    return actionSuccess(`已生成正赛 16 强 ${contestIds.length} 场`, {
+      refresh: true,
+      seed,
+    });
+  } catch (error) {
+    return actionFailure(error instanceof Error ? error.message : "生成正赛失败。");
+  }
+}
+
+export async function generateNextKnockoutRoundAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  const adminResult = await getActionAdmin();
+  if (!adminResult.ok) {
+    return actionFailure(adminResult.error);
+  }
+
+  const parsed = generateFollowupStageSchema.safeParse({
+    tournamentId: formData.get("tournamentId"),
+    targetGroupId: optionalUuidFromForm(formData.get("targetGroupId")),
+    seed: String(formData.get("seed") ?? "").trim() || undefined,
+  });
+
+  if (!parsed.success) {
+    return actionFailure(parsed.error.issues[0]?.message ?? "正赛生成请求无效。");
+  }
+
+  try {
+    const supabase = createRequiredServiceClient();
+    const [{ data: tournament }, { data: matches, error: matchesError }] =
+      await Promise.all([
+        supabase
+          .from("tournaments")
+          .select("id,name")
+          .eq("id", parsed.data.tournamentId)
+          .maybeSingle(),
+        supabase
+          .from("tournament_matches")
+          .select(
+            "id,tournament_id,stage_id,contest_id,round,slot,left_entry_id,right_entry_id,winner_entry_id,loser_entry_id,metadata,created_at,updated_at",
+          )
+          .eq("tournament_id", parsed.data.tournamentId)
+          .order("created_at", { ascending: true }),
+      ]);
+
+    if (!tournament) {
+      return actionFailure("赛事不存在。");
+    }
+    if (matchesError) {
+      return actionFailure(matchesError.message);
+    }
+
+    const existingMatches = (matches ?? []) as TournamentMatch[];
+    const plan = planNextKnockoutRound(existingMatches);
+    if (!plan.ok) {
+      return actionFailure(plan.error);
+    }
+
+    const seed =
+      parsed.data.seed ??
+      `knockout-next:${parsed.data.tournamentId}:${new Date().toISOString()}`;
+    const source = await resolveKnockoutSourceMatches(
+      parsed.data.tournamentId,
+      plan.sourceRound,
+      plan.expectedSourceCount,
+      seed,
+    );
+    if (!source.ok) {
+      return actionFailure(source.error);
+    }
+
+    const resolutionBySlot = new Map(
+      source.resolutions.map((resolution) => [resolution.slot, resolution]),
+    );
+    const targetMatches = plan.targetMatches.map((target) => {
+      const leftSource = resolutionBySlot.get(target.sourceSlots[0]);
+      const rightSource = resolutionBySlot.get(target.sourceSlots[1]);
+      if (!leftSource || !rightSource) {
+        throw new Error("正赛来源场次结果不完整。");
+      }
+
+      const participant =
+        "participant" in target ? target.participant : ("winner" as const);
+      const roundLabel = knockoutRoundLabel(target.round);
+      const title =
+        target.round === "final" || target.round === "third_place"
+          ? roundLabel
+          : `${roundLabel} 第 ${target.slot} 场`;
+
+      return {
+        round: target.round,
+        slot: target.slot,
+        title,
+        leftEntryId:
+          participant === "loser"
+            ? leftSource.loserEntryId
+            : leftSource.winnerEntryId,
+        rightEntryId:
+          participant === "loser"
+            ? rightSource.loserEntryId
+            : rightSource.winnerEntryId,
+        sourceRound: plan.sourceRound,
+        sourceSlots: target.sourceSlots,
+        participant,
+      };
+    });
+    const input = {
+      tournamentId: parsed.data.tournamentId,
+      sourceRound: plan.sourceRound,
+      sourceMatches: source.resolutions,
+    };
+    const output = { matches: targetMatches };
+
+    const { data, error } = await supabase.rpc(
+      "create_knockout_followup_matches_atomic",
+      {
+        p_tournament_id: parsed.data.tournamentId,
+        p_target_group_id: parsed.data.targetGroupId,
+        p_seed: seed,
+        p_input: input as Json,
+        p_output: output as Json,
+        p_source_results: source.resolutions as Json,
+        p_matches: targetMatches as Json,
+        p_created_by: adminResult.profile.id,
+      },
+    );
+
+    if (error) {
+      return actionFailure(error.message);
+    }
+
+    const contestIds = extractStringArray(data, "contestIds");
+    revalidatePath("/admin/tournaments");
+    for (const contestId of contestIds) {
+      revalidatePath(`/admin/contests/${contestId}/edit`);
+      revalidatePath(`/contests/${contestId}`);
+      revalidatePath(`/contests/${contestId}/results`);
+    }
+    if (parsed.data.targetGroupId) {
+      revalidatePath(`/admin/groups/${parsed.data.targetGroupId}`);
+      revalidatePath(`/groups/${parsed.data.targetGroupId}`);
+    }
+
+    const generatedRounds = Array.from(
+      new Set(targetMatches.map((match) => knockoutRoundLabel(match.round))),
+    ).join("、");
+    return actionSuccess(`已生成${generatedRounds} ${contestIds.length} 场`, {
+      refresh: true,
+      seed,
+    });
+  } catch (error) {
+    return actionFailure(
+      error instanceof Error ? error.message : "生成下一轮正赛失败。",
+    );
   }
 }

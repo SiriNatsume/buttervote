@@ -732,6 +732,44 @@ export type Database = {
         };
         Returns: Json;
       };
+      create_preliminary_tiebreakers_atomic: {
+        Args: {
+          p_tournament_id: string;
+          p_target_group_id?: string | null;
+          p_seed: string;
+          p_input: Json;
+          p_output: Json;
+          p_tiebreakers: Json;
+          p_created_by: string;
+        };
+        Returns: Json;
+      };
+      create_knockout_stage_atomic: {
+        Args: {
+          p_tournament_id: string;
+          p_target_group_id?: string | null;
+          p_seed: string;
+          p_input: Json;
+          p_output: Json;
+          p_entries: Json;
+          p_matches: Json;
+          p_created_by: string;
+        };
+        Returns: Json;
+      };
+      create_knockout_followup_matches_atomic: {
+        Args: {
+          p_tournament_id: string;
+          p_target_group_id?: string | null;
+          p_seed: string;
+          p_input: Json;
+          p_output: Json;
+          p_source_results: Json;
+          p_matches: Json;
+          p_created_by: string;
+        };
+        Returns: Json;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

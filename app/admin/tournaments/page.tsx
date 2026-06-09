@@ -2,7 +2,10 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink, ListChecks, Shuffle } from "lucide-react";
 import {
   CreateTournamentForm,
+  GenerateKnockoutForm,
+  GenerateNextKnockoutRoundForm,
   GeneratePreliminaryForm,
+  GenerateTiebreakersForm,
 } from "@/components/tournament-tool-forms";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
@@ -116,6 +119,27 @@ function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatKnockoutRound(value: unknown) {
+  switch (value) {
+    case "round_of_16":
+      return "16 强";
+    case "quarterfinal":
+      return "8 强";
+    case "semifinal":
+      return "半决赛";
+    case "final":
+      return "冠军赛";
+    case "third_place":
+      return "季军赛";
+    default:
+      return "正赛";
+  }
+}
+
 export default async function AdminTournamentsPage() {
   await requireAdmin();
   const supabase = createRequiredServiceClient();
@@ -214,6 +238,7 @@ export default async function AdminTournamentsPage() {
   const contestOptions = ((contests ?? []) as ContestOption[]).filter(
     (contest) => contest.vote_type === "multiple",
   );
+  const groupOptions = (groups ?? []) as Array<Pick<ContestGroup, "id" | "name">>;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
@@ -221,7 +246,7 @@ export default async function AdminTournamentsPage() {
         <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-normal">赛制工具</h1>
           <p className="mt-3 text-muted-foreground">
-            创建赛事、预览海选晋级名单，并生成 48 进 16 预赛分组。
+            创建赛事、预览海选晋级名单，并生成预赛、加赛和正赛 contest。
           </p>
         </div>
         <Button asChild variant="outline">
@@ -247,6 +272,12 @@ export default async function AdminTournamentsPage() {
             const preliminaryStages = preview.stages.filter(
               (stage) => stage.kind === "preliminary",
             );
+            const tiebreakerStages = preview.stages.filter(
+              (stage) => stage.kind === "tiebreaker",
+            );
+            const knockoutStages = preview.stages.filter(
+              (stage) => stage.kind === "knockout",
+            );
             const canGeneratePreliminary =
               Boolean(preview.screeningContest) &&
               ["closed", "published"].includes(
@@ -254,6 +285,12 @@ export default async function AdminTournamentsPage() {
               ) &&
               preliminaryStages.length === 0 &&
               preview.advancers.length > 0;
+            const canGenerateTiebreakers =
+              preliminaryStages.length > 0 &&
+              tiebreakerStages.length === 0 &&
+              knockoutStages.length === 0;
+            const canGenerateKnockout =
+              preliminaryStages.length > 0 && knockoutStages.length === 0;
 
             return (
               <Card key={preview.tournament.id}>
@@ -359,10 +396,54 @@ export default async function AdminTournamentsPage() {
                         ) : null}
                         <GeneratePreliminaryForm
                           tournamentId={preview.tournament.id}
-                          groups={(groups ?? []) as Array<
-                            Pick<ContestGroup, "id" | "name">
-                          >}
+                          groups={groupOptions}
                           disabled={!canGeneratePreliminary}
+                        />
+                      </div>
+
+                      <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                        <div className="mb-3 flex items-center gap-2 font-medium">
+                          <Shuffle className="size-4 text-[#B9854C]" />
+                          生成加赛
+                        </div>
+                        {tiebreakerStages.length > 0 ? (
+                          <div className="mb-3 rounded-xl border bg-[#FFF8E8]/60 p-3 text-sm text-muted-foreground">
+                            已生成 {tiebreakerStages.length} 场预赛加赛。
+                          </div>
+                        ) : null}
+                        <GenerateTiebreakersForm
+                          tournamentId={preview.tournament.id}
+                          groups={groupOptions}
+                          disabled={!canGenerateTiebreakers}
+                        />
+                      </div>
+
+                      <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                        <div className="mb-3 flex items-center gap-2 font-medium">
+                          <Shuffle className="size-4 text-[#B9854C]" />
+                          生成正赛
+                        </div>
+                        {knockoutStages.length > 0 ? (
+                          <div className="mb-3 rounded-xl border bg-[#FFF8E8]/60 p-3 text-sm text-muted-foreground">
+                            已生成正赛 16 强首轮。
+                          </div>
+                        ) : null}
+                        <GenerateKnockoutForm
+                          tournamentId={preview.tournament.id}
+                          groups={groupOptions}
+                          disabled={!canGenerateKnockout}
+                        />
+                      </div>
+
+                      <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                        <div className="mb-3 flex items-center gap-2 font-medium">
+                          <Shuffle className="size-4 text-[#B9854C]" />
+                          生成下一轮正赛
+                        </div>
+                        <GenerateNextKnockoutRoundForm
+                          tournamentId={preview.tournament.id}
+                          groups={groupOptions}
+                          disabled={knockoutStages.length === 0}
                         />
                       </div>
 
@@ -386,6 +467,48 @@ export default async function AdminTournamentsPage() {
                                         .preliminaryGroup ?? "-",
                                     )}
                                     组：{contest?.title ?? "活动已删除"}
+                                  </span>
+                                  {stage.contest_id ? (
+                                    <Button asChild size="sm" variant="outline">
+                                      <Link
+                                        href={`/admin/contests/${stage.contest_id}/edit`}
+                                      >
+                                        打开
+                                      </Link>
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {tiebreakerStages.length > 0 || knockoutStages.length > 0 ? (
+                        <div className="rounded-2xl border border-[#EED8AA]/70 p-4">
+                          <div className="mb-3 font-medium">加赛 / 正赛活动</div>
+                          <div className="space-y-2">
+                            {[...tiebreakerStages, ...knockoutStages].map((stage) => {
+                              const contest = stage.contest_id
+                                ? contestById.get(stage.contest_id)
+                                : null;
+                              const metadata = isRecord(stage.metadata)
+                                ? stage.metadata
+                                : {};
+                              const label =
+                                stage.kind === "tiebreaker"
+                                  ? `加赛 ${String(metadata.preliminaryGroup ?? "-")} 组`
+                                  : `${formatKnockoutRound(metadata.round)} ${String(
+                                      metadata.matchSlot ?? "-",
+                                    )} 场`;
+
+                              return (
+                                <div
+                                  key={stage.id}
+                                  className="flex items-center justify-between gap-3 rounded-xl bg-[#FFF8E8]/60 px-3 py-2 text-sm"
+                                >
+                                  <span className="min-w-0 truncate">
+                                    {label}：{contest?.title ?? "活动已删除"}
                                   </span>
                                   {stage.contest_id ? (
                                     <Button asChild size="sm" variant="outline">

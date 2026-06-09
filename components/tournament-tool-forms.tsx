@@ -3,7 +3,10 @@
 import { Shuffle, Trophy } from "lucide-react";
 import {
   createTournamentAction,
+  generateKnockoutStageAction,
+  generateNextKnockoutRoundAction,
   generatePreliminaryStageAction,
+  generatePreliminaryTiebreakersAction,
 } from "@/lib/actions/tournament-actions";
 import type { Contest, ContestGroup } from "@/lib/types";
 import { FormStatusFieldset } from "@/components/form-status-fieldset";
@@ -18,6 +21,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+type TournamentFormAction = (
+  formData: FormData,
+) => Promise<
+  | {
+      ok?: boolean;
+      error?: string;
+      message?: string;
+      redirectTo?: string;
+      refresh?: boolean;
+    }
+  | void
+>;
 
 export function CreateTournamentForm({
   contests,
@@ -125,5 +141,138 @@ export function GeneratePreliminaryForm({
         </FormSubmitButton>
       </FormStatusFieldset>
     </TransitionActionForm>
+  );
+}
+
+function FollowupStageForm({
+  tournamentId,
+  groups,
+  disabled,
+  action,
+  title,
+  buttonLabel,
+  seedId,
+  seedPlaceholder,
+}: {
+  tournamentId: string;
+  groups: Array<Pick<ContestGroup, "id" | "name">>;
+  disabled?: boolean;
+  action: TournamentFormAction;
+  title: string;
+  buttonLabel: string;
+  seedId: string;
+  seedPlaceholder: string;
+}) {
+  return (
+    <TransitionActionForm action={action} successMessage={title} className="space-y-4">
+      <FormStatusFieldset className="space-y-4">
+        <input type="hidden" name="tournamentId" value={tournamentId} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>放入活动组</Label>
+            <Select name="targetGroupId" defaultValue="none" disabled={disabled}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">不属于活动组</SelectItem>
+                {groups.map((group) => (
+                  <SelectItem key={group.id} value={group.id}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={seedId}>seed</Label>
+            <Input
+              id={seedId}
+              name="seed"
+              maxLength={160}
+              placeholder={seedPlaceholder}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+        <FormSubmitButton
+          className="w-full sm:w-auto"
+          disabled={disabled}
+          loadingText="生成中..."
+        >
+          <Shuffle className="size-4" />
+          {buttonLabel}
+        </FormSubmitButton>
+      </FormStatusFieldset>
+    </TransitionActionForm>
+  );
+}
+
+export function GenerateTiebreakersForm({
+  tournamentId,
+  groups,
+  disabled = false,
+}: {
+  tournamentId: string;
+  groups: Array<Pick<ContestGroup, "id" | "name">>;
+  disabled?: boolean;
+}) {
+  return (
+    <FollowupStageForm
+      tournamentId={tournamentId}
+      groups={groups}
+      disabled={disabled}
+      action={generatePreliminaryTiebreakersAction}
+      title="加赛已生成"
+      buttonLabel="生成预赛加赛"
+      seedId={`tiebreaker-seed-${tournamentId}`}
+      seedPlaceholder="留空则自动生成"
+    />
+  );
+}
+
+export function GenerateKnockoutForm({
+  tournamentId,
+  groups,
+  disabled = false,
+}: {
+  tournamentId: string;
+  groups: Array<Pick<ContestGroup, "id" | "name">>;
+  disabled?: boolean;
+}) {
+  return (
+    <FollowupStageForm
+      tournamentId={tournamentId}
+      groups={groups}
+      disabled={disabled}
+      action={generateKnockoutStageAction}
+      title="正赛已生成"
+      buttonLabel="生成正赛 16 强"
+      seedId={`knockout-seed-${tournamentId}`}
+      seedPlaceholder="留空则自动生成"
+    />
+  );
+}
+
+export function GenerateNextKnockoutRoundForm({
+  tournamentId,
+  groups,
+  disabled = false,
+}: {
+  tournamentId: string;
+  groups: Array<Pick<ContestGroup, "id" | "name">>;
+  disabled?: boolean;
+}) {
+  return (
+    <FollowupStageForm
+      tournamentId={tournamentId}
+      groups={groups}
+      disabled={disabled}
+      action={generateNextKnockoutRoundAction}
+      title="下一轮正赛已生成"
+      buttonLabel="生成下一轮正赛"
+      seedId={`next-knockout-seed-${tournamentId}`}
+      seedPlaceholder="留空则自动生成"
+    />
   );
 }
