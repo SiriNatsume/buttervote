@@ -28,7 +28,10 @@ export default async function AdminGroupsPage({
         "id,name,description,cover_image_path,love_vote_weight,love_vote_quota,created_at",
       )
       .order("created_at", { ascending: false }),
-    supabase.from("contests").select("id,group_id"),
+    supabase
+      .from("contests")
+      .select("id,group_id")
+      .is("archived_at", null),
   ]);
   const contestCountByGroup = new Map<string, number>();
 

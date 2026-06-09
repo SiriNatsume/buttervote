@@ -26,7 +26,7 @@ export default async function VotePage({
       supabase
         .from("contests")
         .select(
-          "id,title,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,show_candidate_image,show_candidate_description,show_nominator_info,voting_ends_at",
+          "id,title,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,show_candidate_image,show_candidate_description,show_nominator_info,voting_ends_at,archived_at",
         )
         .eq("id", id)
         .maybeSingle(),
@@ -44,7 +44,7 @@ export default async function VotePage({
         .order("created_at", { ascending: true }),
     ]);
 
-  if (!contest || contest.status !== "voting") {
+  if (!contest || contest.archived_at || contest.status !== "voting") {
     redirect(`/contests/${id}`);
   }
 

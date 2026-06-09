@@ -65,6 +65,7 @@ export default async function GroupResultsPage({
         "id,title,description,status,vote_type,group_id,closed_result_visibility,live_results_enabled,created_at",
       )
       .eq("group_id", id)
+      .is("archived_at", null)
       .neq("status", "draft")
       .order("created_at", { ascending: true }),
   ]);

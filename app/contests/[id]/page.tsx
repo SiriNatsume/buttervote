@@ -28,7 +28,7 @@ export default async function ContestDetailPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,max_choices,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,voting_starts_at,voting_ends_at,image_path",
+        "id,title,description,status,vote_type,max_choices,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,archived_at",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -41,7 +41,7 @@ export default async function ContestDetailPage({
     getCurrentProfile(),
   ]);
 
-  if (!contest) {
+  if (!contest || contest.archived_at) {
     notFound();
   }
 

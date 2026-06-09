@@ -58,11 +58,11 @@ export async function submitVoteAction(formData: FormData) {
 
   const { data: contest } = await supabase
     .from("contests")
-    .select("id,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled")
+    .select("id,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,archived_at")
     .eq("id", contestId)
     .maybeSingle();
 
-  if (!contest || contest.status !== "voting") {
+  if (!contest || contest.archived_at || contest.status !== "voting") {
     return voteError("该活动当前不能投票。");
   }
 

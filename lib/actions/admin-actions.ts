@@ -11,6 +11,7 @@ import {
 } from "@/lib/contest-rules";
 import { getDescriptionLimitError } from "@/lib/description-limit";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { createRequiredServiceClient } from "@/lib/supabase/service";
 import type {
   ContestStatus,
   HomepageHeroValue,
@@ -138,6 +139,10 @@ const batchGroupScheduleSchema = z.object({
 function optionalUuidFromForm(value: FormDataEntryValue | null) {
   const text = String(value ?? "");
   return text && text !== "none" ? text : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function checkboxFromForm(value: FormDataEntryValue | null) {
@@ -555,9 +560,13 @@ export async function updateContestAction(formData: FormData) {
       : undefined;
   const { data: previous } = await supabase
     .from("contests")
-    .select("group_id")
+    .select("group_id,archived_at")
     .eq("id", contestId)
     .maybeSingle();
+
+  if (!previous || previous.archived_at) {
+    return actionFailure("活动不存在或已归档。");
+  }
 
   const { error } = await supabase
     .from("contests")
@@ -574,7 +583,8 @@ export async function updateContestAction(formData: FormData) {
       show_candidate_description: updates.show_candidate_description,
       ...(votingEndsAt !== undefined ? { voting_ends_at: votingEndsAt } : {}),
     })
-    .eq("id", contestId);
+    .eq("id", contestId)
+    .is("archived_at", null);
 
   if (error) {
     return actionFailure(error.message);
@@ -616,6 +626,7 @@ export async function updateContestStatusAction(
       ...(votingEndsAt !== undefined ? { voting_ends_at: votingEndsAt } : {}),
     })
     .eq("id", parsed.data.contestId)
+    .is("archived_at", null)
     .select("group_id")
     .maybeSingle();
 
@@ -623,11 +634,53 @@ export async function updateContestStatusAction(
     return actionFailure(error.message);
   }
 
+  if (!data) {
+    return actionFailure("活动不存在或已归档。");
+  }
+
   revalidateContest(parsed.data.contestId);
   if (data?.group_id) {
     revalidateGroup(data.group_id);
   }
   return actionSuccess("状态已更新");
+}
+
+export async function archiveContestAction(formData: FormData) {
+  const adminResult = await getActionAdmin();
+  if (!adminResult.ok) {
+    return actionFailure(adminResult.error);
+  }
+
+  const parsed = z
+    .object({ contestId: z.string().uuid() })
+    .safeParse({ contestId: formData.get("contestId") });
+
+  if (!parsed.success) {
+    return actionFailure("活动无效。");
+  }
+
+  const supabase = createRequiredServiceClient();
+  const { data, error } = await supabase.rpc("archive_contest_atomic", {
+    p_contest_id: parsed.data.contestId,
+    p_archived_by: adminResult.profile.id,
+  });
+
+  if (error) {
+    return actionFailure(error.message || "归档活动失败。");
+  }
+
+  const groupId =
+    isRecord(data) && typeof data.groupId === "string" ? data.groupId : null;
+
+  revalidateContest(parsed.data.contestId);
+  revalidatePath("/admin/tournaments");
+  if (groupId) {
+    revalidateGroup(groupId);
+  }
+
+  return actionSuccess("活动已归档", {
+    redirectTo: groupId ? `/admin/groups/${groupId}` : "/admin",
+  });
 }
 
 export async function updateContestImageAction(
@@ -660,6 +713,7 @@ export async function updateContestImageAction(
       image_size: imageMetaParsed.data.imageSize,
     })
     .eq("id", contestIdParsed.data)
+    .is("archived_at", null)
     .select("group_id")
     .maybeSingle();
 
@@ -709,6 +763,17 @@ export async function updateContestSettings(formData: FormData) {
   }
 
   const supabase = await createServerDataClient();
+  const { data: activeContest } = await supabase
+    .from("contests")
+    .select("id")
+    .eq("id", parsed.data.contestId)
+    .is("archived_at", null)
+    .maybeSingle();
+
+  if (!activeContest) {
+    return actionFailure("活动不存在或已归档。");
+  }
+
   const votingStartSync = await syncPendingScheduledTransition({
     supabase,
     contestId: parsed.data.contestId,
@@ -750,6 +815,7 @@ export async function updateContestSettings(formData: FormData) {
       voting_ends_at: parsed.data.voting_ends_at,
     })
     .eq("id", parsed.data.contestId)
+    .is("archived_at", null)
     .select("group_id")
     .maybeSingle();
 
@@ -981,6 +1047,17 @@ export async function createScheduledTransition(formData: FormData) {
   }
 
   const supabase = await createServerDataClient();
+  const { data: contest } = await supabase
+    .from("contests")
+    .select("id")
+    .eq("id", parsed.data.contestId)
+    .is("archived_at", null)
+    .maybeSingle();
+
+  if (!contest) {
+    return actionFailure("活动不存在或已归档。");
+  }
+
   const syncResult = await syncPendingScheduledTransition({
     supabase,
     contestId: parsed.data.contestId,
@@ -1103,6 +1180,7 @@ export async function batchUpdateGroupContestSchedule(input: unknown) {
   const { data: contests, error: contestsError } = await supabase
     .from("contests")
     .select("id,group_id")
+    .is("archived_at", null)
     .in("id", contestIds);
 
   if (contestsError) {
@@ -1132,6 +1210,7 @@ export async function batchUpdateGroupContestSchedule(input: unknown) {
     const { error } = await supabase
       .from("contests")
       .update(contestUpdate)
+      .is("archived_at", null)
       .in("id", contestIds);
 
     if (error) {
@@ -1214,9 +1293,13 @@ export async function reviewNominationAction(formData: FormData) {
   if (parsed.data.reviewAction === "approve") {
     const { data: contestForReview } = await supabase
       .from("contests")
-      .select("candidate_description_max_length,nomination_image_required")
+      .select("candidate_description_max_length,nomination_image_required,archived_at")
       .eq("id", nomination.contest_id)
       .maybeSingle();
+
+    if (!contestForReview || contestForReview.archived_at) {
+      return actionFailure("活动不存在或已归档。");
+    }
 
     if (contestForReview?.nomination_image_required === true && !nomination.image_path) {
       return actionFailure("该活动要求提名图片，请先补充图片后再通过。");
@@ -1312,11 +1395,18 @@ export async function batchReviewNominations(input: unknown) {
   if (parsed.data.action === "approve") {
     const { data: contests, error: contestsError } = await supabase
       .from("contests")
-      .select("id,candidate_description_max_length,nomination_image_required")
+      .select("id,candidate_description_max_length,nomination_image_required,archived_at")
       .in("id", contestIds);
 
     if (contestsError) {
       return actionFailure(contestsError.message);
+    }
+
+    if (
+      (contests ?? []).length !== contestIds.length ||
+      (contests ?? []).some((contest) => contest.archived_at)
+    ) {
+      return actionFailure("部分活动不存在或已归档，无法批量通过提名。");
     }
 
     const descriptionLimitByContest = new Map(
@@ -1604,6 +1694,7 @@ export async function inheritCandidatesAction(formData: FormData) {
   const { data: contests, error: contestsError } = await supabase
     .from("contests")
     .select("id,group_id,candidate_description_max_length")
+    .is("archived_at", null)
     .in("id", [parsed.data.targetContestId, parsed.data.sourceContestId]);
 
   if (contestsError || !contests || contests.length !== 2) {
@@ -1717,11 +1808,14 @@ export async function updateHomepageHeroAction(formData: FormData) {
   const supabase = await createServerDataClient();
   const table =
     parsed.data.featuredType === "group" ? "contest_groups" : "contests";
-  const { data: featured } = await supabase
+  const featuredQuery = supabase
     .from(table)
     .select("id")
-    .eq("id", parsed.data.featuredId)
-    .maybeSingle();
+    .eq("id", parsed.data.featuredId);
+  const { data: featured } =
+    parsed.data.featuredType === "contest"
+      ? await featuredQuery.is("archived_at", null).maybeSingle()
+      : await featuredQuery.maybeSingle();
 
   if (!featured) {
     return actionFailure("推荐对象不存在。");

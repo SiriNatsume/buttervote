@@ -73,6 +73,7 @@ async function applyTransitionsWithServiceClient(transitions: DueTransition[]) {
       .from("contests")
       .update(contestUpdateForTransition(transition))
       .eq("id", transition.contest_id)
+      .is("archived_at", null)
       .select("group_id")
       .maybeSingle();
 
@@ -112,8 +113,9 @@ async function applyWithServiceFallback(contestId?: string) {
 
   let query = supabase
     .from("contest_scheduled_transitions")
-    .select("id,contest_id,target_status,run_at")
+    .select("id,contest_id,target_status,run_at,contests!inner(archived_at)")
     .is("executed_at", null)
+    .is("contests.archived_at", null)
     .lte("run_at", new Date().toISOString())
     .order("run_at", { ascending: true });
 

@@ -118,11 +118,11 @@ async function getContestNominationAccessError(
   const supabase = await createServerDataClient();
   const { data: contest } = await supabase
     .from("contests")
-    .select("group_id")
+    .select("group_id,archived_at")
     .eq("id", contestId)
     .maybeSingle();
 
-  if (!contest) {
+  if (!contest || contest.archived_at) {
     return "活动不存在或暂时无法读取，请稍后再试。";
   }
 
@@ -154,12 +154,12 @@ export async function createNominationAction(formData: FormData) {
   const { data: contest } = await supabase
     .from("contests")
     .select(
-      "id,status,group_id,max_nominations_per_user,candidate_description_max_length,nomination_image_required",
+      "id,status,group_id,max_nominations_per_user,candidate_description_max_length,nomination_image_required,archived_at",
     )
     .eq("id", parsed.data.contestId)
     .maybeSingle();
 
-  if (!contest) {
+  if (!contest || contest.archived_at) {
     return { ok: false, error: "活动不存在或暂时无法读取，请稍后再试。" };
   }
 
@@ -368,11 +368,11 @@ export async function updateNominationImageAction(
 
   const { data: contest } = await supabase
     .from("contests")
-    .select("id,group_id,status,nomination_image_required")
+    .select("id,group_id,status,nomination_image_required,archived_at")
     .eq("id", nomination.contest_id)
     .maybeSingle();
 
-  if (!contest) {
+  if (!contest || contest.archived_at) {
     return { ok: false, error: "活动不存在或暂时无法读取，请稍后再试。" };
   }
 
@@ -577,11 +577,11 @@ export async function updateMyNomination(formData: FormData) {
 
   const { data: contest } = await supabase
     .from("contests")
-    .select("group_id,candidate_description_max_length,nomination_image_required")
+    .select("group_id,candidate_description_max_length,nomination_image_required,archived_at")
     .eq("id", nomination.contest_id)
     .maybeSingle();
 
-  if (!contest) {
+  if (!contest || contest.archived_at) {
     return { ok: false, error: "活动不存在或暂时无法读取，请稍后再试。" };
   }
 

@@ -48,6 +48,7 @@ type ContestResultBundle = {
     status: string;
     vote_type: "single" | "multiple" | "ranked";
     group_id: string | null;
+    archived_at: string | null;
   };
   candidates: ResultCandidate[];
   results: TallyResult[];
@@ -89,6 +90,8 @@ type KnockoutMatchResolutionPayload = {
   winnerCandidateId: string;
   loserCandidateId: string;
 };
+
+type TiebreakerTieKind = "group_first" | "advancement";
 
 const createTournamentSchema = z.object({
   name: z.string().trim().min(1, "赛事名称不能为空").max(160),
@@ -146,7 +149,7 @@ async function getContestResults(contestId: string) {
   const supabase = createRequiredServiceClient();
   const { data: contest, error: contestError } = await supabase
     .from("contests")
-    .select("id,title,status,vote_type,group_id")
+    .select("id,title,status,vote_type,group_id,archived_at")
     .eq("id", contestId)
     .maybeSingle();
 
@@ -154,6 +157,13 @@ async function getContestResults(contestId: string) {
     return {
       ok: false as const,
       error: contestError?.message ?? "活动不存在。",
+    };
+  }
+
+  if (contest.archived_at) {
+    return {
+      ok: false as const,
+      error: "活动已归档，不能作为赛制结果来源。",
     };
   }
 
@@ -238,6 +248,133 @@ function stagePreliminaryGroup(stage: Pick<TournamentStage, "metadata">) {
   return group === "A" || group === "B" || group === "C" || group === "D"
     ? group
     : null;
+}
+
+function stageTieKind(stage: Pick<TournamentStage, "metadata">) {
+  const metadata = isRecord(stage.metadata) ? stage.metadata : {};
+  const tieKind = metadata.tieKind;
+  return tieKind === "group_first" || tieKind === "advancement"
+    ? tieKind
+    : null;
+}
+
+function stageHasLegacyTie(
+  stage: Pick<TournamentStage, "metadata">,
+  tieKind: TiebreakerTieKind,
+) {
+  const metadata = isRecord(stage.metadata) ? stage.metadata : {};
+  if (stageTieKind(stage)) {
+    return false;
+  }
+
+  return tieKind === "group_first"
+    ? Boolean(metadata.groupFirstTie)
+    : Boolean(metadata.advancementTie);
+}
+
+async function filterActiveStages(stages: TournamentStage[]) {
+  const contestIds = [
+    ...new Set(
+      stages
+        .map((stage) => stage.contest_id)
+        .filter((contestId): contestId is string => Boolean(contestId)),
+    ),
+  ];
+
+  if (contestIds.length === 0) {
+    return [];
+  }
+
+  const supabase = createRequiredServiceClient();
+  const { data: contests, error } = await supabase
+    .from("contests")
+    .select("id,archived_at")
+    .in("id", contestIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const activeContestIds = new Set(
+    (contests ?? [])
+      .filter((contest) => !contest.archived_at)
+      .map((contest) => contest.id),
+  );
+
+  return stages.filter(
+    (stage) => stage.contest_id && activeContestIds.has(stage.contest_id),
+  );
+}
+
+async function hasActiveTournamentStage(
+  tournamentId: string,
+  kind: TournamentStage["kind"],
+) {
+  const supabase = createRequiredServiceClient();
+  const { data, error } = await supabase
+    .from("tournament_stages")
+    .select("*")
+    .eq("tournament_id", tournamentId)
+    .eq("kind", kind);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (await filterActiveStages((data ?? []) as TournamentStage[])).length > 0;
+}
+
+async function getActiveTournamentStages(
+  tournamentId: string,
+  kind: TournamentStage["kind"],
+) {
+  const supabase = createRequiredServiceClient();
+  const { data, error } = await supabase
+    .from("tournament_stages")
+    .select("*")
+    .eq("tournament_id", tournamentId)
+    .eq("kind", kind)
+    .order("sequence", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return filterActiveStages((data ?? []) as TournamentStage[]);
+}
+
+async function filterActiveMatches(matches: TournamentMatch[]) {
+  const contestIds = [
+    ...new Set(
+      matches
+        .map((match) => match.contest_id)
+        .filter((contestId): contestId is string => Boolean(contestId)),
+    ),
+  ];
+
+  if (contestIds.length === 0) {
+    return [];
+  }
+
+  const supabase = createRequiredServiceClient();
+  const { data: contests, error } = await supabase
+    .from("contests")
+    .select("id,archived_at")
+    .in("id", contestIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const activeContestIds = new Set(
+    (contests ?? [])
+      .filter((contest) => !contest.archived_at)
+      .map((contest) => contest.id),
+  );
+
+  return matches.filter(
+    (match) => match.contest_id && activeContestIds.has(match.contest_id),
+  );
 }
 
 function entryMapByCandidateId(entries: TournamentEntry[]) {
@@ -522,7 +659,7 @@ async function resolveKnockoutSourceMatches(
     return entriesResult;
   }
 
-  const sourceMatches = (matches ?? []) as TournamentMatch[];
+  const sourceMatches = await filterActiveMatches((matches ?? []) as TournamentMatch[]);
   if (sourceMatches.length !== expectedCount) {
     return {
       ok: false,
@@ -888,26 +1025,17 @@ export async function generatePreliminaryTiebreakersAction(
 
   try {
     const supabase = createRequiredServiceClient();
-    const [{ data: tournament }, { data: existingTiebreakers }] =
-      await Promise.all([
-        supabase
-          .from("tournaments")
-          .select("id,name")
-          .eq("id", parsed.data.tournamentId)
-          .maybeSingle(),
-        supabase
-          .from("tournament_stages")
-          .select("id")
-          .eq("tournament_id", parsed.data.tournamentId)
-          .eq("kind", "tiebreaker")
-          .limit(1),
-      ]);
+    const { data: tournament } = await supabase
+      .from("tournaments")
+      .select("id,name")
+      .eq("id", parsed.data.tournamentId)
+      .maybeSingle();
 
     if (!tournament) {
       return actionFailure("赛事不存在。");
     }
 
-    if ((existingTiebreakers ?? []).length > 0) {
+    if (await hasActiveTournamentStage(parsed.data.tournamentId, "tiebreaker")) {
       return actionFailure("该赛事已经生成过预赛加赛。");
     }
 
@@ -935,38 +1063,83 @@ export async function generatePreliminaryTiebreakersAction(
     const seed =
       parsed.data.seed ??
       `tiebreaker:${parsed.data.tournamentId}:${new Date().toISOString()}`;
-    const tiebreakers = tiebreakerBundles.map((bundle) => ({
-      preliminaryGroup: bundle.group,
-      sourceStageId: bundle.stage.id,
-      sourceContestId: bundle.stage.contest_id,
-      candidates: bundle.resolution.tiebreakerCandidates.map((candidate) => ({
-        candidateId: candidate.candidateId,
-        score: candidate.score,
-        lastVoteAt: candidate.lastVoteAt,
-      })),
-      metadata: {
-        preliminaryGroup: bundle.group,
-        sourceStageId: bundle.stage.id,
-        sourceContestId: bundle.stage.contest_id,
-        advancementTie: bundle.resolution.advancementTie
-          ? {
+    const tiebreakers = tiebreakerBundles.flatMap((bundle) => {
+      const items: Array<{
+        preliminaryGroup: PreliminaryGroupKey;
+        tieKind: TiebreakerTieKind;
+        sourceStageId: string;
+        sourceContestId: string | null;
+        candidates: Array<{
+          candidateId: string;
+          score: number;
+          lastVoteAt: string | null;
+        }>;
+        metadata: Record<string, unknown>;
+      }> = [];
+
+      if (bundle.resolution.groupFirstTie) {
+        items.push({
+          preliminaryGroup: bundle.group,
+          tieKind: "group_first",
+          sourceStageId: bundle.stage.id,
+          sourceContestId: bundle.stage.contest_id,
+          candidates: bundle.resolution.groupFirstTie.candidates.map(
+            (candidate) => ({
+              candidateId: candidate.candidateId,
+              score: candidate.score,
+              lastVoteAt: candidate.lastVoteAt,
+            }),
+          ),
+          metadata: {
+            preliminaryGroup: bundle.group,
+            tieKind: "group_first",
+            titleSuffix: "小组第一加赛",
+            sourceStageId: bundle.stage.id,
+            sourceContestId: bundle.stage.contest_id,
+            groupFirstTie: {
+              score: bundle.resolution.groupFirstTie.score,
+              candidateIds: bundle.resolution.groupFirstTie.candidates.map(
+                (candidate) => candidate.candidateId,
+              ),
+            },
+            advancementTie: null,
+          },
+        });
+      }
+
+      if (bundle.resolution.advancementTie) {
+        items.push({
+          preliminaryGroup: bundle.group,
+          tieKind: "advancement",
+          sourceStageId: bundle.stage.id,
+          sourceContestId: bundle.stage.contest_id,
+          candidates: bundle.resolution.advancementTie.candidates.map(
+            (candidate) => ({
+              candidateId: candidate.candidateId,
+              score: candidate.score,
+              lastVoteAt: candidate.lastVoteAt,
+            }),
+          ),
+          metadata: {
+            preliminaryGroup: bundle.group,
+            tieKind: "advancement",
+            titleSuffix: "晋级名额加赛",
+            sourceStageId: bundle.stage.id,
+            sourceContestId: bundle.stage.contest_id,
+            advancementTie: {
               score: bundle.resolution.advancementTie.score,
               remainingSlots: bundle.resolution.advancementTie.remainingSlots,
               candidateIds: bundle.resolution.advancementTie.candidates.map(
                 (candidate) => candidate.candidateId,
               ),
-            }
-          : null,
-        groupFirstTie: bundle.resolution.groupFirstTie
-          ? {
-              score: bundle.resolution.groupFirstTie.score,
-              candidateIds: bundle.resolution.groupFirstTie.candidates.map(
-                (candidate) => candidate.candidateId,
-              ),
-            }
-          : null,
-      },
-    }));
+            },
+            groupFirstTie: null,
+          },
+        });
+      }
+
+      return items;
+    });
     const input = {
       tournamentId: parsed.data.tournamentId,
       preliminaryGroups: tiebreakerBundles.map((bundle) => ({
@@ -985,10 +1158,16 @@ export async function generatePreliminaryTiebreakersAction(
           ? bundle.resolution.groupFirstTie.candidates.map(toCandidatePayload)
           : null,
       })),
+      splitTiebreakers: tiebreakers.map((item) => ({
+        preliminaryGroup: item.preliminaryGroup,
+        tieKind: item.tieKind,
+        candidates: item.candidates,
+      })),
     };
     const output = {
       tiebreakers: tiebreakers.map((item) => ({
         preliminaryGroup: item.preliminaryGroup,
+        tieKind: item.tieKind,
         candidates: item.candidates,
         metadata: item.metadata,
       })),
@@ -1012,6 +1191,30 @@ export async function generatePreliminaryTiebreakersAction(
     }
 
     const contestIds = extractStringArray(data, "contestIds");
+    const titleUpdates = await Promise.all(
+      contestIds.map((contestId, index) => {
+        const tiebreaker = tiebreakers[index];
+        if (!tiebreaker) {
+          return Promise.resolve({ error: null });
+        }
+
+        const suffix =
+          tiebreaker.tieKind === "group_first"
+            ? "小组第一加赛"
+            : "晋级名额加赛";
+        return supabase
+          .from("contests")
+          .update({
+            title: `${tournament.name} 预赛加赛 ${tiebreaker.preliminaryGroup} 组 ${suffix}`,
+          })
+          .eq("id", contestId);
+      }),
+    );
+    const titleUpdateError = titleUpdates.find((result) => result.error)?.error;
+    if (titleUpdateError) {
+      return actionFailure(titleUpdateError.message);
+    }
+
     revalidatePath("/admin/tournaments");
     for (const contestId of contestIds) {
       revalidatePath(`/admin/contests/${contestId}/edit`);
@@ -1052,26 +1255,17 @@ export async function generateKnockoutStageAction(
 
   try {
     const supabase = createRequiredServiceClient();
-    const [{ data: tournament }, { data: existingKnockout }] =
-      await Promise.all([
-        supabase
-          .from("tournaments")
-          .select("id,name")
-          .eq("id", parsed.data.tournamentId)
-          .maybeSingle(),
-        supabase
-          .from("tournament_stages")
-          .select("id")
-          .eq("tournament_id", parsed.data.tournamentId)
-          .eq("kind", "knockout")
-          .limit(1),
-      ]);
+    const { data: tournament } = await supabase
+      .from("tournaments")
+      .select("id,name")
+      .eq("id", parsed.data.tournamentId)
+      .maybeSingle();
 
     if (!tournament) {
       return actionFailure("赛事不存在。");
     }
 
-    if ((existingKnockout ?? []).length > 0) {
+    if (await hasActiveTournamentStage(parsed.data.tournamentId, "knockout")) {
       return actionFailure("该赛事已经生成过正赛。");
     }
 
@@ -1092,14 +1286,22 @@ export async function generateKnockoutStageAction(
       return actionFailure("请先结束所有预赛活动，再生成正赛。");
     }
 
-    const { data: tiebreakerStages } = await supabase
-      .from("tournament_stages")
-      .select("*")
-      .eq("tournament_id", parsed.data.tournamentId)
-      .eq("kind", "tiebreaker")
-      .order("sequence", { ascending: true });
+    const tiebreakerStages = await getActiveTournamentStages(
+      parsed.data.tournamentId,
+      "tiebreaker",
+    );
+    function findTiebreakerStage(
+      group: PreliminaryGroupKey,
+      tieKind: TiebreakerTieKind,
+    ) {
+      return tiebreakerStages.find(
+        (stage) =>
+          stagePreliminaryGroup(stage) === group &&
+          (stageTieKind(stage) === tieKind || stageHasLegacyTie(stage, tieKind)),
+      );
+    }
     const tiebreakerStageByGroup = new Map(
-      ((tiebreakerStages ?? []) as TournamentStage[])
+      tiebreakerStages
         .map((stage) => [stagePreliminaryGroup(stage), stage] as const)
         .filter(
           (item): item is readonly [PreliminaryGroupKey, TournamentStage] =>
@@ -1116,7 +1318,76 @@ export async function generateKnockoutStageAction(
       );
       let groupWinnerSourceId = bundle.resolution.ordered[0]?.candidateId ?? null;
 
-      if (bundle.resolution.needsTiebreaker) {
+      if (bundle.resolution.advancementTie && bundle.resolution.groupFirstTie) {
+        const advancementStage = findTiebreakerStage(bundle.group, "advancement");
+        if (!advancementStage?.contest_id) {
+          return actionFailure(
+            `${bundle.group} 组仍需要晋级名额加赛，请先生成并结束加赛。`,
+          );
+        }
+
+        const advancementTiebreaker = await getContestResults(
+          advancementStage.contest_id,
+        );
+        if (!advancementTiebreaker.ok) {
+          return actionFailure(advancementTiebreaker.error);
+        }
+        if (!assertClosedContest(advancementTiebreaker.contest)) {
+          return actionFailure(`${bundle.group} 组晋级名额加赛尚未结束。`);
+        }
+
+        const advancementCandidateIds = new Set(
+          bundle.resolution.advancementTie.candidates.map(
+            (candidate) => candidate.candidateId,
+          ),
+        );
+        const advancementResults = toSourceTiebreakerResults(
+          advancementTiebreaker,
+        ).filter((result) => advancementCandidateIds.has(result.candidateId));
+        const selected = resolveTiebreaker(
+          advancementResults,
+          bundle.resolution.advancementTie.remainingSlots,
+          `${parsed.data.seed ?? "knockout"}:${bundle.group}:advancement`,
+        ).selected;
+        advancerSourceIds = [
+          ...bundle.resolution.lockedAdvancers.map(
+            (candidate) => candidate.candidateId,
+          ),
+          ...selected.map((candidate) => candidate.candidateId),
+        ];
+
+        const groupFirstStage = findTiebreakerStage(bundle.group, "group_first");
+        if (!groupFirstStage?.contest_id) {
+          return actionFailure(
+            `${bundle.group} 组仍需要小组第一加赛，请先生成并结束加赛。`,
+          );
+        }
+
+        const groupFirstTiebreaker = await getContestResults(
+          groupFirstStage.contest_id,
+        );
+        if (!groupFirstTiebreaker.ok) {
+          return actionFailure(groupFirstTiebreaker.error);
+        }
+        if (!assertClosedContest(groupFirstTiebreaker.contest)) {
+          return actionFailure(`${bundle.group} 组小组第一加赛尚未结束。`);
+        }
+
+        const groupFirstCandidateIds = new Set(
+          bundle.resolution.groupFirstTie.candidates.map(
+            (candidate) => candidate.candidateId,
+          ),
+        );
+        const groupFirstResults = toSourceTiebreakerResults(
+          groupFirstTiebreaker,
+        ).filter((result) => groupFirstCandidateIds.has(result.candidateId));
+        groupWinnerSourceId =
+          resolveTiebreaker(
+            groupFirstResults,
+            1,
+            `${parsed.data.seed ?? "knockout"}:${bundle.group}:group-first`,
+          ).selected[0]?.candidateId ?? groupWinnerSourceId;
+      } else if (bundle.resolution.needsTiebreaker) {
         const tiebreakerStage = tiebreakerStageByGroup.get(bundle.group);
         if (!tiebreakerStage?.contest_id) {
           return actionFailure(
@@ -1337,7 +1608,9 @@ export async function generateNextKnockoutRoundAction(
       return actionFailure(matchesError.message);
     }
 
-    const existingMatches = (matches ?? []) as TournamentMatch[];
+    const existingMatches = await filterActiveMatches(
+      (matches ?? []) as TournamentMatch[],
+    );
     const plan = planNextKnockoutRound(existingMatches);
     if (!plan.ok) {
       return actionFailure(plan.error);

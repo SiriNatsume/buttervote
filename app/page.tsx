@@ -24,6 +24,7 @@ export default async function HomePage() {
     supabase
       .from("contests")
       .select("id,title,description,status,vote_type,image_path")
+      .is("archived_at", null)
       .neq("status", "draft")
       .order("created_at", { ascending: false }),
     supabase
@@ -59,6 +60,7 @@ export default async function HomePage() {
       .from("contests")
       .select("id,title,description,image_path")
       .eq("id", heroValue.featuredId)
+      .is("archived_at", null)
       .maybeSingle();
 
     if (contest) {

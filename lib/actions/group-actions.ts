@@ -165,6 +165,7 @@ export async function submitGroupVotes(input: GroupVoteInput) {
     supabase
       .from("contests")
       .select("id,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled")
+      .is("archived_at", null)
       .in("id", contestIds),
     supabase
       .from("candidates")

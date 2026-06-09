@@ -32,6 +32,7 @@ export default async function GroupDetailPage({
         "id,title,description,status,vote_type,image_path,max_nominations_per_user,closed_result_visibility,live_results_enabled",
       )
       .eq("group_id", id)
+      .is("archived_at", null)
       .neq("status", "draft")
       .order("created_at", { ascending: true }),
     getCurrentProfile(),

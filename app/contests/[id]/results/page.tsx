@@ -63,14 +63,14 @@ export default async function ResultsPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,group_id,show_candidate_image,show_candidate_description,show_nominator_info,live_results_enabled,closed_result_visibility",
+        "id,title,description,status,vote_type,group_id,show_candidate_image,show_candidate_description,show_nominator_info,live_results_enabled,closed_result_visibility,archived_at",
       )
       .eq("id", id)
       .maybeSingle(),
     getCurrentProfile(),
   ]);
 
-  if (!contest) {
+  if (!contest || contest.archived_at) {
     notFound();
   }
 

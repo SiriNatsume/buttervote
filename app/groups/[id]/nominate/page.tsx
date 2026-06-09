@@ -41,6 +41,7 @@ export default async function GroupNominatePage({
         "id,title,description,status,max_nominations_per_user,nomination_image_required,created_at",
       )
       .eq("group_id", id)
+      .is("archived_at", null)
       .neq("status", "draft")
       .order("created_at", { ascending: true }),
   ]);

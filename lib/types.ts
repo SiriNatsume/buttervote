@@ -144,6 +144,7 @@ export type Contest = {
   image_height: number | null;
   image_size: number | null;
   created_by: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 } & Record<string, unknown>;
@@ -386,6 +387,7 @@ type Tables = {
       image_height?: number | null;
       image_size?: number | null;
       created_by?: string | null;
+      archived_at?: string | null;
       created_at?: string;
       updated_at?: string;
     },
@@ -669,6 +671,13 @@ export type Database = {
           run_at: string;
           group_id: string | null;
         }>;
+      };
+      archive_contest_atomic: {
+        Args: {
+          p_contest_id: string;
+          p_archived_by: string;
+        };
+        Returns: Json;
       };
       submit_vote_with_love: {
         Args: {

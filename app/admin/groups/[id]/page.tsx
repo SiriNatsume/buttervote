@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ImageIcon, Pencil } from "lucide-react";
+import { ArchiveContestDialog } from "@/components/archive-contest-dialog";
 import { DeleteContestGroupDialog } from "@/components/delete-contest-group-dialog";
 import { ContestForm } from "@/components/contest-form";
 import { GroupScheduleBatchPanel } from "@/components/group-schedule-batch-panel";
@@ -50,6 +51,7 @@ export default async function AdminGroupDetailPage({
         "id,title,status,vote_type,max_choices,voting_starts_at,voting_ends_at,created_at",
       )
       .eq("group_id", id)
+      .is("archived_at", null)
       .order("created_at", { ascending: true }),
   ]);
 
@@ -202,6 +204,12 @@ export default async function AdminGroupDetailPage({
                       <Button asChild size="sm" variant="outline" className="w-full">
                         <Link href={`/contests/${contest.id}`}>打开</Link>
                       </Button>
+                      <ArchiveContestDialog
+                        contestId={contest.id}
+                        contestTitle={contest.title}
+                        triggerSize="sm"
+                        triggerClassName="w-full"
+                      />
                     </div>
                   </div>
                 ))}
@@ -240,6 +248,11 @@ export default async function AdminGroupDetailPage({
                             <Button asChild size="sm" variant="outline">
                               <Link href={`/contests/${contest.id}`}>打开</Link>
                             </Button>
+                            <ArchiveContestDialog
+                              contestId={contest.id}
+                              contestTitle={contest.title}
+                              triggerSize="sm"
+                            />
                           </div>
                         </TableCell>
                       </TableRow>

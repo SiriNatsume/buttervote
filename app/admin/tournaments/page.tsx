@@ -44,7 +44,7 @@ import type {
 
 type ContestOption = Pick<
   Contest,
-  "id" | "title" | "status" | "vote_type" | "group_id"
+  "id" | "title" | "status" | "vote_type" | "group_id" | "archived_at"
 >;
 
 type TournamentPreview = {
@@ -152,7 +152,8 @@ export default async function AdminTournamentsPage() {
   ] = await Promise.all([
     supabase
       .from("contests")
-      .select("id,title,status,vote_type,group_id,created_at")
+      .select("id,title,status,vote_type,group_id,archived_at,created_at")
+      .is("archived_at", null)
       .order("created_at", { ascending: false }),
     supabase.from("contest_groups").select("id,name").order("created_at"),
     supabase.from("tournaments").select("*").order("created_at", {
@@ -188,7 +189,10 @@ export default async function AdminTournamentsPage() {
   const previews: TournamentPreview[] = await Promise.all(
     ((tournaments ?? []) as Tournament[]).map(async (tournament) => {
       const tournamentStages = stagesByTournament.get(tournament.id) ?? [];
-      const screeningStage = tournamentStages.find(
+      const activeTournamentStages = tournamentStages.filter(
+        (stage) => stage.contest_id && contestById.has(stage.contest_id),
+      );
+      const screeningStage = activeTournamentStages.find(
         (stage) => stage.kind === "screening",
       );
       const screeningContest = screeningStage?.contest_id
@@ -198,7 +202,7 @@ export default async function AdminTournamentsPage() {
       if (!screeningContest) {
         return {
           tournament,
-          stages: tournamentStages,
+          stages: activeTournamentStages,
           logs: logsByTournament.get(tournament.id) ?? [],
           screeningContest: null,
           results: [],
@@ -214,7 +218,7 @@ export default async function AdminTournamentsPage() {
 
         return {
           tournament,
-          stages: tournamentStages,
+          stages: activeTournamentStages,
           logs: logsByTournament.get(tournament.id) ?? [],
           screeningContest,
           results,
@@ -224,7 +228,7 @@ export default async function AdminTournamentsPage() {
       } catch (error) {
         return {
           tournament,
-          stages: tournamentStages,
+          stages: activeTournamentStages,
           logs: logsByTournament.get(tournament.id) ?? [],
           screeningContest,
           results: [],
@@ -497,7 +501,15 @@ export default async function AdminTournamentsPage() {
                                 : {};
                               const label =
                                 stage.kind === "tiebreaker"
-                                  ? `加赛 ${String(metadata.preliminaryGroup ?? "-")} 组`
+                                  ? `加赛 ${String(
+                                      metadata.preliminaryGroup ?? "-",
+                                    )} 组 ${
+                                      metadata.tieKind === "group_first"
+                                        ? "小组第一"
+                                        : metadata.tieKind === "advancement"
+                                          ? "晋级名额"
+                                          : ""
+                                    }`
                                   : `${formatKnockoutRound(metadata.round)} ${String(
                                       metadata.matchSlot ?? "-",
                                     )} 场`;

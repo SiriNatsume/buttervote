@@ -17,7 +17,7 @@ export default async function MyNominationsPage({
   const { data: nominations } = await supabase
     .from("nominations")
     .select(
-      "id,contest_id,name,description,status,rejection_reason,rejected_at,created_at,image_path,image_width,image_height,image_size,nominator_display_name, contests(id,title,status,candidate_description_max_length,nomination_image_required)",
+      "id,contest_id,name,description,status,rejection_reason,rejected_at,created_at,image_path,image_width,image_height,image_size,nominator_display_name, contests(id,title,status,candidate_description_max_length,nomination_image_required,archived_at)",
     )
     .eq("submitter_id", user.id)
     .order("created_at", { ascending: false });
@@ -31,9 +31,11 @@ export default async function MyNominationsPage({
             status: ContestStatus;
             candidate_description_max_length: number | null;
             nomination_image_required: boolean | null;
+            archived_at: string | null;
           }
         | null
         | undefined;
+      const activeContest = contest?.archived_at ? null : contest;
 
       return {
         id: nomination.id,
@@ -49,15 +51,15 @@ export default async function MyNominationsPage({
         image_height: nomination.image_height,
         image_size: nomination.image_size,
         nominator_display_name: nomination.nominator_display_name,
-        contest: contest
+        contest: activeContest
           ? {
-              id: contest.id,
-              title: contest.title,
-              status: contest.status,
+              id: activeContest.id,
+              title: activeContest.title,
+              status: activeContest.status,
               candidate_description_max_length:
-                contest.candidate_description_max_length,
+                activeContest.candidate_description_max_length,
               nomination_image_required:
-                contest.nomination_image_required === true,
+                activeContest.nomination_image_required === true,
             }
           : null,
       };

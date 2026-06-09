@@ -31,6 +31,7 @@ export default async function GroupVotePage({
         "id,title,status,vote_type,max_choices,require_exact_choices,show_candidate_image,show_candidate_description,show_nominator_info,love_vote_enabled,created_at",
       )
       .eq("group_id", id)
+      .is("archived_at", null)
       .eq("status", "voting")
       .order("created_at", { ascending: true }),
   ]);

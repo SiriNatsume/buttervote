@@ -15,6 +15,7 @@ import { getPublicImageUrl } from "@/lib/image/image-url";
 import { formatDateTime } from "@/lib/time";
 import type { ContestStatus, VoteType } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ArchiveContestDialog } from "@/components/archive-contest-dialog";
 import { ContestStatusSelect } from "@/components/contest-status-select";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
@@ -180,6 +181,12 @@ function ContestActions({ contest }: { contest: AdminContestItem }) {
       <Button asChild size="sm" variant="outline" className="w-full md:w-auto">
         <Link href={`/contests/${contest.id}`}>打开</Link>
       </Button>
+      <ArchiveContestDialog
+        contestId={contest.id}
+        contestTitle={contest.title}
+        triggerSize="sm"
+        triggerClassName="w-full md:w-auto"
+      />
     </>
   );
 }

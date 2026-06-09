@@ -17,6 +17,7 @@ import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transiti
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { formatDateTime } from "@/lib/time";
 import { ClearableDatetimeInput } from "@/components/clearable-datetime-input";
+import { ArchiveContestDialog } from "@/components/archive-contest-dialog";
 import { ContestImageUploader } from "@/components/contest-image-uploader";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { InheritCandidatesForm } from "@/components/inherit-candidates-form";
@@ -62,7 +63,7 @@ export default async function EditContestPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,max_choices,require_exact_choices,nomination_image_required,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,image_width,image_height,image_size,created_by,created_at,updated_at",
+        "id,title,description,status,vote_type,max_choices,require_exact_choices,nomination_image_required,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,image_width,image_height,image_size,created_by,archived_at,created_at,updated_at",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -94,6 +95,7 @@ export default async function EditContestPage({
       .from("contests")
       .select("id,title")
       .eq("group_id", contest.group_id)
+      .is("archived_at", null)
       .order("created_at", { ascending: true });
     groupContests = contestsInGroup ?? [];
 
@@ -144,8 +146,21 @@ export default async function EditContestPage({
           <Button asChild>
             <Link href={`/contests/${contest.id}`}>打开活动</Link>
           </Button>
+          {!contest.archived_at ? (
+            <ArchiveContestDialog
+              contestId={contest.id}
+              contestTitle={contest.title}
+              triggerClassName="w-full sm:w-auto"
+            />
+          ) : null}
         </div>
       </div>
+
+      {contest.archived_at ? (
+        <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          该活动已归档，不会出现在公开活动、活动组和赛制工具中。
+        </div>
+      ) : null}
 
       {query.error ? (
         <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">

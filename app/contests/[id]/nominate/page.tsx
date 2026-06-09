@@ -30,7 +30,7 @@ export default async function NominatePage({
   const { data: contest } = await supabase
     .from("contests")
     .select(
-      "id,title,status,group_id,max_nominations_per_user,show_existing_nominations,show_nominator_info,candidate_description_max_length,nomination_image_required",
+      "id,title,status,group_id,max_nominations_per_user,show_existing_nominations,show_nominator_info,candidate_description_max_length,nomination_image_required,archived_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -40,7 +40,7 @@ export default async function NominatePage({
     contest?.status === "nominating" ||
     (contest?.status === "admin_nominating" && isAdmin);
 
-  if (!contest || !canNominate) {
+  if (!contest || contest.archived_at || !canNominate) {
     redirect(`/contests/${id}`);
   }
 

@@ -29,6 +29,7 @@ export default async function AdminHomepagePage({
       supabase
         .from("contests")
         .select("id,title")
+        .is("archived_at", null)
         .neq("status", "draft")
         .order("created_at", { ascending: false }),
       supabase

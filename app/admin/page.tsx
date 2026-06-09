@@ -35,11 +35,12 @@ export default async function AdminPage({
       supabase
         .from("contests")
         .select("id,title,description,status,vote_type,max_choices,image_path,group_id,created_at")
+        .is("archived_at", null)
         .order("created_at", { ascending: false }),
       supabase
         .from("nominations")
         .select(
-          "id,contest_id,submitter_id,name,description,status,image_path,image_width,image_height,image_size,nominator_display_name,nominator_note,rejection_reason,rejected_at,created_at,updated_at, contests(title)",
+          "id,contest_id,submitter_id,name,description,status,image_path,image_width,image_height,image_size,nominator_display_name,nominator_note,rejection_reason,rejected_at,created_at,updated_at, contests(title,archived_at)",
         )
         .eq("status", "pending")
         .order("created_at", { ascending: true }),
@@ -81,12 +82,17 @@ export default async function AdminPage({
   const profileById = new Map(
     (nominationProfiles ?? []).map((profile) => [profile.id, profile]),
   );
-  const nominationsWithProfiles = (nominations ?? []).map((nomination) => ({
-    ...nomination,
-    profiles: nomination.submitter_id
-      ? profileById.get(nomination.submitter_id) ?? null
-      : null,
-  }));
+  const nominationsWithProfiles = (nominations ?? [])
+    .filter((nomination) => {
+      const contest = nomination.contests as { archived_at?: string | null } | null;
+      return !contest?.archived_at;
+    })
+    .map((nomination) => ({
+      ...nomination,
+      profiles: nomination.submitter_id
+        ? profileById.get(nomination.submitter_id) ?? null
+        : null,
+    }));
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
