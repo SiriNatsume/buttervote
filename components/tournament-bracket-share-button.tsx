@@ -14,80 +14,14 @@ type ShareBracket = {
   };
 };
 
-type Rect = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
 const TRANSPARENT_PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 const MAX_OUTPUT_WIDTH = 2600;
 const CAPTURE_SCALE = 1.12;
-const HEADER_HEIGHT = 66;
-const FOOTER_HEIGHT = 58;
+const FOOTER_HEIGHT = 72;
 
 function imageSource(src: string | { src: string }) {
   return typeof src === "string" ? src : src.src;
-}
-
-function roundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-) {
-  const safeRadius = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + safeRadius, y);
-  ctx.lineTo(x + width - safeRadius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
-  ctx.lineTo(x + width, y + height - safeRadius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
-  ctx.lineTo(x + safeRadius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
-  ctx.lineTo(x, y + safeRadius);
-  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
-  ctx.closePath();
-}
-
-function fillRoundedRect(
-  ctx: CanvasRenderingContext2D,
-  rect: Rect,
-  radius: number,
-  fill: string,
-  stroke?: string,
-  lineWidth = 2,
-) {
-  roundedRect(ctx, rect.x, rect.y, rect.width, rect.height, radius);
-  ctx.fillStyle = fill;
-  ctx.fill();
-
-  if (stroke) {
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = lineWidth;
-    ctx.stroke();
-  }
-}
-
-function ellipsizeText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-) {
-  if (ctx.measureText(text).width <= maxWidth) {
-    return text;
-  }
-
-  let current = text;
-  while (current.length > 0 && ctx.measureText(`${current}...`).width > maxWidth) {
-    current = current.slice(0, -1);
-  }
-
-  return current ? `${current}...` : "...";
 }
 
 function drawImageContain(
@@ -226,7 +160,7 @@ function expandCloneForFullBracket(clone: HTMLElement, targetWidth: number) {
   }
 }
 
-async function elementToCanvas(root: HTMLElement, tournamentName: string) {
+async function elementToCanvas(root: HTMLElement) {
   const grid = root.querySelector<HTMLElement>("[data-bracket-share-grid]");
   const rootWidth = Math.ceil(root.getBoundingClientRect().width);
   const targetWidth = Math.max(rootWidth, (grid?.scrollWidth ?? root.scrollWidth) + 48);
@@ -268,7 +202,7 @@ async function elementToCanvas(root: HTMLElement, tournamentName: string) {
       windowWidth: width,
     });
 
-    const canvasHeight = height + HEADER_HEIGHT + FOOTER_HEIGHT;
+    const canvasHeight = height + FOOTER_HEIGHT;
     const canvas = document.createElement("canvas");
     canvas.width = Math.ceil(width * scale);
     canvas.height = Math.ceil(canvasHeight * scale);
@@ -279,9 +213,9 @@ async function elementToCanvas(root: HTMLElement, tournamentName: string) {
 
     ctx.fillStyle = "#FFF8E8";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(contentCanvas, 0, Math.round(HEADER_HEIGHT * scale));
+    ctx.drawImage(contentCanvas, 0, 0);
     ctx.scale(scale, scale);
-    await drawShareMarks(ctx, width, canvasHeight, height, tournamentName);
+    await drawShareMarks(ctx, width, canvasHeight, height);
 
     return canvas;
   } finally {
@@ -294,45 +228,31 @@ async function drawShareMarks(
   width: number,
   canvasHeight: number,
   contentHeight: number,
-  tournamentName: string,
 ) {
   const logoImage = await loadCleanImage(imageSource(logo));
-  const logoBox = { x: 18, y: 10, width: 170, height: 46 };
-  fillRoundedRect(ctx, logoBox, 16, "#FFFCF4", "#EED8AA", 1.5);
+  const margin = 22;
+  const logoWidth = 150;
+  const logoHeight = 30;
+  const logoX = width - margin - logoWidth;
+  const logoY = contentHeight + 12;
 
   if (logoImage) {
-    drawImageContain(ctx, logoImage, logoBox.x + 16, logoBox.y + 10, 138, 26);
+    drawImageContain(ctx, logoImage, logoX, logoY, logoWidth, logoHeight);
   } else {
     ctx.fillStyle = "#B9854C";
-    ctx.font = "700 18px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("Butter Vote", logoBox.x + logoBox.width / 2, logoBox.y + 30);
+    ctx.font = "700 20px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("Butter Vote", width - margin, logoY + 22);
   }
 
-  const infoBoxWidth = Math.min(480, Math.max(320, width * 0.24));
-  const infoBox = {
-    x: width - infoBoxWidth - 18,
-    y: canvasHeight - 50,
-    width: infoBoxWidth,
-    height: 40,
-  };
-  fillRoundedRect(ctx, infoBox, 14, "#FFFCF4", "#EED8AA", 1.5);
-
-  ctx.fillStyle = "#EED8AA";
-  ctx.fillRect(18, HEADER_HEIGHT - 1, width - 36, 1.5);
-  ctx.fillRect(18, HEADER_HEIGHT + contentHeight + 1, width - 36, 1.5);
-
   ctx.textAlign = "right";
-  ctx.fillStyle = "#5C321E";
+  ctx.fillStyle = "#B9854C";
   ctx.font = "700 15px sans-serif";
   ctx.fillText(
-    ellipsizeText(ctx, tournamentName, infoBox.width - 26),
-    infoBox.x + infoBox.width - 13,
-    infoBox.y + 17,
+    "@SiriNatsume",
+    width - margin,
+    Math.min(canvasHeight - 16, logoY + 52),
   );
-  ctx.fillStyle = "#B9854C";
-  ctx.font = "700 13px sans-serif";
-  ctx.fillText("@SiriNatsume", infoBox.x + infoBox.width - 13, infoBox.y + 33);
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement) {
@@ -397,7 +317,7 @@ export function TournamentBracketShareButton({
 
     setIsGenerating(true);
     try {
-      const canvas = await elementToCanvas(root, bracket.tournament.name);
+      const canvas = await elementToCanvas(root);
       const blob = await canvasToBlob(canvas);
       const copied = await copyBlob(blob).catch(() => false);
 

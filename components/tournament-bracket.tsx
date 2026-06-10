@@ -1,4 +1,4 @@
-import { Crown, Trophy, UserRound } from "lucide-react";
+import { Trophy, UserRound } from "lucide-react";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import type {
   TournamentBracketData,
@@ -18,7 +18,7 @@ function ParticipantRow({
 }) {
   if (!participant) {
     return (
-      <div className="flex min-h-[72px] items-center rounded-xl border border-dashed border-[#EED8AA] bg-white/45 px-3 py-2 text-sm text-muted-foreground">
+      <div className="flex min-h-[78px] items-center rounded-xl border border-dashed border-[#EED8AA] bg-white/45 px-3 py-2 text-sm text-muted-foreground">
         待定
       </div>
     );
@@ -29,13 +29,13 @@ function ParticipantRow({
   return (
     <div
       className={cn(
-        "flex min-h-[78px] items-center gap-3 rounded-xl border px-3 py-2.5",
+        "flex min-h-[84px] items-center gap-3 rounded-xl border px-3 py-2.5",
         participant.isWinner && resultVisible
           ? "border-l-[5px] border-[#9ACF9E] border-l-[#3C8B4F] bg-[#F7FEF5]"
           : "border-[#EED8AA]/70 bg-white/75",
       )}
     >
-      <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F7EAD0]">
+      <div className="flex size-[52px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F7EAD0]">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -46,12 +46,12 @@ function ParticipantRow({
           <UserRound className="size-5 text-[#B9854C]" aria-hidden="true" />
         )}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="break-words text-[16px] font-bold leading-5 text-[#3F2418]">
+      <div className="flex min-h-[52px] min-w-0 flex-1 flex-col justify-center">
+        <div className="break-words text-[16px] font-bold leading-[22px] text-[#3F2418]">
           {participant.name}
         </div>
         {participant.seedLabel ? (
-          <div className="mt-1 break-words text-[11px] font-medium leading-4 text-[#7A6040]">
+          <div className="mt-1 break-words text-[11px] font-medium leading-[16px] text-[#7A6040]">
             {participant.seedLabel}
           </div>
         ) : null}
@@ -59,7 +59,7 @@ function ParticipantRow({
       {resultVisible && participant.score !== null ? (
         <div
           className={cn(
-            "w-12 shrink-0 rounded-lg bg-white/75 px-1 py-1 text-center text-[15px] font-bold leading-4 text-[#5C321E]",
+            "flex h-[52px] w-12 shrink-0 flex-col items-center justify-center rounded-lg bg-white/75 px-1 text-center text-[16px] font-bold leading-5 text-[#5C321E]",
             participant.isWinner && "text-[#2F7A42]",
           )}
         >
@@ -182,13 +182,15 @@ function ChampionCard({
   const imageUrl = getPublicImageUrl(champion.imagePath);
 
   return (
-    <div className="rounded-2xl border-2 border-[#F0C45C] bg-[#FFF4D8] px-4 pb-4 pt-6 text-center">
+    <div className="rounded-2xl border-2 border-[#F0C45C] bg-[#FFF4D8] px-4 pb-4 pt-3 text-center">
       <div className="mx-auto w-fit">
-        <div className="relative">
-          <Crown
-            className="absolute -top-6 left-1/2 z-10 size-10 -translate-x-1/2 fill-[#F0C45C] text-[#B9854C] drop-shadow"
-            aria-hidden="true"
-          />
+        <div
+          className="mx-auto mb-1 text-[34px] font-bold leading-8 text-[#D6A539]"
+          aria-hidden="true"
+        >
+          ♛
+        </div>
+        <div>
           <div className="flex size-24 items-center justify-center overflow-hidden rounded-2xl border-4 border-[#F0C45C] bg-white shadow-sm">
             {imageUrl ? (
               <img
@@ -223,18 +225,18 @@ function FinalStandingPanel({
   }
 
   return (
-    <div className="rounded-2xl border border-[#EED8AA]/80 bg-white/80 p-3">
-      <div className="mb-2 text-sm font-bold text-[#5C321E]">最终结果</div>
-      <div className="space-y-1.5">
+    <div className="rounded-2xl border border-[#EED8AA]/80 bg-white/90 p-4">
+      <div className="mb-3 text-[15px] font-bold leading-5 text-[#5C321E]">最终结果</div>
+      <div className="space-y-2">
         {rows.map(([label, participant]) => (
           <div
             key={label}
-            className="flex items-center gap-2 rounded-xl bg-[#FFF8E8]/80 px-2.5 py-1.5"
+            className="flex min-h-11 items-center gap-3 rounded-xl bg-[#FFF8E8]/85 px-3 py-2"
           >
-            <span className="w-12 shrink-0 text-xs font-bold text-[#B9854C]">
+            <span className="w-14 shrink-0 text-[13px] font-bold leading-5 text-[#B9854C]">
               {label}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#3F2418]">
+            <span className="min-w-0 flex-1 break-words text-[15px] font-semibold leading-5 text-[#3F2418]">
               {participant.name}
             </span>
           </div>
@@ -265,23 +267,23 @@ function TopologyMatchNode({
   return (
     <div
       className={cn(
-        "relative min-w-0 rounded-2xl border bg-[#FFFCF4]/95 p-3.5",
+        "relative min-w-0 rounded-2xl border bg-[#FFFCF4] p-4",
         match
           ? "border-[#EED8AA]/80"
           : "border-dashed border-[#EED8AA]/70 bg-[#FFF8E8]/60",
         center && "border-[#74B87A]/80 bg-[#F1FAEF]",
       )}
     >
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="text-[12px] font-bold text-[#7A6040]">
+      <div className="mb-3 flex min-h-6 items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center">
+          <div className="text-[12px] font-bold leading-5 text-[#7A6040]">
             {roundLabel(round)} · 第 {slot} 场
           </div>
         </div>
         {statusText ? (
           <Badge
             variant={match?.contest?.status === "voting" ? "love" : "outline"}
-            className="max-w-[96px] shrink-0 whitespace-normal text-center leading-4"
+            className="inline-flex h-7 max-w-[112px] shrink-0 items-center justify-center whitespace-nowrap px-2.5 text-center leading-none"
           >
             {statusText}
           </Badge>
@@ -339,7 +341,7 @@ function MatchColumn({
 }) {
   return (
     <div className="flex min-w-0 flex-col justify-around gap-4">
-      <div className="rounded-2xl border border-[#EED8AA]/80 bg-white/85 px-3 py-2 text-center">
+      <div className="flex h-16 flex-col items-center justify-center rounded-2xl border border-[#EED8AA]/80 bg-white/90 px-3 text-center">
         <div className="text-lg font-bold leading-6 text-[#4A2B1B]">
           {title}
         </div>
@@ -497,38 +499,43 @@ export function TournamentBracket({
 
   return (
     <section
-      className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-3 shadow-sm sm:p-4"
+      className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8] p-3 shadow-sm sm:p-4"
       data-bracket-share-root
     >
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/70 px-3 py-1 text-sm font-medium text-[#8A5525]">
-            <Trophy className="size-4" />
+          <div className="inline-flex h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/85 px-3 text-sm font-medium leading-none text-[#8A5525]">
+            <Trophy className="size-4 shrink-0" />
             正赛对阵
           </div>
-          <h2 className="mt-2 break-words text-[26px] font-bold leading-8 tracking-normal text-[#4A2B1B]">
+          <h2 className="mt-2 break-words text-[26px] font-bold leading-[34px] tracking-normal text-[#4A2B1B]">
             {bracket.tournament.name}
           </h2>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium text-[#7A6040]">
-            <span className="rounded-full border border-[#D7EBCB] bg-[#F4FBF1] px-2.5 py-1">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium leading-none text-[#7A6040]">
+            <span className="inline-flex h-6 items-center rounded-full border border-[#D7EBCB] bg-[#F4FBF1] px-2.5">
               绿色左条 = 获胜
             </span>
-            <span className="rounded-full border border-[#EED8AA]/80 bg-white/70 px-2.5 py-1">
+            <span className="inline-flex h-6 items-center rounded-full border border-[#EED8AA]/80 bg-white/80 px-2.5">
               数字 = 得票数
             </span>
-            <span className="rounded-full border border-[#EED8AA]/80 bg-white/70 px-2.5 py-1">
+            <span className="inline-flex h-6 items-center rounded-full border border-[#EED8AA]/80 bg-white/80 px-2.5">
               两侧向中心晋级
             </span>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <TournamentBracketShareButton bracket={bracket} />
-          <Badge variant="secondary">{tournamentState}</Badge>
+          <Badge
+            variant="secondary"
+            className="inline-flex h-7 items-center whitespace-nowrap px-3 leading-none"
+          >
+            {tournamentState}
+          </Badge>
         </div>
       </div>
 
       <div
-        className="w-full min-w-0 overflow-hidden rounded-2xl border border-[#EED8AA]/60 bg-white/35"
+        className="w-full min-w-0 overflow-hidden rounded-2xl border border-[#EED8AA]/60 bg-[#FFF8E8]"
         data-bracket-share-frame
       >
         <div
@@ -536,11 +543,11 @@ export function TournamentBracket({
           data-bracket-share-scroll
         >
           <div
-            className="grid min-h-[720px] w-max max-w-none gap-0 p-3"
+            className="grid min-h-[740px] w-max max-w-none gap-0 p-4"
             data-bracket-share-grid
             style={{
               gridTemplateColumns:
-                "312px 36px 312px 36px 312px 36px 360px 36px 312px 36px 312px 36px 312px",
+                "324px 36px 324px 36px 324px 36px 400px 36px 324px 36px 324px 36px 324px",
             }}
           >
             <MatchColumn
