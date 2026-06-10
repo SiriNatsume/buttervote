@@ -1,7 +1,6 @@
 import "server-only";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { ScheduledTransitionTarget } from "@/lib/types";
 
@@ -133,7 +132,11 @@ async function applyWithServiceFallback(contestId?: string) {
 }
 
 async function applyWithRpc(contestId?: string) {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
+  if (!supabase) {
+    return null;
+  }
+
   const { data, error } = await supabase.rpc("apply_due_scheduled_transitions", {
     p_contest_id: contestId ?? null,
   });

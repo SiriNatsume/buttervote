@@ -245,9 +245,13 @@ async function fetchCandidateLineage(
 async function tallyVisibleContestScores(
   supabase: BracketClient,
   contests: BracketContest[],
+  forceVisibleContestIds: ReadonlySet<string> = new Set(),
 ) {
   const scores = new Map<string, Map<string, number>>();
-  const visibleContests = contests.filter((contest) => canViewResults(contest, null));
+  const visibleContests = contests.filter(
+    (contest) =>
+      canViewResults(contest, null) || forceVisibleContestIds.has(contest.id),
+  );
   const visibleContestIds = visibleContests.map((contest) => contest.id);
 
   if (visibleContestIds.length === 0) {
@@ -460,9 +464,18 @@ async function loadTournamentBracket(
     candidateMap.set(candidate.id, candidate);
   }
 
+  const forceVisibleContestIds = new Set(
+    tournament.status === "completed"
+      ? activeMatches
+          .filter((match) => match.winner_entry_id && match.loser_entry_id)
+          .map((match) => match.contest_id)
+          .filter((contestId): contestId is string => Boolean(contestId))
+      : [],
+  );
   const scoreByContest = await tallyVisibleContestScores(
     supabase,
     [...contestById.values()],
+    forceVisibleContestIds,
   );
   const matchCandidatesByContest = new Map<string, BracketCandidate[]>();
 
@@ -515,7 +528,9 @@ async function loadTournamentBracket(
         const contest = match.contest_id
           ? contestById.get(match.contest_id) ?? null
           : null;
-        const resultVisible = contest ? canViewResults(contest, null) : false;
+        const resultVisible = contest
+          ? canViewResults(contest, null) || forceVisibleContestIds.has(contest.id)
+          : false;
 
         return {
           id: match.id,

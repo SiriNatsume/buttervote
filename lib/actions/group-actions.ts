@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getActionUser } from "@/lib/auth";
 import { toUserFacingError } from "@/lib/action-error";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
-import { createServerDataClient } from "@/lib/supabase/server-data";
+import { createRequiredServiceClient } from "@/lib/supabase/service";
 import type { Json, VoteType } from "@/lib/types";
 
 const groupVoteInputSchema = z.object({
@@ -133,7 +133,7 @@ export async function submitGroupVotes(input: GroupVoteInput) {
     return { ok: false, error: "每个活动只能提交一次投票。" };
   }
 
-  const supabase = await createServerDataClient();
+  const supabase = createRequiredServiceClient();
   const { data: group, error: groupError } = await supabase
     .from("contest_groups")
     .select("id,love_vote_quota,love_vote_weight")

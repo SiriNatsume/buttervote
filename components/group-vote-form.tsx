@@ -175,7 +175,9 @@ export function GroupVoteForm({
     [selections],
   );
   const availableLoveVotes = Math.max(0, loveVoteRemaining - selectedLoveCount);
-  const unvotedContests = contests.filter((contest) => !contest.existingVoteId);
+  const unvotedContests = contests.filter(
+    (contest) => !contest.existingVoteId && contest.candidates.length > 0,
+  );
   const candidateNameById = useMemo(() => {
     const entries = contests.flatMap((contest) =>
       contest.candidates.map((candidate) => [candidate.id, candidate.name] as const),

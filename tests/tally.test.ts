@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { tallyVotes } from "../lib/tally";
+import { tallyVotes } from "../lib/tally.ts";
 
 const baseCandidate = {
   description: null,

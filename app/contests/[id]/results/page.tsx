@@ -101,7 +101,7 @@ export default async function ResultsPage({
     .select("id,tournament_id,kind,metadata")
     .eq("contest_id", id)
     .maybeSingle();
-  const { data: tournamentLogs } = tournamentStage
+  const { data: tournamentLogs } = isAdmin && tournamentStage
     ? await supabase
         .from("tournament_draw_logs")
         .select("id,kind,seed,input,output,created_at")
@@ -458,7 +458,7 @@ export default async function ResultsPage({
         </div>
       )}
 
-      {(tournamentLogs ?? []).length > 0 ? (
+      {isAdmin && (tournamentLogs ?? []).length > 0 ? (
         <Card className="mt-6">
           <CardHeader>
             <CardTitle>赛制抽签日志</CardTitle>

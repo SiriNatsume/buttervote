@@ -8,6 +8,7 @@ import {
   buildKnockoutBracket,
   buildPreliminaryPools,
   drawPreliminaryGroups,
+  reconcilePreliminaryAdvancerIds,
   resolveKnockoutMatch,
   resolvePreliminaryGroup,
   resolveScreeningAdvancers,
@@ -516,6 +517,52 @@ function toSourceTiebreakerResults(
 
 function resultByCandidateId(results: TallyResult[]) {
   return new Map(results.map((result) => [result.candidateId, result]));
+}
+
+function uniqueCandidateIds(candidateIds: string[]) {
+  return [...new Set(candidateIds.filter(Boolean))];
+}
+
+function resolveExpectedTiebreakerCandidates(params: {
+  results: TallyResult[];
+  expectedCandidateIds: string[];
+  slots: number;
+  seed: string;
+  label: string;
+}) {
+  const expectedCandidateIds = uniqueCandidateIds(params.expectedCandidateIds);
+  const expectedCandidateIdSet = new Set(expectedCandidateIds);
+  const scopedResults = params.results.filter((result) =>
+    expectedCandidateIdSet.has(result.candidateId),
+  );
+  const presentCandidateIds = new Set(
+    scopedResults.map((result) => result.candidateId),
+  );
+  const missingCandidateIds = expectedCandidateIds.filter(
+    (candidateId) => !presentCandidateIds.has(candidateId),
+  );
+
+  if (missingCandidateIds.length > 0) {
+    return {
+      ok: false as const,
+      error: `${params.label}加赛候选映射不完整，请检查加赛是否由赛制工具生成。`,
+    };
+  }
+
+  const resolution = resolveTiebreaker(
+    scopedResults,
+    params.slots,
+    params.seed,
+  );
+
+  if (resolution.selected.length < Math.min(params.slots, scopedResults.length)) {
+    return {
+      ok: false as const,
+      error: `${params.label}加赛结果不足，请先结束加赛并确认候选有效。`,
+    };
+  }
+
+  return { ok: true as const, resolution };
 }
 
 function assertClosedContest(contest: Pick<ContestResultBundle["contest"], "status">) {
@@ -1475,6 +1522,10 @@ export async function generateKnockoutStageAction(
         (candidate) => candidate.candidateId,
       );
       let groupWinnerSourceId = bundle.resolution.ordered[0]?.candidateId ?? null;
+      let advancementOrderedSourceIds: string[] = [];
+      const lockedAdvancerSourceIds = bundle.resolution.lockedAdvancers.map(
+        (candidate) => candidate.candidateId,
+      );
 
       if (bundle.resolution.advancementTie && bundle.resolution.groupFirstTie) {
         const advancementStage = findTiebreakerStage(bundle.group, "advancement");
@@ -1501,17 +1552,26 @@ export async function generateKnockoutStageAction(
         );
         const advancementResults = toSourceTiebreakerResults(
           advancementTiebreaker,
-        ).filter((result) => advancementCandidateIds.has(result.candidateId));
-        const selected = resolveTiebreaker(
-          advancementResults,
-          bundle.resolution.advancementTie.remainingSlots,
-          `${parsed.data.seed ?? "knockout"}:${bundle.group}:advancement`,
-        ).selected;
+        );
+        const advancementResolution = resolveExpectedTiebreakerCandidates({
+          results: advancementResults,
+          expectedCandidateIds: [...advancementCandidateIds],
+          slots: bundle.resolution.advancementTie.remainingSlots,
+          seed: `${parsed.data.seed ?? "knockout"}:${bundle.group}:advancement`,
+          label: `${bundle.group} 组晋级名额`,
+        });
+        if (!advancementResolution.ok) {
+          return actionFailure(advancementResolution.error);
+        }
+        advancementOrderedSourceIds =
+          advancementResolution.resolution.ordered.map(
+            (candidate) => candidate.candidateId,
+          );
         advancerSourceIds = [
-          ...bundle.resolution.lockedAdvancers.map(
+          ...lockedAdvancerSourceIds,
+          ...advancementResolution.resolution.selected.map(
             (candidate) => candidate.candidateId,
           ),
-          ...selected.map((candidate) => candidate.candidateId),
         ];
 
         const groupFirstStage = findTiebreakerStage(bundle.group, "group_first");
@@ -1538,13 +1598,19 @@ export async function generateKnockoutStageAction(
         );
         const groupFirstResults = toSourceTiebreakerResults(
           groupFirstTiebreaker,
-        ).filter((result) => groupFirstCandidateIds.has(result.candidateId));
+        );
+        const groupFirstResolution = resolveExpectedTiebreakerCandidates({
+          results: groupFirstResults,
+          expectedCandidateIds: [...groupFirstCandidateIds],
+          slots: 1,
+          seed: `${parsed.data.seed ?? "knockout"}:${bundle.group}:group-first`,
+          label: `${bundle.group} 组小组第一`,
+        });
+        if (!groupFirstResolution.ok) {
+          return actionFailure(groupFirstResolution.error);
+        }
         groupWinnerSourceId =
-          resolveTiebreaker(
-            groupFirstResults,
-            1,
-            `${parsed.data.seed ?? "knockout"}:${bundle.group}:group-first`,
-          ).selected[0]?.candidateId ?? groupWinnerSourceId;
+          groupFirstResolution.resolution.selected[0]?.candidateId ?? null;
       } else if (bundle.resolution.needsTiebreaker) {
         const tiebreakerStage = tiebreakerStageByGroup.get(bundle.group);
         if (!tiebreakerStage?.contest_id) {
@@ -1572,16 +1638,25 @@ export async function generateKnockoutStageAction(
           const advancementResults = sourceResults.filter((result) =>
             advancementCandidateIds.has(result.candidateId),
           );
-          const selected = resolveTiebreaker(
-            advancementResults,
-            bundle.resolution.advancementTie.remainingSlots,
-            `${parsed.data.seed ?? "knockout"}:${bundle.group}:advancement`,
-          ).selected;
+          const advancementResolution = resolveExpectedTiebreakerCandidates({
+            results: advancementResults,
+            expectedCandidateIds: [...advancementCandidateIds],
+            slots: bundle.resolution.advancementTie.remainingSlots,
+            seed: `${parsed.data.seed ?? "knockout"}:${bundle.group}:advancement`,
+            label: `${bundle.group} 组晋级名额`,
+          });
+          if (!advancementResolution.ok) {
+            return actionFailure(advancementResolution.error);
+          }
+          advancementOrderedSourceIds =
+            advancementResolution.resolution.ordered.map(
+              (candidate) => candidate.candidateId,
+            );
           advancerSourceIds = [
-            ...bundle.resolution.lockedAdvancers.map(
+            ...lockedAdvancerSourceIds,
+            ...advancementResolution.resolution.selected.map(
               (candidate) => candidate.candidateId,
             ),
-            ...selected.map((candidate) => candidate.candidateId),
           ];
         }
 
@@ -1594,25 +1669,33 @@ export async function generateKnockoutStageAction(
           const groupFirstResults = sourceResults.filter((result) =>
             groupFirstCandidateIds.has(result.candidateId),
           );
+          const groupFirstResolution = resolveExpectedTiebreakerCandidates({
+            results: groupFirstResults,
+            expectedCandidateIds: [...groupFirstCandidateIds],
+            slots: 1,
+            seed: `${parsed.data.seed ?? "knockout"}:${bundle.group}:group-first`,
+            label: `${bundle.group} 组小组第一`,
+          });
+          if (!groupFirstResolution.ok) {
+            return actionFailure(groupFirstResolution.error);
+          }
           groupWinnerSourceId =
-            resolveTiebreaker(
-              groupFirstResults,
-              1,
-              `${parsed.data.seed ?? "knockout"}:${bundle.group}:group-first`,
-            ).selected[0]?.candidateId ?? groupWinnerSourceId;
+            groupFirstResolution.resolution.selected[0]?.candidateId ?? null;
         }
       }
 
-      if (advancerSourceIds.length !== 4 || !groupWinnerSourceId) {
+      const reconciledAdvancers = reconcilePreliminaryAdvancerIds({
+        advancerCandidateIds: advancerSourceIds,
+        lockedAdvancerCandidateIds: lockedAdvancerSourceIds,
+        groupWinnerCandidateId: groupWinnerSourceId,
+        advancementOrderedCandidateIds: advancementOrderedSourceIds,
+      });
+
+      if (!reconciledAdvancers.ok) {
         return actionFailure(`${bundle.group} 组晋级结果不足 4 名。`);
       }
 
-      advancerSourceIds = [
-        groupWinnerSourceId,
-        ...advancerSourceIds.filter(
-          (candidateId) => candidateId !== groupWinnerSourceId,
-        ),
-      ];
+      advancerSourceIds = reconciledAdvancers.candidateIds;
 
       advancerSourceIds.forEach((candidateId, index) => {
         const entry = entryByCandidate.get(candidateId);

@@ -56,6 +56,11 @@ export type PreliminaryGroupResolution<T extends TournamentResult> = {
   tiebreakerCandidates: T[];
 };
 
+export type PreliminaryAdvancerIdResolution = {
+  ok: boolean;
+  candidateIds: string[];
+};
+
 export type TiebreakerResolution<T extends TournamentResult> = {
   ordered: T[];
   selected: T[];
@@ -254,6 +259,10 @@ function uniqueByCandidate<T extends TournamentResult>(items: T[]) {
   return unique;
 }
 
+function uniqueIds(items: readonly string[]) {
+  return [...new Set(items.filter(Boolean))];
+}
+
 function emptyPreliminaryGroups<T extends TournamentResult>() {
   const groups: PreliminaryGroups<T> = {
     A: [],
@@ -263,6 +272,52 @@ function emptyPreliminaryGroups<T extends TournamentResult>() {
   };
 
   return groups;
+}
+
+export function reconcilePreliminaryAdvancerIds(params: {
+  advancerCandidateIds: readonly string[];
+  lockedAdvancerCandidateIds?: readonly string[];
+  groupWinnerCandidateId?: string | null;
+  advancementOrderedCandidateIds?: readonly string[];
+  slots?: number;
+}): PreliminaryAdvancerIdResolution {
+  const slots = params.slots ?? 4;
+  const groupWinnerId = params.groupWinnerCandidateId ?? null;
+  let candidateIds = uniqueIds(params.advancerCandidateIds);
+
+  if (
+    groupWinnerId &&
+    !candidateIds.includes(groupWinnerId) &&
+    (params.advancementOrderedCandidateIds?.length ?? 0) > 0
+  ) {
+    candidateIds = uniqueIds([
+      ...(params.lockedAdvancerCandidateIds ?? []),
+      groupWinnerId,
+      ...(params.advancementOrderedCandidateIds ?? []),
+    ]).slice(0, slots);
+  }
+
+  candidateIds = uniqueIds(candidateIds);
+
+  if (
+    slots <= 0 ||
+    !groupWinnerId ||
+    candidateIds.length !== slots ||
+    !candidateIds.includes(groupWinnerId)
+  ) {
+    return {
+      ok: false,
+      candidateIds,
+    };
+  }
+
+  return {
+    ok: true,
+    candidateIds: [
+      groupWinnerId,
+      ...candidateIds.filter((candidateId) => candidateId !== groupWinnerId),
+    ],
+  };
 }
 
 export function resolveScreeningAdvancers<T extends TournamentResult>(

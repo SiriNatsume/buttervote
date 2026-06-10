@@ -211,28 +211,30 @@ export default async function GroupResultsPage({
           {summaries.map(({ contest, topResults }) => (
             <Card
               key={contest.id}
-              className="flex h-full flex-col border-[#EED8AA]/70 bg-[#FFFCF4]/90"
+              className="flex h-full min-w-0 flex-col overflow-hidden border-[#EED8AA]/70 bg-[#FFFCF4]/90"
             >
-              <CardHeader>
+              <CardHeader className="min-w-0">
                 <div className="mb-3 flex flex-wrap gap-2">
                   <StatusBadge status={contest.status} />
                   <VoteTypeBadge voteType={contest.vote_type} />
                 </div>
-                <CardTitle>{contest.title}</CardTitle>
+                <CardTitle className="break-words leading-tight">
+                  {contest.title}
+                </CardTitle>
               </CardHeader>
-              <CardContent className="flex-1 space-y-3">
+              <CardContent className="min-w-0 flex-1 space-y-3">
                 <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
                   {contest.description || "暂无简介。"}
                 </p>
                 {topResults.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="min-w-0 space-y-2">
                     {topResults.map((result) => (
                       <div
                         key={result.candidateId}
-                        className="flex items-center justify-between rounded-2xl border border-[#EED8AA]/70 bg-white/70 px-3 py-2 text-sm"
+                        className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-[#EED8AA]/70 bg-white/70 px-3 py-2 text-sm"
                       >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <Trophy className="size-4 text-[#B9854C]" />
+                        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                          <Trophy className="size-4 shrink-0 text-[#B9854C]" />
                           <span className="shrink-0">
                             排序第 {result.position} 位
                           </span>
@@ -252,7 +254,7 @@ export default async function GroupResultsPage({
                   </div>
                 )}
               </CardContent>
-              <CardFooter>
+              <CardFooter className="min-w-0">
                 <Button asChild className="w-full" variant="outline">
                   <Link href={`/contests/${contest.id}/results`}>
                     查看完整结果

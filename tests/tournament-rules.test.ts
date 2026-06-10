@@ -3,12 +3,13 @@ import {
   buildKnockoutBracket,
   buildPreliminaryPools,
   drawPreliminaryGroups,
+  reconcilePreliminaryAdvancerIds,
   resolveKnockoutMatch,
   resolvePreliminaryGroup,
   resolveScreeningAdvancers,
   resolveTiebreaker,
   type TournamentResult,
-} from "../lib/tournament-rules";
+} from "../lib/tournament-rules.ts";
 
 function result(
   candidateId: string,
@@ -146,6 +147,26 @@ function groupWinner(candidateId: string, group: "A" | "B" | "C" | "D") {
 
   assert.equal(first.selected.length, 1);
   assert.equal(first.selected[0]?.candidateId, repeat.selected[0]?.candidateId);
+}
+
+{
+  const resolution = reconcilePreliminaryAdvancerIds({
+    advancerCandidateIds: ["a", "b", "c", "d"],
+    groupWinnerCandidateId: "e",
+    advancementOrderedCandidateIds: ["a", "b", "c", "d", "e"],
+  });
+
+  assert.equal(resolution.ok, true);
+  assert.deepEqual(resolution.candidateIds, ["e", "a", "b", "c"]);
+}
+
+{
+  const resolution = reconcilePreliminaryAdvancerIds({
+    advancerCandidateIds: ["a", "b", "c", "d"],
+    groupWinnerCandidateId: "missing",
+  });
+
+  assert.equal(resolution.ok, false);
 }
 
 {
