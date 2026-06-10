@@ -83,21 +83,6 @@ function roundLabel(round: string) {
   return ROUND_LABEL[round] ?? "正赛";
 }
 
-function tournamentStatusLabel(status: string, hasChampion: boolean) {
-  if (hasChampion) {
-    return "冠军已决出";
-  }
-
-  const labels: Record<string, string> = {
-    draft: "草稿",
-    active: "进行中",
-    completed: "已完成",
-    archived: "已归档",
-  };
-
-  return labels[status] ?? status;
-}
-
 function matchStatusLabel(status: string) {
   const labels: Record<string, string> = {
     draft: "未开始",
@@ -444,10 +429,6 @@ export function TournamentBracket({
   const thirdPlace = matches.get("third_place:1") ?? null;
   const champion = championFromFinal(finalMatch);
   const standings = finalStandingRows(finalMatch, thirdPlace);
-  const tournamentState = tournamentStatusLabel(
-    bracket.tournament.status,
-    Boolean(champion),
-  );
   const leftRoundOf16 = [1, 2, 3, 4].map((slot) => ({
     round: "round_of_16",
     slot,
@@ -504,11 +485,7 @@ export function TournamentBracket({
     >
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="inline-flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/85 px-3 text-sm font-medium leading-none text-[#8A5525]">
-            <Trophy className="size-4 shrink-0" />
-            <span className="-translate-y-[1.5px] leading-none">正赛对阵</span>
-          </div>
-          <h2 className="mt-2 break-words text-[26px] font-bold leading-[34px] tracking-normal text-[#4A2B1B]">
+          <h2 className="break-words text-[26px] font-bold leading-[34px] tracking-normal text-[#4A2B1B]">
             {bracket.tournament.name}
           </h2>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-medium leading-none text-[#7A6040]">
@@ -525,12 +502,6 @@ export function TournamentBracket({
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <TournamentBracketShareButton bracket={bracket} />
-          <Badge
-            variant="secondary"
-            className="inline-flex h-7 items-center whitespace-nowrap px-3 py-0 leading-none"
-          >
-            <span className="-translate-y-[1.5px] leading-none">{tournamentState}</span>
-          </Badge>
         </div>
       </div>
 
