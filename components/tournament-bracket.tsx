@@ -488,15 +488,15 @@ export function TournamentBracket({
           <h2 className="break-words text-[26px] font-bold leading-[34px] tracking-normal text-[#4A2B1B]">
             {bracket.tournament.name}
           </h2>
-          <div className="mt-5 flex flex-wrap items-center gap-2.5 text-xs font-medium leading-[16px] text-[#7A6040]">
-            <span className="inline-flex min-h-7 items-center rounded-full border border-[#D7EBCB] bg-[#F4FBF1] px-3 py-1">
-              <span className="leading-[16px]">绿色左条 = 获胜</span>
+          <div className="mt-5 flex flex-wrap items-center gap-2.5 text-xs font-medium leading-[14px] text-[#7A6040]">
+            <span className="inline-flex h-7 items-center overflow-visible rounded-full border border-[#D7EBCB] bg-[#F4FBF1] px-3 pb-[4px] pt-[1px]">
+              <span className="leading-[14px]">绿色左条 = 获胜</span>
             </span>
-            <span className="inline-flex min-h-7 items-center rounded-full border border-[#EED8AA]/80 bg-white/80 px-3 py-1">
-              <span className="leading-[16px]">数字 = 得票数</span>
+            <span className="inline-flex h-7 items-center overflow-visible rounded-full border border-[#EED8AA]/80 bg-white/80 px-3 pb-[4px] pt-[1px]">
+              <span className="leading-[14px]">数字 = 得票数</span>
             </span>
-            <span className="inline-flex min-h-7 items-center rounded-full border border-[#EED8AA]/80 bg-white/80 px-3 py-1">
-              <span className="leading-[16px]">两侧向中心晋级</span>
+            <span className="inline-flex h-7 items-center overflow-visible rounded-full border border-[#EED8AA]/80 bg-white/80 px-3 pb-[4px] pt-[1px]">
+              <span className="leading-[14px]">两侧向中心晋级</span>
             </span>
           </div>
         </div>
