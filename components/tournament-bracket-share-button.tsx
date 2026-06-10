@@ -18,7 +18,7 @@ const TRANSPARENT_PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 const MAX_OUTPUT_WIDTH = 2600;
 const CAPTURE_SCALE = 1.12;
-const FOOTER_HEIGHT = 72;
+const FOOTER_HEIGHT = 84;
 
 function imageSource(src: string | { src: string }) {
   return typeof src === "string" ? src : src.src;
@@ -137,6 +137,15 @@ function expandCloneForFullBracket(clone: HTMLElement, targetWidth: number) {
   clone.style.width = `${targetWidth}px`;
   clone.style.maxWidth = "none";
   clone.style.overflow = "visible";
+  clone.style.backgroundColor = "#FFF8E8";
+  clone.style.borderColor = "transparent";
+  clone.style.borderRadius = "0";
+  clone.style.boxShadow = "none";
+
+  for (const element of Array.from(clone.querySelectorAll<HTMLElement>("*"))) {
+    element.style.boxShadow = "none";
+    element.style.textShadow = "none";
+  }
 
   for (const selector of [
     "[data-bracket-share-frame]",
@@ -230,27 +239,27 @@ async function drawShareMarks(
   contentHeight: number,
 ) {
   const logoImage = await loadCleanImage(imageSource(logo));
-  const margin = 22;
   const logoWidth = 150;
   const logoHeight = 30;
-  const logoX = width - margin - logoWidth;
-  const logoY = contentHeight + 12;
+  const centerX = width / 2;
+  const logoX = centerX - logoWidth / 2;
+  const logoY = contentHeight + 14;
 
   if (logoImage) {
     drawImageContain(ctx, logoImage, logoX, logoY, logoWidth, logoHeight);
   } else {
     ctx.fillStyle = "#B9854C";
     ctx.font = "700 20px sans-serif";
-    ctx.textAlign = "right";
-    ctx.fillText("Butter Vote", width - margin, logoY + 22);
+    ctx.textAlign = "center";
+    ctx.fillText("Butter Vote", centerX, logoY + 22);
   }
 
-  ctx.textAlign = "right";
+  ctx.textAlign = "center";
   ctx.fillStyle = "#B9854C";
   ctx.font = "700 15px sans-serif";
   ctx.fillText(
     "@SiriNatsume",
-    width - margin,
+    centerX,
     Math.min(canvasHeight - 16, logoY + 52),
   );
 }

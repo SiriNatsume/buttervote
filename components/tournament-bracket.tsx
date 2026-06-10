@@ -504,9 +504,9 @@ export function TournamentBracket({
     >
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="inline-flex h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/85 px-3 text-sm font-medium leading-none text-[#8A5525]">
+          <div className="inline-flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/85 px-3 text-sm font-medium leading-none text-[#8A5525]">
             <Trophy className="size-4 shrink-0" />
-            正赛对阵
+            <span className="relative -top-px leading-none">正赛对阵</span>
           </div>
           <h2 className="mt-2 break-words text-[26px] font-bold leading-[34px] tracking-normal text-[#4A2B1B]">
             {bracket.tournament.name}
@@ -529,7 +529,7 @@ export function TournamentBracket({
             variant="secondary"
             className="inline-flex h-7 items-center whitespace-nowrap px-3 leading-none"
           >
-            {tournamentState}
+            <span className="relative -top-px leading-none">{tournamentState}</span>
           </Badge>
         </div>
       </div>
