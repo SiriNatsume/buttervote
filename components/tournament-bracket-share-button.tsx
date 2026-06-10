@@ -23,10 +23,10 @@ type Rect = {
 
 const TRANSPARENT_PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
-const MAX_OUTPUT_WIDTH = 3600;
-const CAPTURE_SCALE = 1.5;
-const HEADER_HEIGHT = 112;
-const FOOTER_HEIGHT = 112;
+const MAX_OUTPUT_WIDTH = 2600;
+const CAPTURE_SCALE = 1.12;
+const HEADER_HEIGHT = 66;
+const FOOTER_HEIGHT = 58;
 
 function imageSource(src: string | { src: string }) {
   return typeof src === "string" ? src : src.src;
@@ -297,42 +297,42 @@ async function drawShareMarks(
   tournamentName: string,
 ) {
   const logoImage = await loadCleanImage(imageSource(logo));
-  const logoBox = { x: 24, y: 17, width: 250, height: 78 };
-  fillRoundedRect(ctx, logoBox, 24, "#FFFCF4", "#EED8AA", 2);
+  const logoBox = { x: 18, y: 10, width: 170, height: 46 };
+  fillRoundedRect(ctx, logoBox, 16, "#FFFCF4", "#EED8AA", 1.5);
 
   if (logoImage) {
-    drawImageContain(ctx, logoImage, logoBox.x + 22, logoBox.y + 17, 206, 44);
+    drawImageContain(ctx, logoImage, logoBox.x + 16, logoBox.y + 10, 138, 26);
   } else {
     ctx.fillStyle = "#B9854C";
-    ctx.font = "700 25px sans-serif";
+    ctx.font = "700 18px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Butter Vote", logoBox.x + logoBox.width / 2, logoBox.y + 48);
+    ctx.fillText("Butter Vote", logoBox.x + logoBox.width / 2, logoBox.y + 30);
   }
 
-  const infoBoxWidth = Math.min(620, Math.max(360, width * 0.34));
+  const infoBoxWidth = Math.min(480, Math.max(320, width * 0.24));
   const infoBox = {
-    x: width - infoBoxWidth - 28,
-    y: canvasHeight - 98,
+    x: width - infoBoxWidth - 18,
+    y: canvasHeight - 50,
     width: infoBoxWidth,
-    height: 84,
+    height: 40,
   };
-  fillRoundedRect(ctx, infoBox, 24, "#FFFCF4", "#EED8AA", 2);
+  fillRoundedRect(ctx, infoBox, 14, "#FFFCF4", "#EED8AA", 1.5);
 
   ctx.fillStyle = "#EED8AA";
-  ctx.fillRect(24, HEADER_HEIGHT - 1, width - 48, 2);
-  ctx.fillRect(24, HEADER_HEIGHT + contentHeight + 1, width - 48, 2);
+  ctx.fillRect(18, HEADER_HEIGHT - 1, width - 36, 1.5);
+  ctx.fillRect(18, HEADER_HEIGHT + contentHeight + 1, width - 36, 1.5);
 
   ctx.textAlign = "right";
   ctx.fillStyle = "#5C321E";
-  ctx.font = "700 24px sans-serif";
+  ctx.font = "700 15px sans-serif";
   ctx.fillText(
-    ellipsizeText(ctx, tournamentName, infoBox.width - 48),
-    infoBox.x + infoBox.width - 24,
-    infoBox.y + 32,
+    ellipsizeText(ctx, tournamentName, infoBox.width - 26),
+    infoBox.x + infoBox.width - 13,
+    infoBox.y + 17,
   );
   ctx.fillStyle = "#B9854C";
-  ctx.font = "700 21px sans-serif";
-  ctx.fillText("@SiriNatsume", infoBox.x + infoBox.width - 24, infoBox.y + 62);
+  ctx.font = "700 13px sans-serif";
+  ctx.fillText("@SiriNatsume", infoBox.x + infoBox.width - 13, infoBox.y + 33);
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement) {

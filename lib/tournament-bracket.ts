@@ -89,6 +89,7 @@ export type TournamentBracketMatch = {
   right: TournamentBracketParticipant | null;
   resultVisible: boolean;
   winnerEntryId: string | null;
+  loserEntryId: string | null;
 };
 
 export type TournamentBracketRound = {
@@ -526,6 +527,7 @@ async function loadTournamentBracket(
           right: participant(match.right_entry_id, match),
           resultVisible,
           winnerEntryId: resultVisible ? match.winner_entry_id : null,
+          loserEntryId: resultVisible ? match.loser_entry_id : null,
         } satisfies TournamentBracketMatch;
       });
 
