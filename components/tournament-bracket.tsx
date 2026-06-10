@@ -506,20 +506,20 @@ export function TournamentBracket({
         <div className="min-w-0">
           <div className="inline-flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA] bg-white/85 px-3 text-sm font-medium leading-none text-[#8A5525]">
             <Trophy className="size-4 shrink-0" />
-            <span className="relative -top-px leading-none">正赛对阵</span>
+            <span className="-translate-y-[1.5px] leading-none">正赛对阵</span>
           </div>
           <h2 className="mt-2 break-words text-[26px] font-bold leading-[34px] tracking-normal text-[#4A2B1B]">
             {bracket.tournament.name}
           </h2>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium leading-none text-[#7A6040]">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-medium leading-none text-[#7A6040]">
             <span className="inline-flex h-6 items-center rounded-full border border-[#D7EBCB] bg-[#F4FBF1] px-2.5">
-              绿色左条 = 获胜
+              <span className="-translate-y-px leading-none">绿色左条 = 获胜</span>
             </span>
             <span className="inline-flex h-6 items-center rounded-full border border-[#EED8AA]/80 bg-white/80 px-2.5">
-              数字 = 得票数
+              <span className="-translate-y-px leading-none">数字 = 得票数</span>
             </span>
             <span className="inline-flex h-6 items-center rounded-full border border-[#EED8AA]/80 bg-white/80 px-2.5">
-              两侧向中心晋级
+              <span className="-translate-y-px leading-none">两侧向中心晋级</span>
             </span>
           </div>
         </div>
@@ -527,9 +527,9 @@ export function TournamentBracket({
           <TournamentBracketShareButton bracket={bracket} />
           <Badge
             variant="secondary"
-            className="inline-flex h-7 items-center whitespace-nowrap px-3 leading-none"
+            className="inline-flex h-7 items-center whitespace-nowrap px-3 py-0 leading-none"
           >
-            <span className="relative -top-px leading-none">{tournamentState}</span>
+            <span className="-translate-y-[1.5px] leading-none">{tournamentState}</span>
           </Badge>
         </div>
       </div>
