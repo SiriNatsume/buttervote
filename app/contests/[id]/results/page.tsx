@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ResultList } from "@/components/result-list";
+import { TournamentDrawSummaryCard } from "@/components/tournament-draw-summary-card";
 import { Heart } from "lucide-react";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
@@ -11,10 +12,12 @@ import { getCurrentProfile } from "@/lib/auth";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { createRequiredServiceClient } from "@/lib/supabase/service";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
+import { buildPublicDrawSummaries } from "@/lib/tournament-draw-summary";
 import type { LoveVoteAllocation, TournamentEntry, Vote } from "@/lib/types";
 
 type VoteProfile = {
@@ -101,11 +104,14 @@ export default async function ResultsPage({
     .select("id,tournament_id,kind,metadata")
     .eq("contest_id", id)
     .maybeSingle();
-  const { data: tournamentLogs } = isAdmin && tournamentStage
-    ? await supabase
+  const drawLogTournamentId = canReadAllVotes
+    ? tournamentStage?.tournament_id ?? null
+    : null;
+  const { data: tournamentLogs } = drawLogTournamentId
+    ? await createRequiredServiceClient()
         .from("tournament_draw_logs")
         .select("id,kind,seed,input,output,created_at")
-        .eq("tournament_id", tournamentStage.tournament_id)
+        .eq("tournament_id", drawLogTournamentId)
         .order("created_at", { ascending: false })
     : { data: [] };
   const { data: tournamentEntries } =
@@ -255,6 +261,13 @@ export default async function ResultsPage({
     isAdmin && tournamentStage?.kind === "preliminary"
       ? resolvePreliminaryGroup(results, screeningRankByCandidate)
       : null;
+  const publicDrawSummaries =
+    canReadAllVotes && tournamentStage
+      ? buildPublicDrawSummaries(
+          (tournamentLogs ?? []) as TournamentDrawLogInfo[],
+          tournamentStage.kind,
+        )
+      : [];
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
@@ -356,6 +369,8 @@ export default async function ResultsPage({
               暂无候选项或投票。候选项和有效投票产生后会显示结果。
             </div>
           )}
+
+          <TournamentDrawSummaryCard summaries={publicDrawSummaries} />
 
           {isAdmin && adminVoteRows.length > 0 ? (
             <Card>
