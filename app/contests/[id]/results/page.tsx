@@ -296,6 +296,8 @@ export default async function ResultsPage({
         </div>
       ) : (
         <div className="space-y-6">
+          <TournamentDrawSummaryCard summaries={publicDrawSummaries} />
+
           {showLoveBreakdown && contest.group_id && totalLoveVotes > 0 ? (
             <Card>
               <CardHeader>
@@ -369,8 +371,6 @@ export default async function ResultsPage({
               暂无候选项或投票。候选项和有效投票产生后会显示结果。
             </div>
           )}
-
-          <TournamentDrawSummaryCard summaries={publicDrawSummaries} />
 
           {isAdmin && adminVoteRows.length > 0 ? (
             <Card>

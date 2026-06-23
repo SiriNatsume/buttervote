@@ -50,7 +50,6 @@ const METHOD_DETAILS = [
   "算法：seed 伪随机数 + Fisher-Yates 洗牌。",
   "实现：Butter Vote tournament-rules v1。",
   "复现条件：相同输入、相同 seed、相同规则版本会生成相同结果。",
-  "说明：该随机用于可复现抽签，不是密码学安全随机。",
 ];
 const PRELIMINARY_GROUPS = ["A", "B", "C", "D"] as const;
 
