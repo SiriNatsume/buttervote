@@ -1,0 +1,10 @@
+Butter Vote
+Copyright (C) 2026 SiriNatsume
+
+Butter Vote is free software licensed under the GNU Affero General Public License version 3.0 only (AGPL-3.0-only). See LICENSE for the full license text.
+
+Original project: https://github.com/SiriNatsume/buttervote
+
+If you modify Butter Vote and run the modified version as a network service, the AGPL-3.0 requires that the corresponding source code of that modified version be made available to the users who interact with it over the network.
+
+This notice covers the Butter Vote source code. The Butter Vote name, logo, and other brand assets are handled separately in TRADEMARKS.md.

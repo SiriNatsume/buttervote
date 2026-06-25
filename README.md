@@ -193,3 +193,9 @@ update public.profiles
 set role = 'admin'
 where email = 'you@example.com';
 ```
+
+## 开源协议与署名
+
+Butter Vote 源代码基于 GNU Affero General Public License version 3.0 only（AGPL-3.0-only）发布。修改版如果作为网络服务对外提供，需要按照 AGPL-3.0 向网络用户提供对应源码。完整协议见 `LICENSE`。
+
+项目原始署名见 `NOTICE`。Butter Vote 名称、logo 和品牌资产不随源代码许可证授权，使用规则见 `TRADEMARKS.md`。
