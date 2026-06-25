@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --test-scheduled",
-    "deploy": "wrangler deploy",
+    "deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/deploy-cloudflare.ps1 -Target cron",
+    "deploy:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/deploy-cloudflare.ps1 -Target cron -DryRun",
+    "deploy:raw": "wrangler deploy",
     "secret:put": "wrangler secret put CRON_SECRET",
     "typecheck": "tsc --noEmit"
   },

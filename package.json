@@ -9,7 +9,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental false",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/deploy-cloudflare.ps1",
+    "deploy:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/deploy-cloudflare.ps1 -DryRun",
+    "deploy:raw": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
