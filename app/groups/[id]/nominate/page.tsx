@@ -43,7 +43,8 @@ export default async function GroupNominatePage({
       .eq("group_id", id)
       .is("archived_at", null)
       .neq("status", "draft")
-      .order("created_at", { ascending: true }),
+      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false }),
   ]);
 
   if (!group) {

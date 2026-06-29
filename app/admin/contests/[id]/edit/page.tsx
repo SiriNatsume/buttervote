@@ -96,7 +96,8 @@ export default async function EditContestPage({
       .select("id,title")
       .eq("group_id", contest.group_id)
       .is("archived_at", null)
-      .order("created_at", { ascending: true });
+      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false });
     groupContests = contestsInGroup ?? [];
 
     if (groupContests.length > 0) {

@@ -52,7 +52,8 @@ export default async function AdminGroupDetailPage({
       )
       .eq("group_id", id)
       .is("archived_at", null)
-      .order("created_at", { ascending: true }),
+      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false }),
   ]);
 
   if (!group) {
