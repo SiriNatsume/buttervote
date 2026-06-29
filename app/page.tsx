@@ -138,40 +138,43 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-      <section className="relative mb-10 min-h-[390px] overflow-hidden rounded-3xl border border-[#EED8AA]/80 bg-[#FFF3D0] shadow-sm">
-        {heroImageUrl ? (
-          <img
-            src={heroImageUrl}
-            alt={`${activeHero.title} 首页图`}
-            className="absolute inset-0 size-full object-cover"
-          />
-        ) : (
-          <div className="butter-placeholder absolute inset-0 flex items-center justify-center p-8">
-            <Image
-              src={logo}
-              alt="Butter Vote logo"
-              className="w-[min(72%,520px)] object-contain opacity-90"
-              priority
-            />
+      <section className="mb-10 overflow-hidden rounded-3xl border border-[#EED8AA]/80 bg-[#FFF8E8] shadow-sm">
+        <div className="relative bg-[#FFF3D0]">
+          <div className="flex min-h-[220px] items-center justify-center bg-[#FFF3D0] sm:min-h-[420px]">
+            {heroImageUrl ? (
+              <img
+                src={heroImageUrl}
+                alt={`${activeHero.title} 首页图`}
+                className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain"
+              />
+            ) : (
+              <div className="butter-placeholder flex min-h-[260px] w-full items-center justify-center p-8 sm:min-h-[420px]">
+                <Image
+                  src={logo}
+                  alt="Butter Vote logo"
+                  className="w-[min(72%,520px)] object-contain opacity-90"
+                  priority
+                />
+              </div>
+            )}
           </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#FFF8E8]/95 via-[#FFF8E8]/78 to-[#FFF3D0]/36" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(255,210,90,0.32),transparent_24rem)]" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-44 bg-gradient-to-t from-[#FFF8E8]/95 via-[#FFF8E8]/62 to-transparent sm:block" />
 
-        <div className="relative flex min-h-[390px] flex-col justify-end p-6 sm:p-10">
-          <div className="max-w-3xl py-3">
-            <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-orange-200 bg-white/65 px-3 py-1 text-sm font-medium text-orange-700 shadow-sm">
-              <Heart className="size-4 fill-current" />
-              Butter Vote 社区投票
-            </div>
-            <h1 className="mt-5 max-w-3xl text-4xl font-bold tracking-normal text-[#5C321E] sm:text-5xl">
-              {activeHero.title}
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-8 text-[#6A4A2B]">
-              {activeHero.description}
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Button asChild size="lg">
+          <div className="relative z-10 border-t border-[#EED8AA]/70 bg-[#FFF8E8]/96 p-5 sm:absolute sm:inset-x-5 sm:bottom-5 sm:rounded-2xl sm:border sm:bg-[#FFF8E8]/86 sm:p-6 sm:shadow-sm sm:backdrop-blur-md lg:inset-x-8 lg:bottom-8">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <div className="inline-flex max-w-full shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-orange-200 bg-white/72 px-3 py-1 text-sm font-medium text-orange-700 shadow-sm">
+                  <Heart className="size-4 shrink-0 fill-current" />
+                  <span className="truncate">Butter Vote 社区投票</span>
+                </div>
+                <h1 className="mt-4 max-w-4xl break-words text-3xl font-bold tracking-normal text-[#5C321E] sm:text-4xl">
+                  {activeHero.title}
+                </h1>
+                <p className="mt-3 max-w-3xl text-base leading-7 text-[#6A4A2B]">
+                  {activeHero.description}
+                </p>
+              </div>
+              <Button asChild size="lg" className="shrink-0 self-start lg:self-auto">
                 <Link href={activeHero.href}>
                   {activeHero.cta}
                   <ArrowRight className="size-4" />
