@@ -104,8 +104,8 @@
       linear-gradient(180deg, #fff8e8 0%, #fffdf6 45%, #fff8e8 100%);
     color: hsl(var(--foreground));
     font-family:
-      var(--font-inter), "PingFang SC", "Microsoft YaHei", "Noto Sans SC",
-      system-ui, sans-serif;
+      var(--font-inter), var(--font-noto-sans-sc), "Noto Sans SC",
+      "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
     font-weight: 450;
     @apply antialiased;
   }

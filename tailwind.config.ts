@@ -20,9 +20,10 @@ const config = {
       fontFamily: {
         sans: [
           "var(--font-inter)",
+          "var(--font-noto-sans-sc)",
+          "Noto Sans SC",
           "PingFang SC",
           "Microsoft YaHei",
-          "Noto Sans SC",
           "system-ui",
           "sans-serif",
         ],

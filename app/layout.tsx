@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Noto_Sans_SC } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "@/components/app-providers";
 import { SiteHeader } from "@/components/site-header";
@@ -8,6 +8,13 @@ import { SiteFooter } from "@/components/site-footer";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+const notoSansSc = Noto_Sans_SC({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-noto-sans-sc",
   display: "swap",
 });
 
@@ -23,7 +30,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className={`${inter.variable} flex min-h-screen flex-col`}>
+      <body
+        className={`${inter.variable} ${notoSansSc.variable} flex min-h-screen flex-col`}
+      >
         <AppProviders>
           <SiteHeader />
           <main className="flex-1">{children}</main>
