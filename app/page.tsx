@@ -1,9 +1,7 @@
-import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight } from "lucide-react";
 import { ContestCard } from "@/components/contest-card";
+import { HomepageHeroPanel } from "@/components/homepage-hero-panel";
 import { TournamentBracket } from "@/components/tournament-bracket";
-import { Button } from "@/components/ui/button";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
@@ -147,6 +145,7 @@ export default async function HomePage() {
               <img
                 src={heroImageUrl}
                 alt={`${activeHero.title} 首页图`}
+                data-homepage-hero-image="true"
                 className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain"
               />
             ) : (
@@ -161,42 +160,14 @@ export default async function HomePage() {
             )}
           </div>
 
-          <div
-            className={
-              showHeroDescription
-                ? "relative z-10 border-t border-[#EED8AA]/70 bg-[#FFF8E8]/97 p-3 sm:absolute sm:bottom-5 sm:left-5 sm:max-w-[420px] sm:rounded-2xl sm:border sm:bg-[#FFF8E8]/88 sm:p-4 sm:shadow-sm sm:backdrop-blur-md lg:bottom-8 lg:left-8 lg:max-w-[460px]"
-                : "relative z-10 border-t border-[#EED8AA]/70 bg-[#FFF8E8]/97 p-3 sm:absolute sm:inset-x-5 sm:bottom-5 sm:rounded-2xl sm:border sm:bg-[#FFF8E8]/88 sm:px-4 sm:py-3 sm:shadow-sm sm:backdrop-blur-md lg:inset-x-8 lg:bottom-8"
-            }
-          >
-            <div
-              className={
-                showHeroDescription
-                  ? "flex flex-col gap-2.5"
-                  : "flex items-center justify-between gap-3"
-              }
-            >
-              <h1
-                className={
-                  showHeroDescription
-                    ? "max-w-full break-words text-2xl font-bold tracking-normal text-[#5C321E] sm:text-3xl"
-                    : "min-w-0 flex-1 truncate text-xl font-bold tracking-normal text-[#5C321E] sm:text-2xl"
-                }
-              >
-                {activeHero.title}
-              </h1>
-              {showHeroDescription ? (
-                <p className="line-clamp-2 max-w-2xl text-sm leading-6 text-[#6A4A2B]">
-                  {activeHero.description}
-                </p>
-              ) : null}
-              <Button asChild size="sm" className="w-fit">
-                <Link href={activeHero.href}>
-                  {activeHero.cta}
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
+          <HomepageHeroPanel
+            title={activeHero.title}
+            description={activeHero.description}
+            href={activeHero.href}
+            cta={activeHero.cta}
+            showDescription={showHeroDescription}
+            imageUrl={heroImageUrl}
+          />
         </div>
       </section>
 
