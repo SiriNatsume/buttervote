@@ -1,15 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ImageIcon, Trophy } from "lucide-react";
-import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
+import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  GroupResultSummaryList,
+  type GroupContestResultSummary,
+} from "@/components/group-result-summary-list";
 import { canViewResults } from "@/lib/contest-rules";
 import { getCurrentProfile } from "@/lib/auth";
 import { getPublicImageUrl } from "@/lib/image/image-url";
@@ -17,7 +13,7 @@ import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { fetchAllRows } from "@/lib/supabase-pagination";
-import { tallyVotes, type TallyResult } from "@/lib/tally";
+import { tallyVotes } from "@/lib/tally";
 import type { Candidate, Contest, LoveVoteAllocation, Vote } from "@/lib/types";
 
 type ResultCandidate = Pick<
@@ -35,12 +31,9 @@ type ResultContest = Pick<
   | "group_id"
   | "closed_result_visibility"
   | "live_results_enabled"
+  | "created_at"
+  | "updated_at"
 >;
-
-type ContestSummary = {
-  contest: ResultContest;
-  topResults: TallyResult[];
-};
 
 type GroupLoveVoteRow = Pick<
   LoveVoteAllocation,
@@ -68,7 +61,7 @@ export default async function GroupResultsPage({
     dataClient
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,group_id,closed_result_visibility,live_results_enabled,created_at",
+        "id,title,description,status,vote_type,group_id,closed_result_visibility,live_results_enabled,created_at,updated_at",
       )
       .eq("group_id", id)
       .is("archived_at", null)
@@ -154,20 +147,39 @@ export default async function GroupResultsPage({
     }
   }
 
-  const summaries: ContestSummary[] = visibleContests.map((contest) => {
-    const results = tallyVotes({
-      voteType: contest.vote_type,
-      candidates: candidatesByContest.get(contest.id) ?? [],
-      votes: votesByContest.get(contest.id) ?? [],
-      loveVoteWeight: contest.group_id ? Number(group.love_vote_weight) : null,
-      loveAllocations: loveAllocationsByContest.get(contest.id) ?? [],
-    });
+  const summaries: GroupContestResultSummary[] = visibleContests
+    .map((contest) => {
+      const results = tallyVotes({
+        voteType: contest.vote_type,
+        candidates: candidatesByContest.get(contest.id) ?? [],
+        votes: votesByContest.get(contest.id) ?? [],
+        loveVoteWeight: contest.group_id ? Number(group.love_vote_weight) : null,
+        loveAllocations: loveAllocationsByContest.get(contest.id) ?? [],
+      });
+      const resultPublishedAt = contest.updated_at ?? contest.created_at ?? null;
 
-    return {
-      contest,
-      topResults: results.slice(0, 3),
-    };
-  });
+      return {
+        contest: {
+          id: contest.id,
+          title: contest.title,
+          description: contest.description,
+          status: contest.status,
+          vote_type: contest.vote_type,
+          resultPublishedAt,
+        },
+        topResults: results.slice(0, 4),
+      };
+    })
+    .sort((a, b) => {
+      const left = a.contest.resultPublishedAt
+        ? Date.parse(a.contest.resultPublishedAt)
+        : 0;
+      const right = b.contest.resultPublishedAt
+        ? Date.parse(b.contest.resultPublishedAt)
+        : 0;
+
+      return right - left;
+    });
   const coverUrl = getPublicImageUrl(group.cover_image_path);
 
   return (
@@ -201,74 +213,8 @@ export default async function GroupResultsPage({
         </div>
       </div>
 
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">可查看结果</h2>
-        <span className="text-sm text-muted-foreground">{summaries.length}</span>
-      </div>
+      <GroupResultSummaryList summaries={summaries} />
 
-      {summaries.length > 0 ? (
-        <div className="grid gap-5 md:grid-cols-2">
-          {summaries.map(({ contest, topResults }) => (
-            <Card
-              key={contest.id}
-              className="flex h-full min-w-0 flex-col overflow-hidden border-[#EED8AA]/70 bg-[#FFFCF4]/90"
-            >
-              <CardHeader className="min-w-0">
-                <div className="mb-3 flex flex-wrap gap-2">
-                  <StatusBadge status={contest.status} />
-                  <VoteTypeBadge voteType={contest.vote_type} />
-                </div>
-                <CardTitle className="break-words leading-tight">
-                  {contest.title}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="min-w-0 flex-1 space-y-3">
-                <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
-                  {contest.description || "暂无简介。"}
-                </p>
-                {topResults.length > 0 ? (
-                  <div className="min-w-0 space-y-2">
-                    {topResults.map((result) => (
-                      <div
-                        key={result.candidateId}
-                        className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-[#EED8AA]/70 bg-white/70 px-3 py-2 text-sm"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                          <Trophy className="size-4 shrink-0 text-[#B9854C]" />
-                          <span className="shrink-0">
-                            排序第 {result.position} 位
-                          </span>
-                          <span className="truncate font-medium">
-                            {result.name}
-                          </span>
-                        </div>
-                        <span className="shrink-0 font-semibold">
-                          {result.score} 分
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
-                    暂无候选项或票数。
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="min-w-0">
-                <Button asChild className="w-full" variant="outline">
-                  <Link href={`/contests/${contest.id}/results`}>
-                    查看完整结果
-                  </Link>
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          当前活动组暂无可查看结果。结果公开后会在这里显示。
-        </div>
-      )}
     </div>
   );
 }

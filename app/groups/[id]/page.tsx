@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BarChart3, ImageIcon, Send, Trophy } from "lucide-react";
-import { ContestCard } from "@/components/contest-card";
+import { GroupContestSearchList } from "@/components/group-contest-search-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { canNominateByStatus, canViewResults } from "@/lib/contest-rules";
@@ -194,24 +194,8 @@ export default async function GroupDetailPage({
         </div>
       </div>
 
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">活动</h2>
-        <span className="text-sm text-muted-foreground">
-          {visibleContests.length}
-        </span>
-      </div>
+      <GroupContestSearchList contests={visibleContests} />
 
-      {visibleContests.length > 0 ? (
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {visibleContests.map((contest) => (
-            <ContestCard key={contest.id} contest={contest} />
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          该活动组暂无公开活动。活动发布后会在这里展示。
-        </div>
-      )}
     </div>
   );
 }
