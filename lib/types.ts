@@ -209,6 +209,7 @@ export type HomepageHeroValue = {
   featuredId?: string;
   title?: string;
   description?: string;
+  showDescription?: boolean;
   imagePath?: string;
 };
 

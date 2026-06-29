@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Heart } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { ContestCard } from "@/components/contest-card";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { Button } from "@/components/ui/button";
@@ -135,12 +135,14 @@ export default async function HomePage() {
     href: defaultHeroHref,
     cta: "开始投票",
   };
+  const showHeroDescription =
+    heroValue?.showDescription !== false && Boolean(activeHero.description);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
       <section className="mb-10 overflow-hidden rounded-3xl border border-[#EED8AA]/80 bg-[#FFF8E8] shadow-sm">
         <div className="relative bg-[#FFF3D0]">
-          <div className="flex min-h-[220px] items-center justify-center bg-[#FFF3D0] sm:min-h-[420px]">
+          <div className="flex min-h-[180px] items-center justify-center bg-[#FFF3D0] sm:min-h-[420px]">
             {heroImageUrl ? (
               <img
                 src={heroImageUrl}
@@ -148,7 +150,7 @@ export default async function HomePage() {
                 className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain"
               />
             ) : (
-              <div className="butter-placeholder flex min-h-[260px] w-full items-center justify-center p-8 sm:min-h-[420px]">
+              <div className="butter-placeholder flex min-h-[220px] w-full items-center justify-center p-8 sm:min-h-[420px]">
                 <Image
                   src={logo}
                   alt="Butter Vote logo"
@@ -158,23 +160,36 @@ export default async function HomePage() {
               </div>
             )}
           </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-44 bg-gradient-to-t from-[#FFF8E8]/95 via-[#FFF8E8]/62 to-transparent sm:block" />
 
-          <div className="relative z-10 border-t border-[#EED8AA]/70 bg-[#FFF8E8]/96 p-5 sm:absolute sm:inset-x-5 sm:bottom-5 sm:rounded-2xl sm:border sm:bg-[#FFF8E8]/86 sm:p-6 sm:shadow-sm sm:backdrop-blur-md lg:inset-x-8 lg:bottom-8">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0">
-                <div className="inline-flex max-w-full shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-orange-200 bg-white/72 px-3 py-1 text-sm font-medium text-orange-700 shadow-sm">
-                  <Heart className="size-4 shrink-0 fill-current" />
-                  <span className="truncate">Butter Vote 社区投票</span>
-                </div>
-                <h1 className="mt-4 max-w-4xl break-words text-3xl font-bold tracking-normal text-[#5C321E] sm:text-4xl">
-                  {activeHero.title}
-                </h1>
-                <p className="mt-3 max-w-3xl text-base leading-7 text-[#6A4A2B]">
+          <div
+            className={
+              showHeroDescription
+                ? "relative z-10 border-t border-[#EED8AA]/70 bg-[#FFF8E8]/97 p-3 sm:absolute sm:bottom-5 sm:left-5 sm:max-w-[420px] sm:rounded-2xl sm:border sm:bg-[#FFF8E8]/88 sm:p-4 sm:shadow-sm sm:backdrop-blur-md lg:bottom-8 lg:left-8 lg:max-w-[460px]"
+                : "relative z-10 border-t border-[#EED8AA]/70 bg-[#FFF8E8]/97 p-3 sm:absolute sm:inset-x-5 sm:bottom-5 sm:rounded-2xl sm:border sm:bg-[#FFF8E8]/88 sm:px-4 sm:py-3 sm:shadow-sm sm:backdrop-blur-md lg:inset-x-8 lg:bottom-8"
+            }
+          >
+            <div
+              className={
+                showHeroDescription
+                  ? "flex flex-col gap-2.5"
+                  : "flex items-center justify-between gap-3"
+              }
+            >
+              <h1
+                className={
+                  showHeroDescription
+                    ? "max-w-full break-words text-2xl font-bold tracking-normal text-[#5C321E] sm:text-3xl"
+                    : "min-w-0 flex-1 truncate text-xl font-bold tracking-normal text-[#5C321E] sm:text-2xl"
+                }
+              >
+                {activeHero.title}
+              </h1>
+              {showHeroDescription ? (
+                <p className="line-clamp-2 max-w-2xl text-sm leading-6 text-[#6A4A2B]">
                   {activeHero.description}
                 </p>
-              </div>
-              <Button asChild size="lg" className="shrink-0 self-start lg:self-auto">
+              ) : null}
+              <Button asChild size="sm" className="w-fit">
                 <Link href={activeHero.href}>
                   {activeHero.cta}
                   <ArrowRight className="size-4" />

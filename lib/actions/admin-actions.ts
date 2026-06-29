@@ -87,6 +87,7 @@ const homepageHeroSchema = z.object({
   featuredId: z.string().uuid(),
   title: z.string().trim().max(160).optional(),
   description: z.string().trim().max(1000).optional(),
+  showDescription: z.boolean().default(true),
 });
 
 const homepageBracketSchema = z.object({
@@ -1802,6 +1803,7 @@ export async function updateHomepageHeroAction(formData: FormData) {
     featuredId: formData.get("featuredId"),
     title: formData.get("title") || undefined,
     description: formData.get("description") || undefined,
+    showDescription: formData.get("showDescription") === "on",
   });
 
   if (!parsed.success) {
@@ -1844,6 +1846,7 @@ export async function updateHomepageHeroAction(formData: FormData) {
   const value: HomepageHeroValue = {
     featuredType: parsed.data.featuredType,
     featuredId: parsed.data.featuredId,
+    showDescription: parsed.data.showDescription,
   };
 
   if (parsed.data.title) {

@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 
 type Option = {
@@ -135,6 +136,18 @@ export function HomepageHeroForm({
             placeholder="可选覆盖简介"
           />
         </div>
+        <Label className="flex items-center gap-3 rounded-2xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-4">
+          <Checkbox
+            name="showDescription"
+            defaultChecked={value?.showDescription !== false}
+          />
+          <span>
+            在首页 Hero 展示简介
+            <span className="block text-xs leading-5 text-muted-foreground">
+              关闭后首页入口只显示标题和按钮，更适合宣传海报。
+            </span>
+          </span>
+        </Label>
         <FormSubmitButton
           disabled={!featuredId}
           className="w-full sm:w-auto"
