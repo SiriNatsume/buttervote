@@ -1,25 +1,16 @@
 import "server-only";
 
 import { initWasm, Resvg } from "@resvg/resvg-wasm";
-import wasmAsset from "@resvg/resvg-wasm/index_bg.wasm";
 
 let initPromise: Promise<void> | null = null;
 
-function wasmInput() {
-  if (typeof wasmAsset === "string") {
-    if (wasmAsset.startsWith("data:")) {
-      return fetch(wasmAsset);
-    }
-
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-    return fetch(new URL(wasmAsset, baseUrl));
-  }
-
-  return wasmAsset;
-}
-
 async function ensureResvgInitialized() {
-  initPromise ??= initWasm(wasmInput());
+  // This file is inlined into the API route bundle. Keep the wasm import relative
+  // to the emitted .next/server/app/.../bracket-image/route.js file so Wrangler
+  // can collect it as a compiled wasm module instead of a runtime-fetched asset.
+  initPromise ??= import(
+    /* webpackIgnore: true */ "../../../../../../../lib/bracket-image/resvg.wasm?module"
+  ).then(({ default: wasmModule }) => initWasm(wasmModule));
   await initPromise;
 }
 
