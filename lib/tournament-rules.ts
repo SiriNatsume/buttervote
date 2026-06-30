@@ -104,8 +104,8 @@ const PRELIMINARY_GROUPS: PreliminaryGroupKey[] = ["A", "B", "C", "D"];
 const GROUP_WINNER_SLOTS: Record<PreliminaryGroupKey, number> = {
   A: 1,
   B: 5,
-  C: 9,
-  D: 13,
+  C: 3,
+  D: 7,
 };
 const ROUND_OF_16_PAIRS: Array<[number, number]> = [
   [1, 16],

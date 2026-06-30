@@ -183,9 +183,108 @@ function groupWinner(candidateId: string, group: "A" | "B" | "C" | "D") {
 
   assert.equal(bracket.slots[0]?.entry?.candidateId, "a1");
   assert.equal(bracket.slots[4]?.entry?.candidateId, "b1");
-  assert.equal(bracket.slots[8]?.entry?.candidateId, "c1");
-  assert.equal(bracket.slots[12]?.entry?.candidateId, "d1");
+  assert.equal(bracket.slots[2]?.entry?.candidateId, "c1");
+  assert.equal(bracket.slots[6]?.entry?.candidateId, "d1");
   assert.equal(bracket.matches.length, 8);
+
+  const fixedGroupWinnerIds = new Set(["a1", "b1", "c1", "d1"]);
+  const groupWinnerIdsByMatch = bracket.matches.map((match) => ({
+    slot: match.slot,
+    winners: [match.left, match.right]
+      .filter((entry) => entry && fixedGroupWinnerIds.has(entry.candidateId))
+      .map((entry) => entry?.candidateId),
+  }));
+
+  assert.deepEqual(groupWinnerIdsByMatch, [
+    { slot: 1, winners: ["a1"] },
+    { slot: 2, winners: [] },
+    { slot: 3, winners: ["b1"] },
+    { slot: 4, winners: [] },
+    { slot: 5, winners: ["c1"] },
+    { slot: 6, winners: [] },
+    { slot: 7, winners: ["d1"] },
+    { slot: 8, winners: [] },
+  ]);
+
+  assert.deepEqual(
+    bracket.matches
+      .filter((match) => [1, 2, 3, 4].includes(match.slot))
+      .flatMap((match) => [match.left, match.right])
+      .filter((entry) => entry && fixedGroupWinnerIds.has(entry.candidateId))
+      .map((entry) => entry?.candidateId),
+    ["a1", "b1"],
+  );
+  assert.deepEqual(
+    bracket.matches
+      .filter((match) => [5, 6, 7, 8].includes(match.slot))
+      .flatMap((match) => [match.left, match.right])
+      .filter((entry) => entry && fixedGroupWinnerIds.has(entry.candidateId))
+      .map((entry) => entry?.candidateId),
+    ["c1", "d1"],
+  );
+
+  const winnerIdsByRoundOf16 = new Map(
+    groupWinnerIdsByMatch.map((match) => [match.slot, match.winners]),
+  );
+  const quarterfinalSources = [
+    { slot: 1, sourceSlots: [1, 2] },
+    { slot: 2, sourceSlots: [3, 4] },
+    { slot: 3, sourceSlots: [5, 6] },
+    { slot: 4, sourceSlots: [7, 8] },
+  ].map((target) => ({
+    slot: target.slot,
+    winners: target.sourceSlots.flatMap(
+      (slot) => winnerIdsByRoundOf16.get(slot) ?? [],
+    ),
+  }));
+
+  assert.deepEqual(quarterfinalSources, [
+    { slot: 1, winners: ["a1"] },
+    { slot: 2, winners: ["b1"] },
+    { slot: 3, winners: ["c1"] },
+    { slot: 4, winners: ["d1"] },
+  ]);
+
+  const winnerIdsByQuarterfinal = new Map(
+    quarterfinalSources.map((match) => [match.slot, match.winners]),
+  );
+  const semifinalSources = [
+    { slot: 1, sourceSlots: [1, 2] },
+    { slot: 2, sourceSlots: [3, 4] },
+  ].map((target) => ({
+    slot: target.slot,
+    winners: target.sourceSlots.flatMap(
+      (slot) => winnerIdsByQuarterfinal.get(slot) ?? [],
+    ),
+  }));
+
+  assert.deepEqual(semifinalSources, [
+    { slot: 1, winners: ["a1", "b1"] },
+    { slot: 2, winners: ["c1", "d1"] },
+  ]);
+  assert.deepEqual(
+    semifinalSources.flatMap((match) => match.winners),
+    ["a1", "b1", "c1", "d1"],
+  );
+
+  const winnerIdsBySemifinal = new Map(
+    semifinalSources.map((match) => [match.slot, match.winners]),
+  );
+  const terminalSources = [
+    { round: "final", slot: 1, sourceSlots: [1, 2] },
+    { round: "third_place", slot: 1, sourceSlots: [1, 2] },
+  ].map((target) => ({
+    round: target.round,
+    slot: target.slot,
+    winners: target.sourceSlots.flatMap(
+      (slot) => winnerIdsBySemifinal.get(slot) ?? [],
+    ),
+  }));
+
+  assert.deepEqual(terminalSources, [
+    { round: "final", slot: 1, winners: ["a1", "b1", "c1", "d1"] },
+    { round: "third_place", slot: 1, winners: ["a1", "b1", "c1", "d1"] },
+  ]);
 }
 
 {
