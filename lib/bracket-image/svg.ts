@@ -196,6 +196,7 @@ type CloudflareImageRequestInit = RequestInit & {
 };
 
 const MAX_EMBEDDED_IMAGE_BYTES = 4 * 1024 * 1024;
+const EMBEDDED_PARTICIPANT_IMAGE_SIZE = 512;
 
 function imageUrlForPath(imagePath: string) {
   if (/^https?:\/\//i.test(imagePath) || imagePath.startsWith("data:")) {
@@ -234,11 +235,11 @@ function imageFetchInit(signal: AbortSignal): CloudflareImageRequestInit {
     signal,
     cf: {
       image: {
-        width: 128,
-        height: 128,
+        width: EMBEDDED_PARTICIPANT_IMAGE_SIZE,
+        height: EMBEDDED_PARTICIPANT_IMAGE_SIZE,
         fit: "cover",
         format: "jpeg",
-        quality: 86,
+        quality: 92,
       },
     },
   };
@@ -392,14 +393,14 @@ function renderChampionSlot(champion: RenderParticipant | null) {
     <g>
       ${renderCrown(centerX, crownY)}
       <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="22" fill="#FFF4D8" stroke="#F0C45C" stroke-width="3" />
-      <rect x="${x + 82}" y="${y + 22}" width="76" height="76" rx="20" fill="#FFFCF4" stroke="#F0C45C" stroke-width="3" />
+      <rect x="${x + 76}" y="${y + 16}" width="88" height="88" rx="22" fill="#FFFCF4" stroke="#F0C45C" stroke-width="3" />
       ${
         champion.imageDataUrl
           ? `
             <clipPath id="champion-image-clip">
-              <rect x="${x + 88}" y="${y + 28}" width="64" height="64" rx="17" />
+              <rect x="${x + 82}" y="${y + 22}" width="76" height="76" rx="19" />
             </clipPath>
-            <image href="${escapeXml(champion.imageDataUrl)}" x="${x + 88}" y="${y + 28}" width="64" height="64" preserveAspectRatio="xMidYMid slice" clip-path="url(#champion-image-clip)" />
+            <image href="${escapeXml(champion.imageDataUrl)}" x="${x + 82}" y="${y + 22}" width="76" height="76" preserveAspectRatio="xMidYMid slice" image-rendering="optimizeQuality" clip-path="url(#champion-image-clip)" />
           `
           : `<text x="${centerX}" y="${y + 70}" text-anchor="middle" font-size="22" font-weight="900" fill="#B9854C">BV</text>`
       }
@@ -427,12 +428,12 @@ function renderParticipantRow(params: {
     `;
   }
 
-  const avatarSize = 46;
-  const avatarX = x + 12;
-  const avatarY = y + 8;
+  const avatarSize = 54;
+  const avatarX = x + 8;
+  const avatarY = y + 4;
   const scoreVisible = resultVisible && participant.score !== null;
   const scoreWidth = scoreVisible ? 42 : 0;
-  const textMaxUnits = scoreVisible ? 8.4 : 11.2;
+  const textMaxUnits = scoreVisible ? 7.8 : 10.6;
   const rowFill =
     participant.isWinner && resultVisible ? "#F7FEF5" : "#FFFFFF";
   const rowStroke =
@@ -444,21 +445,21 @@ function renderParticipantRow(params: {
   const image = participant.imageDataUrl
     ? `
       <clipPath id="${clipId}">
-        <rect x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" rx="13" />
+        <rect x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" rx="15" />
       </clipPath>
-      <image href="${escapeXml(participant.imageDataUrl)}" x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />
+      <image href="${escapeXml(participant.imageDataUrl)}" x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" preserveAspectRatio="xMidYMid slice" image-rendering="optimizeQuality" clip-path="url(#${clipId})" />
     `
     : `
-      <rect x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" rx="13" fill="#F7EAD0" />
-      <text x="${avatarX + avatarSize / 2}" y="${avatarY + 30}" text-anchor="middle" font-size="14" font-weight="800" fill="#B9854C">BV</text>
+      <rect x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" rx="15" fill="#F7EAD0" />
+      <text x="${avatarX + avatarSize / 2}" y="${avatarY + 35}" text-anchor="middle" font-size="15" font-weight="800" fill="#B9854C">BV</text>
     `;
 
   return `
     <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="14" fill="${rowFill}" fill-opacity="0.88" stroke="${rowStroke}" stroke-width="2" />
     ${leftStripe}
     ${image}
-    <text x="${x + 70}" y="${y + 26}" font-size="19" font-weight="800" fill="#3F2418">${escapeXml(fitText(participant.name, textMaxUnits))}</text>
-    <text x="${x + 70}" y="${y + 48}" font-size="12" font-weight="700" fill="#7A6040">${escapeXml(fitText(formatMeta(participant), scoreVisible ? 15.8 : 19.2))}</text>
+    <text x="${x + 76}" y="${y + 25}" font-size="19" font-weight="800" fill="#3F2418">${escapeXml(fitText(participant.name, textMaxUnits))}</text>
+    <text x="${x + 76}" y="${y + 48}" font-size="12" font-weight="700" fill="#7A6040">${escapeXml(fitText(formatMeta(participant), scoreVisible ? 15.2 : 18.4))}</text>
     ${
       scoreVisible
         ? `
