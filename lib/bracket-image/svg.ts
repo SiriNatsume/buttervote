@@ -183,12 +183,65 @@ function championFromFinal(match: RenderMatch | null) {
   );
 }
 
+type CloudflareImageRequestInit = RequestInit & {
+  cf?: {
+    image?: {
+      width?: number;
+      height?: number;
+      fit?: "cover" | "contain" | "scale-down" | "crop" | "pad";
+      format?: "jpeg";
+      quality?: number;
+    };
+  };
+};
+
+const MAX_EMBEDDED_IMAGE_BYTES = 4 * 1024 * 1024;
+
 function imageUrlForPath(imagePath: string) {
   if (/^https?:\/\//i.test(imagePath) || imagePath.startsWith("data:")) {
     return imagePath;
   }
 
   return getPublicImageUrl(imagePath);
+}
+
+function supportedImageContentType(bytes: Uint8Array, contentType: string) {
+  const normalized = contentType.toLowerCase();
+  const isPng =
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47;
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+
+  if (isPng) {
+    return "image/png";
+  }
+  if (isJpeg) {
+    return "image/jpeg";
+  }
+  if (normalized === "image/png" || normalized === "image/jpeg") {
+    return normalized;
+  }
+
+  return null;
+}
+
+function imageFetchInit(signal: AbortSignal): CloudflareImageRequestInit {
+  return {
+    cache: "force-cache",
+    headers: { accept: "image/png,image/jpeg,*/*;q=0.1" },
+    signal,
+    cf: {
+      image: {
+        width: 128,
+        height: 128,
+        fit: "cover",
+        format: "jpeg",
+        quality: 86,
+      },
+    },
+  };
 }
 
 async function fetchImageDataUrl(imagePath: string | null) {
@@ -209,19 +262,36 @@ async function fetchImageDataUrl(imagePath: string | null) {
   const timeout = setTimeout(() => controller.abort(), 6000);
 
   try {
-    const response = await fetch(url, {
-      cache: "force-cache",
-      signal: controller.signal,
-    });
+    const response = await fetch(url, imageFetchInit(controller.signal));
 
     if (!response.ok) {
       return null;
     }
 
-    const contentType =
-      response.headers.get("content-type")?.split(";")[0] || "image/png";
-    const bytes = Buffer.from(await response.arrayBuffer());
-    return `data:${contentType};base64,${bytes.toString("base64")}`;
+    const contentLength = Number(response.headers.get("content-length") ?? 0);
+    if (contentLength > MAX_EMBEDDED_IMAGE_BYTES) {
+      console.error("Bracket image asset is too large to embed.", {
+        imagePath,
+        contentLength,
+      });
+      return null;
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const contentType = supportedImageContentType(
+      bytes,
+      response.headers.get("content-type")?.split(";")[0] || "",
+    );
+
+    if (!contentType) {
+      console.error("Bracket image asset type is not supported by resvg.", {
+        imagePath,
+        responseType: response.headers.get("content-type"),
+      });
+      return null;
+    }
+
+    return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`;
   } catch (error) {
     console.error("Failed to embed bracket image asset.", error);
     return null;

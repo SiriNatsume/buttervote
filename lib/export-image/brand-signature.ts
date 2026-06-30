@@ -1,6 +1,6 @@
 import "server-only";
 
-import logo from "@/img/网站logo.png";
+import { BUTTER_VOTE_LOGO_DATA_URL } from "@/lib/export-image/butter-vote-logo-data";
 
 export type BrandSignatureOptions = {
   x: number;
@@ -10,10 +10,6 @@ export type BrandSignatureOptions = {
   handle?: string;
 };
 
-type StaticAsset = string | { src: string };
-
-let logoPromise: Promise<string | null> | null = null;
-
 function escapeXml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -22,40 +18,8 @@ function escapeXml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
-function assetSrc(asset: StaticAsset) {
-  return typeof asset === "string" ? asset : asset.src;
-}
-
-function absoluteAssetUrl(src: string) {
-  if (/^https?:\/\//i.test(src) || src.startsWith("data:")) {
-    return src;
-  }
-
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  return new URL(src, baseUrl).toString();
-}
-
-async function fetchAssetDataUrl(src: string, fallbackContentType: string) {
-  try {
-    const response = await fetch(absoluteAssetUrl(src), { cache: "force-cache" });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const contentType =
-      response.headers.get("content-type")?.split(";")[0] || fallbackContentType;
-    const bytes = Buffer.from(await response.arrayBuffer());
-    return `data:${contentType};base64,${bytes.toString("base64")}`;
-  } catch (error) {
-    console.error("Failed to load Butter Vote logo for image export.", error);
-    return null;
-  }
-}
-
 export async function loadButterVoteLogoDataUrl() {
-  logoPromise ??= fetchAssetDataUrl(assetSrc(logo), "image/png");
-  return logoPromise;
+  return BUTTER_VOTE_LOGO_DATA_URL;
 }
 
 export function renderBrandSignatureSvg({
