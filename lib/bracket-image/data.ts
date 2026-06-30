@@ -15,8 +15,19 @@ import type {
   TournamentMatch,
   Vote,
 } from "@/lib/types";
+import type {
+  BracketImageData,
+  BracketImageMatch,
+  BracketImageParticipant,
+  BracketImageRound,
+} from "@/lib/bracket-image/types";
 
 type BracketClient = SupabaseClient<Database>;
+
+type BracketTournament = Pick<
+  Tournament,
+  "id" | "name" | "status" | "updated_at"
+>;
 
 type BracketContest = Pick<
   Contest,
@@ -46,17 +57,6 @@ type BracketCandidate = Pick<
   | "created_at"
 >;
 
-type PublicVoteRow = Pick<Vote, "id" | "contest_id" | "payload" | "created_at">;
-type PublicLoveVoteRow = Pick<
-  LoveVoteAllocation,
-  "vote_id" | "candidate_id" | "contest_id"
->;
-
-type BracketTournament = Pick<
-  Tournament,
-  "id" | "name" | "status" | "created_at" | "updated_at"
->;
-
 type BracketEntry = Pick<
   TournamentEntry,
   | "id"
@@ -70,50 +70,21 @@ type BracketEntry = Pick<
   | "status"
 >;
 
-export type TournamentBracketParticipant = {
-  entryId: string;
-  name: string;
-  imagePath: string | null;
-  seedLabel: string | null;
-  score: number | null;
-  isWinner: boolean;
-};
+type PublicVoteRow = Pick<Vote, "id" | "contest_id" | "payload" | "created_at">;
+type PublicLoveVoteRow = Pick<
+  LoveVoteAllocation,
+  "vote_id" | "candidate_id" | "contest_id"
+>;
 
-export type TournamentBracketMatch = {
-  id: string;
-  round: string;
-  roundLabel: string;
-  slot: number;
-  contest: BracketContest | null;
-  left: TournamentBracketParticipant | null;
-  right: TournamentBracketParticipant | null;
-  resultVisible: boolean;
-  winnerEntryId: string | null;
-  loserEntryId: string | null;
-};
-
-export type TournamentBracketRound = {
-  key: string;
-  label: string;
-  matches: TournamentBracketMatch[];
-};
-
-export type TournamentBracketData = {
-  tournament: BracketTournament;
-  groupId: string | null;
-  rounds: TournamentBracketRound[];
-  hasVotingMatch: boolean;
-};
-
-const ROUND_ORDER = [
+const ROUND_ORDER: BracketImageRound[] = [
   "round_of_16",
   "quarterfinal",
   "semifinal",
   "final",
   "third_place",
-] as const;
+];
 
-const ROUND_LABEL: Record<string, string> = {
+const ROUND_LABEL: Record<BracketImageRound, string> = {
   round_of_16: "16 强",
   quarterfinal: "8 强",
   semifinal: "半决赛",
@@ -122,7 +93,11 @@ const ROUND_LABEL: Record<string, string> = {
 };
 
 function roundLabel(round: string) {
-  return ROUND_LABEL[round] ?? "正赛";
+  return ROUND_LABEL[round as BracketImageRound] ?? "正赛";
+}
+
+function normalizeRound(round: string): BracketImageRound | null {
+  return ROUND_ORDER.find((item) => item === round) ?? null;
 }
 
 function candidateIdsFromEntries(entries: BracketEntry[]) {
@@ -139,25 +114,10 @@ function candidateIdsFromEntries(entries: BracketEntry[]) {
   ];
 }
 
-function seedLabel(entry: BracketEntry) {
-  const parts: string[] = [];
-
-  if (entry.preliminary_group) {
-    parts.push(`${entry.preliminary_group} 组`);
-  }
-  if (typeof entry.preliminary_rank === "number") {
-    parts.push(`预赛第 ${entry.preliminary_rank}`);
-  } else if (entry.is_group_winner) {
-    parts.push("小组第一");
-  }
-  if (typeof entry.screening_rank === "number") {
-    parts.push(`海选第 ${entry.screening_rank}`);
-  }
-
-  return parts.length > 0 ? parts.join(" · ") : null;
-}
-
-function lineage(candidateId: string | null | undefined, candidates: Map<string, BracketCandidate>) {
+function lineage(
+  candidateId: string | null | undefined,
+  candidates: Map<string, BracketCandidate>,
+) {
   const ids = new Set<string>();
   let current = candidateId;
 
@@ -279,7 +239,7 @@ async function tallyVisibleContestScores(
   const serviceSupabase = createServiceClient();
 
   if (!serviceSupabase) {
-    console.error("Tournament bracket scores require the service client.");
+    console.error("Bracket image scores require the service client.");
     return scores;
   }
 
@@ -313,7 +273,7 @@ async function tallyVisibleContestScores(
 
   if (candidatesError || voteRowsError || loveRowsError) {
     console.error(
-      "Failed to load tournament bracket scores.",
+      "Failed to load bracket image scores.",
       candidatesError?.message ?? voteRowsError?.message ?? loveRowsError?.message,
     );
     return scores;
@@ -363,14 +323,17 @@ async function tallyVisibleContestScores(
   return scores;
 }
 
-async function loadTournamentBracket(
-  supabase: BracketClient,
-  tournamentId: string,
-): Promise<TournamentBracketData | null> {
+async function loadBracketImageData(params: {
+  supabase: BracketClient;
+  tournamentId: string;
+  groupId: string;
+  groupName: string;
+}): Promise<BracketImageData | null> {
+  const { supabase, tournamentId, groupId, groupName } = params;
   const [{ data: tournament }, { data: matches }] = await Promise.all([
     supabase
       .from("tournaments")
-      .select("id,name,status,created_at,updated_at")
+      .select("id,name,status,updated_at")
       .eq("id", tournamentId)
       .neq("status", "archived")
       .maybeSingle(),
@@ -386,9 +349,9 @@ async function loadTournamentBracket(
     return null;
   }
 
-  const rawMatches = ((matches ?? []) as TournamentMatch[]).filter(
-    (match) => match.contest_id,
-  );
+  const rawMatches = ((matches ?? []) as TournamentMatch[]).filter((match) => {
+    return Boolean(match.contest_id && normalizeRound(match.round));
+  });
   const contestIds = [
     ...new Set(
       rawMatches
@@ -399,10 +362,12 @@ async function loadTournamentBracket(
 
   if (contestIds.length === 0) {
     return {
-      tournament: tournament as BracketTournament,
-      groupId: null,
-      rounds: [],
-      hasVotingMatch: false,
+      tournamentId: tournament.id,
+      tournamentName: tournament.name,
+      groupId,
+      groupName,
+      generatedAt: new Date().toISOString(),
+      matches: [],
     };
   }
 
@@ -412,17 +377,10 @@ async function loadTournamentBracket(
       "id,title,status,vote_type,group_id,live_results_enabled,closed_result_visibility,voting_starts_at,voting_ends_at,archived_at,created_at",
     )
     .in("id", contestIds)
+    .eq("group_id", groupId)
     .is("archived_at", null);
-  const activeContests = (contests ?? []) as BracketContest[];
-  const groupIds = [
-    ...new Set(
-      activeContests
-        .map((contest) => contest.group_id)
-        .filter((groupId): groupId is string => Boolean(groupId)),
-    ),
-  ];
   const contestById = new Map(
-    activeContests.map((contest) => [contest.id, contest]),
+    ((contests ?? []) as BracketContest[]).map((contest) => [contest.id, contest]),
   );
   const activeMatches = rawMatches.filter(
     (match) => match.contest_id && contestById.has(match.contest_id),
@@ -462,20 +420,23 @@ async function loadTournamentBracket(
           .eq("is_active", true)
       : { data: [] };
   const activeMatchCandidates = (matchCandidates ?? []) as BracketCandidate[];
-  const candidateMap = await fetchCandidateLineage(supabase, [
-    ...candidateIdsFromEntries((entries ?? []) as BracketEntry[]),
-    ...activeMatchCandidates.flatMap((candidate) => [
-      candidate.id,
-      candidate.inherited_from_candidate_id,
-    ]),
-  ].filter((candidateId): candidateId is string => Boolean(candidateId)));
+  const candidateMap = await fetchCandidateLineage(
+    supabase,
+    [
+      ...candidateIdsFromEntries((entries ?? []) as BracketEntry[]),
+      ...activeMatchCandidates.flatMap((candidate) => [
+        candidate.id,
+        candidate.inherited_from_candidate_id,
+      ]),
+    ].filter((candidateId): candidateId is string => Boolean(candidateId)),
+  );
 
   for (const candidate of activeMatchCandidates) {
     candidateMap.set(candidate.id, candidate);
   }
 
   const forceVisibleContestIds = new Set(
-    tournament.status === "completed"
+    (tournament as BracketTournament).status === "completed"
       ? activeMatches
           .filter((match) => match.winner_entry_id && match.loser_entry_id)
           .map((match) => match.contest_id)
@@ -498,7 +459,7 @@ async function loadTournamentBracket(
   function participant(
     entryId: string | null,
     match: TournamentMatch,
-  ): TournamentBracketParticipant | null {
+  ): BracketImageParticipant | null {
     const entry = entryId ? entryById.get(entryId) : null;
     const candidate = candidateForEntry(entry, candidateMap);
 
@@ -524,112 +485,128 @@ async function loadTournamentBracket(
       entryId: entry.id,
       name: candidate.name,
       imagePath: candidate.image_path,
-      seedLabel: seedLabel(entry),
+      preliminaryGroup: entry.preliminary_group,
+      preliminaryRank: entry.preliminary_rank,
+      screeningRank: entry.screening_rank,
       score,
       isWinner: match.winner_entry_id === entry.id,
     };
   }
 
-  const rounds = ROUND_ORDER.map((round) => {
-    const roundMatches = activeMatches
-      .filter((match) => match.round === round)
-      .sort((a, b) => a.slot - b.slot)
-      .map((match) => {
-        const contest = match.contest_id
-          ? contestById.get(match.contest_id) ?? null
-          : null;
-        const resultVisible = contest
-          ? canViewResults(contest, null) || forceVisibleContestIds.has(contest.id)
-          : false;
+  const bracketMatches = activeMatches
+    .sort((a, b) => {
+      const roundDelta =
+        ROUND_ORDER.indexOf(normalizeRound(a.round) ?? "round_of_16") -
+        ROUND_ORDER.indexOf(normalizeRound(b.round) ?? "round_of_16");
+      return roundDelta !== 0 ? roundDelta : a.slot - b.slot;
+    })
+    .map((match) => {
+      const round = normalizeRound(match.round) ?? "round_of_16";
+      const contest = match.contest_id
+        ? contestById.get(match.contest_id) ?? null
+        : null;
+      const resultVisible = contest
+        ? canViewResults(contest, null) || forceVisibleContestIds.has(contest.id)
+        : false;
 
-        return {
-          id: match.id,
-          round: match.round,
-          roundLabel: roundLabel(match.round),
-          slot: match.slot,
-          contest,
-          left: participant(match.left_entry_id, match),
-          right: participant(match.right_entry_id, match),
-          resultVisible,
-          winnerEntryId: resultVisible ? match.winner_entry_id : null,
-          loserEntryId: resultVisible ? match.loser_entry_id : null,
-        } satisfies TournamentBracketMatch;
-      });
-
-    return {
-      key: round,
-      label: roundLabel(round),
-      matches: roundMatches,
-    };
-  }).filter((round) => round.matches.length > 0);
+      return {
+        id: match.id,
+        round,
+        roundLabel: roundLabel(round),
+        slot: match.slot,
+        contest: contest
+          ? {
+              id: contest.id,
+              title: contest.title,
+              status: contest.status,
+            }
+          : null,
+        left: participant(match.left_entry_id, match),
+        right: participant(match.right_entry_id, match),
+        resultVisible,
+        winnerEntryId: resultVisible ? match.winner_entry_id : null,
+        loserEntryId: resultVisible ? match.loser_entry_id : null,
+      } satisfies BracketImageMatch;
+    });
 
   return {
-    tournament: tournament as BracketTournament,
-    groupId: groupIds[0] ?? null,
-    rounds,
-    hasVotingMatch: [...contestById.values()].some(
-      (contest) => contest.status === "voting",
-    ),
+    tournamentId: tournament.id,
+    tournamentName: tournament.name,
+    groupId,
+    groupName,
+    generatedAt: new Date().toISOString(),
+    matches: bracketMatches,
   };
 }
 
-export async function getTournamentBracket(
-  supabase: BracketClient,
-  tournamentId: string,
-) {
-  try {
-    return await loadTournamentBracket(supabase, tournamentId);
-  } catch (error) {
-    console.error("Failed to load tournament bracket.", error);
+export async function getBracketImageDataForGroup(params: {
+  supabase: BracketClient;
+  groupId: string;
+  tournamentId?: string | null;
+}) {
+  const { supabase, groupId, tournamentId } = params;
+  const { data: group } = await supabase
+    .from("contest_groups")
+    .select("id,name")
+    .eq("id", groupId)
+    .maybeSingle();
+
+  if (!group) {
     return null;
   }
-}
 
-export async function getTournamentBracketsForGroup(
-  supabase: BracketClient,
-  groupId: string,
-) {
   const { data: groupContests } = await supabase
     .from("contests")
-    .select("id,status,created_at")
+    .select("id")
     .eq("group_id", groupId)
     .is("archived_at", null);
   const contestIds = (groupContests ?? []).map((contest) => contest.id);
 
   if (contestIds.length === 0) {
-    return [];
+    return null;
   }
 
   const { data: matches } = await supabase
     .from("tournament_matches")
     .select("tournament_id,contest_id")
     .in("contest_id", contestIds);
-  const tournamentIds = [
-    ...new Set(
-      (matches ?? [])
-        .filter((match) => match.contest_id)
-        .map((match) => match.tournament_id),
-    ),
+  const availableTournamentIds = [
+    ...new Set((matches ?? []).map((match) => match.tournament_id)),
   ];
 
-  if (tournamentIds.length === 0) {
-    return [];
+  if (availableTournamentIds.length === 0) {
+    return null;
   }
 
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id")
-    .in("id", tournamentIds)
-    .neq("status", "archived")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const selectedTournamentId =
+    tournamentId && availableTournamentIds.includes(tournamentId)
+      ? tournamentId
+      : null;
 
-  if (!tournament) {
-    return [];
+  const { data: selectedTournament } = selectedTournamentId
+    ? await supabase
+        .from("tournaments")
+        .select("id")
+        .eq("id", selectedTournamentId)
+        .neq("status", "archived")
+        .maybeSingle()
+    : await supabase
+        .from("tournaments")
+        .select("id")
+        .in("id", availableTournamentIds)
+        .neq("status", "archived")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+  if (!selectedTournament) {
+    return null;
   }
 
-  const bracket = await getTournamentBracket(supabase, tournament.id);
-
-  return bracket && bracket.rounds.length > 0 ? [bracket] : [];
+  return loadBracketImageData({
+    supabase,
+    tournamentId: selectedTournament.id,
+    groupId,
+    groupName: group.name,
+  });
 }
