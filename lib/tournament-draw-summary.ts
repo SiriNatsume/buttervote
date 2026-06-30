@@ -27,6 +27,8 @@ export type PublicDrawSummary = {
   title: string;
   seed: string;
   createdAt: string;
+  retractedAt?: string | null;
+  retractReason?: string | null;
   methodLabel: string;
   methodDetails: string[];
   ruleSummary: string;
@@ -43,6 +45,8 @@ type PublicLog = {
   input: unknown;
   output: unknown;
   created_at: string;
+  retracted_at?: string | null;
+  retract_reason?: string | null;
 };
 
 const METHOD_LABEL = "Butter Vote 内置 seed 伪随机洗牌";
@@ -326,19 +330,35 @@ function buildKnockoutRoundSummary(log: PublicLog): PublicDrawSummary | null {
 }
 
 export function buildPublicDrawSummary(log: PublicLog): PublicDrawSummary | null {
+  let summary: PublicDrawSummary | null;
+
   switch (log.kind) {
     case "preliminary_draw":
-      return buildPreliminaryDrawSummary(log);
+      summary = buildPreliminaryDrawSummary(log);
+      break;
     case "preliminary_tiebreaker_generation":
-      return buildTiebreakerGenerationSummary(log);
+      summary = buildTiebreakerGenerationSummary(log);
+      break;
     case "knockout_draw":
-      return buildKnockoutDrawSummary(log);
+      summary = buildKnockoutDrawSummary(log);
+      break;
     case "knockout_round_generation":
     case "knockout_finalization":
-      return buildKnockoutRoundSummary(log);
+      summary = buildKnockoutRoundSummary(log);
+      break;
     default:
-      return null;
+      summary = null;
   }
+
+  if (!summary) {
+    return null;
+  }
+
+  return {
+    ...summary,
+    retractedAt: log.retracted_at ?? null,
+    retractReason: asString(log.retract_reason),
+  };
 }
 
 export function buildPublicDrawSummaries(

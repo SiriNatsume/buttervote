@@ -113,6 +113,16 @@ const generateFollowupStageSchema = z.object({
   seed: z.string().trim().max(160).optional(),
 });
 
+const retractDrawSchema = z.object({
+  tournamentId: z.string().uuid(),
+  drawLogId: z.string().uuid(),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "请填写撤回理由。")
+    .max(500, "撤回理由不能超过 500 个字符。"),
+});
+
 function actionSuccess<T extends Record<string, unknown> = Record<string, unknown>>(
   message?: string,
   extra?: T,
@@ -2008,5 +2018,68 @@ export async function generateNextKnockoutRoundAction(
     return actionFailure(
       error instanceof Error ? error.message : "生成下一轮正赛失败。",
     );
+  }
+}
+
+export async function retractTournamentDrawAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  const adminResult = await getActionAdmin();
+  if (!adminResult.ok) {
+    return actionFailure(adminResult.error);
+  }
+
+  const parsed = retractDrawSchema.safeParse({
+    tournamentId: formData.get("tournamentId"),
+    drawLogId: formData.get("drawLogId"),
+    reason: String(formData.get("reason") ?? ""),
+  });
+
+  if (!parsed.success) {
+    return actionFailure(parsed.error.issues[0]?.message ?? "撤回请求无效。");
+  }
+
+  try {
+    const supabase = createRequiredServiceClient();
+    const { data, error } = await supabase.rpc(
+      "retract_tournament_draw_atomic",
+      {
+        p_tournament_id: parsed.data.tournamentId,
+        p_draw_log_id: parsed.data.drawLogId,
+        p_reason: parsed.data.reason,
+        p_retracted_by: adminResult.profile.id,
+      },
+    );
+
+    if (error) {
+      return actionFailure(error.message);
+    }
+
+    const archivedContestIds = extractStringArray(data, "archivedContestIds");
+    const groupIds = extractStringArray(data, "groupIds");
+    const sourceContestIds = extractStringArray(data, "sourceContestIds");
+
+    revalidatePath("/");
+    revalidatePath("/admin");
+    revalidatePath("/admin/tournaments");
+    for (const contestId of [...archivedContestIds, ...sourceContestIds]) {
+      revalidatePath(`/admin/contests/${contestId}/edit`);
+      revalidatePath(`/contests/${contestId}`);
+      revalidatePath(`/contests/${contestId}/results`);
+    }
+    for (const groupId of groupIds) {
+      revalidatePath(`/admin/groups/${groupId}`);
+      revalidatePath(`/groups/${groupId}`);
+      revalidatePath(`/groups/${groupId}/results`);
+    }
+
+    return actionSuccess("抽签已撤回，生成的比赛已归档。", {
+      refresh: true,
+      archivedContestIds,
+      sourceContestIds,
+      groupIds,
+    });
+  } catch (error) {
+    return actionFailure(error instanceof Error ? error.message : "撤回抽签失败。");
   }
 }

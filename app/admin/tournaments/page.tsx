@@ -12,6 +12,7 @@ import {
   GenerateNextKnockoutRoundForm,
   GeneratePreliminaryForm,
   GenerateTiebreakersForm,
+  RetractTournamentDrawDialog,
 } from "@/components/tournament-tool-forms";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +40,7 @@ import {
   resolveScreeningAdvancers,
   type ScreeningBoundary,
 } from "@/lib/tournament-rules";
+import { getTournamentDrawRetractionTarget } from "@/lib/tournament-retraction";
 import type {
   Contest,
   ContestGroup,
@@ -306,6 +308,11 @@ export default async function AdminTournamentsPage() {
               knockoutStages.length === 0;
             const canGenerateKnockout =
               preliminaryStages.length > 0 && knockoutStages.length === 0;
+            const retractionTarget = getTournamentDrawRetractionTarget({
+              logs: preview.logs,
+              stages: preview.stages,
+              contestsById: contestById,
+            });
 
             return (
               <Card key={preview.tournament.id} className="min-w-0 overflow-hidden">
@@ -578,13 +585,30 @@ export default async function AdminTournamentsPage() {
                           key={log.id}
                           className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFFCF4]/80 p-4"
                         >
-                          <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2 text-sm">
-                            <Badge variant="outline">{log.kind}</Badge>
-                            <Badge variant="secondary">seed：{log.seed}</Badge>
-                            <span className="text-muted-foreground">
-                              {formatDateTime(log.created_at)}
-                            </span>
+                          <div className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+                              <Badge variant="outline">{log.kind}</Badge>
+                              <Badge variant="secondary">seed：{log.seed}</Badge>
+                              <span className="text-muted-foreground">
+                                {formatDateTime(log.created_at)}
+                              </span>
+                              {log.retracted_at ? (
+                                <Badge variant="destructive">已撤回</Badge>
+                              ) : null}
+                            </div>
+                            {retractionTarget?.log.id === log.id ? (
+                              <RetractTournamentDrawDialog
+                                tournamentId={preview.tournament.id}
+                                drawLogId={log.id}
+                                drawTitle={log.kind}
+                              />
+                            ) : null}
                           </div>
+                          {log.retract_reason ? (
+                            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                              撤回理由：{log.retract_reason}
+                            </div>
+                          ) : null}
                           <div className="grid min-w-0 gap-3 lg:grid-cols-2">
                             <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[#2B2118] p-3 text-xs leading-5 text-[#FFF8E8]">
                               {formatJson(log.input)}

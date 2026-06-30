@@ -123,4 +123,38 @@ function textOf(summary: PublicDrawSummary) {
   assert.deepEqual(summaries, []);
 }
 
+
+{
+  const summaries = buildPublicDrawSummaries(
+    [
+      {
+        id: "log-retracted",
+        kind: "knockout_draw",
+        seed: "seed-retracted",
+        created_at: "2026-06-23T16:00:00.000Z",
+        retracted_at: "2026-06-23T17:00:00.000Z",
+        retract_reason: "预赛结果修正后重新抽签",
+        input: {
+          finalists: [
+            {
+              entryId: "entry-secret",
+              name: "角色 A",
+              preliminaryGroup: "A",
+              preliminaryRank: 1,
+            },
+          ],
+        },
+        output: {
+          slots: [{ slot: 1, entryId: "entry-secret", fixedGroupWinner: "A" }],
+        },
+      },
+    ],
+    "knockout",
+  );
+
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0]?.retractedAt, "2026-06-23T17:00:00.000Z");
+  assert.equal(summaries[0]?.retractReason, "预赛结果修正后重新抽签");
+  assert(!textOf(summaries[0]!).includes("entry-secret"));
+}
 console.log("tournament draw summary tests passed");
