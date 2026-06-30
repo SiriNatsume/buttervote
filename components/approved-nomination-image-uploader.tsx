@@ -50,7 +50,7 @@ export function ApprovedNominationImageUploader({
           </DialogHeader>
           <ImageCropUpload
             mode="candidate-image"
-            storagePath={`nominations/${nominationId}/image.webp`}
+            storagePath={`nominations/${nominationId}/image.jpg`}
             onUploaded={async (result) => {
               const response = await updateApprovedNominationImage(nominationId, {
                 imagePath: result.imagePath,

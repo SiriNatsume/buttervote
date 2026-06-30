@@ -26,6 +26,10 @@ const imageMetaSchema = z.object({
 
 type ImageMeta = z.infer<typeof imageMetaSchema>;
 
+function nominationImagePathPattern(nominationId: string) {
+  return new RegExp(`^nominations/${nominationId}/image\\.jpe?g$`);
+}
+
 async function removeStorageObjects(paths: string[]) {
   if (paths.length === 0) {
     return;
@@ -58,8 +62,8 @@ async function prepareRequiredNominationImage(
     }
   | { ok: false; error: string }
 > {
-  const temporaryPath = `nomination-drafts/${nominationId}/image.webp`;
-  const finalPath = `nominations/${nominationId}/image.webp`;
+  const temporaryPath = `nomination-drafts/${nominationId}/image.jpg`;
+  const finalPath = `nominations/${nominationId}/image.jpg`;
 
   if (imageMeta.imagePath !== temporaryPath) {
     return { ok: false, error: "请先上传提名图片后再提交。" };
@@ -333,8 +337,8 @@ export async function updateNominationImageAction(
     return { ok: false, error: "图片信息无效。" };
   }
 
-  const expectedPath = `nominations/${nominationIdParsed.data}/image.webp`;
-  if (imageMetaParsed.data.imagePath !== expectedPath) {
+  const expectedPath = nominationImagePathPattern(nominationIdParsed.data);
+  if (!expectedPath.test(imageMetaParsed.data.imagePath)) {
     return { ok: false, error: "图片路径与提名不匹配。" };
   }
 
@@ -445,8 +449,8 @@ export async function updateApprovedNominationImage(
     return { ok: false, error: "图片信息无效。" };
   }
 
-  const expectedPath = `nominations/${nominationIdParsed.data}/image.webp`;
-  if (imageMetaParsed.data.imagePath !== expectedPath) {
+  const expectedPath = nominationImagePathPattern(nominationIdParsed.data);
+  if (!expectedPath.test(imageMetaParsed.data.imagePath)) {
     return { ok: false, error: "图片路径与提名不匹配。" };
   }
 

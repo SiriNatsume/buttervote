@@ -37,7 +37,7 @@ export function NominationImageUploader({
     <div className="space-y-4">
       <ImageCropUpload
         mode="candidate-image"
-        storagePath={`nominations/${nominationId}/image.webp`}
+        storagePath={`nominations/${nominationId}/image.jpg`}
         value={currentValue}
         disabled={disabled}
         onUploaded={async (result) => {

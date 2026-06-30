@@ -99,6 +99,12 @@ export function ImageCropUpload({
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const outputMimeType = /\.jpe?g$/i.test(storagePath)
+    ? "image/jpeg"
+    : "image/webp";
+  const outputFileName =
+    outputMimeType === "image/jpeg" ? "image.jpg" : "image.webp";
+
   const metaText = useMemo(() => {
     if (!value?.imageWidth || !value?.imageHeight || !value?.imageSize) {
       return null;
@@ -150,7 +156,7 @@ export function ImageCropUpload({
         croppedAreaPixels,
         outputWidth: config.outputWidth,
         outputHeight: config.outputHeight,
-        mimeType: "image/webp",
+        mimeType: outputMimeType,
         quality: 0.82,
         maxSizeBytes: config.maxSizeBytes,
       });
@@ -158,7 +164,7 @@ export function ImageCropUpload({
       const formData = new FormData();
       formData.set("bucket", bucket);
       formData.set("storagePath", storagePath);
-      formData.set("file", result.blob, "image.webp");
+      formData.set("file", result.blob, outputFileName);
 
       const uploadResponse = await fetch("/api/uploads/vote-image", {
         method: "POST",

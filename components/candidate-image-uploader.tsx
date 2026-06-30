@@ -25,7 +25,7 @@ export function CandidateImageUploader({
   return (
     <ImageCropUpload
       mode="candidate-image"
-      storagePath={`candidates/${candidateId}/image.webp`}
+      storagePath={`candidates/${candidateId}/image.jpg`}
       value={currentValue}
       onUploaded={async (result) => {
         const response = await updateCandidateImageByAdmin(candidateId, {

@@ -76,6 +76,10 @@ const imageMetaSchema = z.object({
   imageSize: z.number().int().positive().max(2 * 1024 * 1024),
 });
 
+function candidateImagePathPattern(candidateId: string) {
+  return new RegExp(`^candidates/${candidateId}/image\\.jpe?g$`);
+}
+
 const inheritSchema = z.object({
   targetContestId: z.string().uuid(),
   sourceContestId: z.string().uuid(),
@@ -946,8 +950,8 @@ export async function updateCandidateImageByAdmin(
     return { ok: false, error: "图片信息无效。" };
   }
 
-  const expectedPath = `candidates/${candidateIdParsed.data}/image.webp`;
-  if (imageMetaParsed.data.imagePath !== expectedPath) {
+  const expectedPath = candidateImagePathPattern(candidateIdParsed.data);
+  if (!expectedPath.test(imageMetaParsed.data.imagePath)) {
     return { ok: false, error: "图片路径与候选项不匹配。" };
   }
 

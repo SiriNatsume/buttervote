@@ -21,21 +21,25 @@ async function canUploadPath(storagePath: string, profileId: string, isAdmin: bo
     new RegExp(`^(contests|groups)/${uuidPattern}/cover\\.webp$`).test(
       storagePath,
     ) ||
-    new RegExp(`^candidates/${uuidPattern}/image\\.webp$`).test(storagePath)
+    new RegExp(`^candidates/${uuidPattern}/image\\.jpe?g$`).test(
+      storagePath,
+    )
   ) {
     return isAdmin;
   }
 
   if (
-    new RegExp(`^nomination-drafts/${uuidPattern}/image\\.webp$`).test(
-      storagePath,
-    )
+    new RegExp(
+      `^nomination-drafts/${uuidPattern}/image\\.jpe?g$`,
+    ).test(storagePath)
   ) {
     return true;
   }
 
   const nominationMatch = storagePath.match(
-    new RegExp(`^nominations/(${uuidPattern})/image\\.webp$`),
+    new RegExp(
+      `^nominations/(${uuidPattern})/image\\.jpe?g$`,
+    ),
   );
 
   if (!nominationMatch) {

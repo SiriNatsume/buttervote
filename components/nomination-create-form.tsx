@@ -199,7 +199,7 @@ export function NominationCreateForm({
               {draftImageId ? (
                 <ImageCropUpload
                   mode="candidate-image"
-                  storagePath={`nomination-drafts/${draftImageId}/image.webp`}
+                  storagePath={`nomination-drafts/${draftImageId}/image.jpg`}
                   value={requiredImage ?? undefined}
                   onUploaded={(result) =>
                     setRequiredImage({
