@@ -21,6 +21,7 @@ const notoSansSc = Noto_Sans_SC({
 export const metadata: Metadata = {
   title: "Butter Vote",
   description: "参与提名、投票和活动评选，发现大家共同喜欢的选择。",
+  icons: { icon: "/icon.png", apple: "/apple-icon.png" },
 };
 
 export default function RootLayout({
