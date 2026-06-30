@@ -65,7 +65,15 @@ export function TournamentDrawSummaryCard({
                   <Badge variant="outline" className="min-w-0 shrink whitespace-normal text-left">
                     生成时间：{formatDateTime(summary.createdAt)}
                   </Badge>
+                  {summary.retractedAt ? (
+                    <Badge variant="destructive">已撤回</Badge>
+                  ) : null}
                 </div>
+                {summary.retractReason ? (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    撤回理由：{summary.retractReason}
+                  </div>
+                ) : null}
               </div>
               <span className="shrink-0 text-sm text-muted-foreground">
                 展开查看

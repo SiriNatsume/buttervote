@@ -1,19 +1,32 @@
 "use client";
 
-import { Shuffle, Trophy } from "lucide-react";
+import { useState } from "react";
+import { RotateCcw, Shuffle, Trophy } from "lucide-react";
 import {
   createTournamentAction,
   generateKnockoutStageAction,
   generateNextKnockoutRoundAction,
   generatePreliminaryStageAction,
   generatePreliminaryTiebreakersAction,
+  retractTournamentDrawAction,
 } from "@/lib/actions/tournament-actions";
 import type { Contest, ContestGroup } from "@/lib/types";
 import { FormStatusFieldset } from "@/components/form-status-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { TransitionActionForm } from "@/components/transition-action-form";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -274,5 +287,70 @@ export function GenerateNextKnockoutRoundForm({
       seedId={`next-knockout-seed-${tournamentId}`}
       seedPlaceholder="留空则自动生成"
     />
+  );
+}
+
+export function RetractTournamentDrawDialog({
+  tournamentId,
+  drawLogId,
+  drawTitle,
+}: {
+  tournamentId: string;
+  drawLogId: string;
+  drawTitle: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const reasonId = `retract-reason-${drawLogId}`;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="destructive" size="sm">
+          <RotateCcw className="size-4" />
+          撤回抽签
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>撤回抽签？</DialogTitle>
+          <DialogDescription>
+            将撤回“{drawTitle}”，并归档这次抽签生成且仍处于草稿状态的比赛。此操作会保留透明度记录。
+          </DialogDescription>
+        </DialogHeader>
+        <TransitionActionForm
+          action={retractTournamentDrawAction}
+          successMessage="抽签已撤回"
+          onSuccess={() => setOpen(false)}
+          className="space-y-4"
+        >
+          <input type="hidden" name="tournamentId" value={tournamentId} />
+          <input type="hidden" name="drawLogId" value={drawLogId} />
+          <div className="space-y-2">
+            <Label htmlFor={reasonId}>撤回理由</Label>
+            <Textarea
+              id={reasonId}
+              name="reason"
+              required
+              maxLength={500}
+              placeholder="例如：抽签前发现预赛结果录入有误，需要修正后重新生成。"
+            />
+          </div>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                取消
+              </Button>
+            </DialogClose>
+            <FormSubmitButton
+              variant="destructive"
+              className="w-full sm:w-auto"
+              loadingText="撤回中..."
+            >
+              确认撤回
+            </FormSubmitButton>
+          </div>
+        </TransitionActionForm>
+      </DialogContent>
+    </Dialog>
   );
 }

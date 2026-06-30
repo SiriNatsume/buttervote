@@ -282,6 +282,9 @@ export type TournamentDrawLog = {
   output: Json;
   created_by: string | null;
   created_at: string;
+  retracted_at: string | null;
+  retracted_by: string | null;
+  retract_reason: string | null;
 } & Record<string, unknown>;
 
 export type TournamentMatch = {
@@ -610,6 +613,9 @@ type Tables = {
       output?: Json;
       created_by?: string | null;
       created_at?: string;
+      retracted_at?: string | null;
+      retracted_by?: string | null;
+      retract_reason?: string | null;
     },
     Partial<Omit<TournamentDrawLog, "id" | "created_at">>
   >;
@@ -781,6 +787,15 @@ export type Database = {
           p_source_results: Json;
           p_matches: Json;
           p_created_by: string;
+        };
+        Returns: Json;
+      };
+      retract_tournament_draw_atomic: {
+        Args: {
+          p_tournament_id: string;
+          p_draw_log_id: string;
+          p_reason: string;
+          p_retracted_by: string;
         };
         Returns: Json;
       };

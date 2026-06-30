@@ -42,6 +42,8 @@ type TournamentDrawLogInfo = {
   input: unknown;
   output: unknown;
   created_at: string;
+  retracted_at: string | null;
+  retract_reason: string | null;
 };
 
 function voterDisplayName(profile?: VoteProfile | null) {
@@ -110,7 +112,7 @@ export default async function ResultsPage({
   const { data: tournamentLogs } = drawLogTournamentId
     ? await createRequiredServiceClient()
         .from("tournament_draw_logs")
-        .select("id,kind,seed,input,output,created_at")
+        .select("id,kind,seed,input,output,created_at,retracted_at,retract_reason")
         .eq("tournament_id", drawLogTournamentId)
         .order("created_at", { ascending: false })
     : { data: [] };
