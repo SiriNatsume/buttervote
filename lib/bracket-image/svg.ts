@@ -488,7 +488,7 @@ export async function renderBracketImageSvg(data: BracketImageData) {
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS.width}" height="${CANVAS.height}" viewBox="0 0 ${CANVAS.width} ${CANVAS.height}">
   <style>
     text {
-      font-family: "Microsoft YaHei", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", "Arial Unicode MS", sans-serif;
+      font-family: "Noto Sans SC", "Microsoft YaHei", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", "Arial Unicode MS", sans-serif;
       letter-spacing: 0;
     }
   </style>

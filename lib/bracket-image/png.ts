@@ -1,6 +1,10 @@
 import "server-only";
 
-import { initWasm, Resvg } from "@resvg/resvg-wasm";
+import { initWasm, Resvg, type ResvgRenderOptions } from "@resvg/resvg-wasm";
+import {
+  BRACKET_EXPORT_FONT_FAMILY,
+  loadBracketExportFontBuffers,
+} from "@/lib/bracket-image/fonts";
 
 let initPromise: Promise<void> | null = null;
 
@@ -17,13 +21,30 @@ async function ensureResvgInitialized() {
 export async function svgToPng(svg: string) {
   await ensureResvgInitialized();
 
+  const fontBuffers = await loadBracketExportFontBuffers(svg);
+  if (fontBuffers.length === 0 && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Bracket export font could not be loaded; refusing to render without an explicit font.",
+    );
+  }
+
+  const font: NonNullable<ResvgRenderOptions["font"]> =
+    fontBuffers.length > 0
+      ? {
+          fontBuffers,
+          defaultFontFamily: BRACKET_EXPORT_FONT_FAMILY,
+          sansSerifFamily: BRACKET_EXPORT_FONT_FAMILY,
+        }
+      : {
+          loadSystemFonts: true,
+          defaultFontFamily: "Microsoft YaHei",
+          sansSerifFamily: "Microsoft YaHei",
+        };
+
   const renderer = new Resvg(svg, {
     fitTo: { mode: "original" },
-    font: {
-      loadSystemFonts: true,
-      defaultFontFamily: "Microsoft YaHei",
-      sansSerifFamily: "Microsoft YaHei",
-    },
+    font,
+    textRendering: 2,
   });
 
   try {
