@@ -12,6 +12,7 @@ import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
+import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
 import { getTournamentBracketsForGroup } from "@/lib/tournament-bracket";
 import type { LoveVoteAllocation, Vote } from "@/lib/types";
 
@@ -65,7 +66,12 @@ export default async function GroupVotePage({
   }
 
   const contestIds = (contests ?? []).map((contest) => contest.id);
-  const [{ data: candidates }, { data: existingVotes }, { count: usedLoveVotes }] =
+  const [
+    { data: candidates },
+    { data: existingVotes },
+    { data: existingLoveRows },
+    { count: usedLoveVotes },
+  ] =
     contestIds.length > 0
       ? await Promise.all([
           supabase
@@ -76,7 +82,13 @@ export default async function GroupVotePage({
             .order("created_at", { ascending: true }),
           supabase
             .from("votes")
-            .select("id,contest_id")
+            .select("id,contest_id,payload")
+            .eq("voter_id", user.id)
+            .in("contest_id", contestIds),
+          supabase
+            .from("love_vote_allocations")
+            .select("contest_id,vote_id,candidate_id")
+            .eq("group_id", id)
             .eq("voter_id", user.id)
             .in("contest_id", contestIds),
           supabase
@@ -85,7 +97,7 @@ export default async function GroupVotePage({
             .eq("group_id", id)
             .eq("voter_id", user.id),
         ])
-      : [{ data: [] }, { data: [] }, { count: 0 }];
+      : [{ data: [] }, { data: [] }, { data: [] }, { count: 0 }];
 
   const candidatesByContest = new Map(
     contestIds.map((contestId) => [
@@ -94,13 +106,30 @@ export default async function GroupVotePage({
     ]),
   );
   const voteByContest = new Map(
-    (existingVotes ?? []).map((vote) => [vote.contest_id, vote.id]),
+    (existingVotes ?? []).map((vote) => [vote.contest_id, vote]),
   );
-  const contestsWithCandidates = (contests ?? []).map((contest) => ({
-    ...contest,
-    candidates: candidatesByContest.get(contest.id) ?? [],
-    existingVoteId: voteByContest.get(contest.id) ?? null,
-  }));
+  const loveCandidateIdsByVote = new Map<string, string[]>();
+
+  for (const loveRow of existingLoveRows ?? []) {
+    const current = loveCandidateIdsByVote.get(loveRow.vote_id) ?? [];
+    current.push(loveRow.candidate_id);
+    loveCandidateIdsByVote.set(loveRow.vote_id, current);
+  }
+
+  const contestsWithCandidates = (contests ?? []).map((contest) => {
+    const existingVote = voteByContest.get(contest.id);
+    return {
+      ...contest,
+      candidates: candidatesByContest.get(contest.id) ?? [],
+      existingVoteId: existingVote?.id ?? null,
+      selectedCandidateIds: existingVote
+        ? selectedCandidateIdsFromVotePayload(contest.vote_type, existingVote.payload)
+        : [],
+      alreadyLoveCandidateIds: existingVote
+        ? loveCandidateIdsByVote.get(existingVote.id) ?? []
+        : [],
+    };
+  });
   const liveResultContestIds = contestsWithCandidates
     .filter((contest) => contest.live_results_enabled)
     .map((contest) => contest.id);

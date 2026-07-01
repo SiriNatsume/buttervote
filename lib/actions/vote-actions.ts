@@ -13,6 +13,18 @@ const baseVoteSchema = z.object({
   voteType: z.enum(["single", "multiple", "ranked"]),
 });
 
+const supplementLoveVotesSchema = z.object({
+  groupId: z.string().uuid(),
+  items: z
+    .array(
+      z.object({
+        contestId: z.string().uuid(),
+        candidateIds: z.array(z.string().uuid()).min(1),
+      }),
+    )
+    .min(1),
+});
+
 function voteError(message: string) {
   return { ok: false as const, error: toUserFacingError(message) };
 }
@@ -225,6 +237,65 @@ export async function submitVoteAction(formData: FormData) {
     revalidatePath(`/groups/${contest.group_id}/vote`);
   }
   return { ok: true as const, redirectTo: `/contests/${contestId}?voted=1` };
+}
+
+export async function supplementLoveVotesAction(input: unknown) {
+  const userResult = await getActionUser();
+  if (!userResult.ok) {
+    return voteError(userResult.error);
+  }
+
+  const parsed = supplementLoveVotesSchema.safeParse(input);
+  if (!parsed.success) {
+    return voteError(parsed.error.issues[0]?.message ?? "真爱票补投请求无效。");
+  }
+
+  const user = userResult.profile;
+  const normalizedItems = parsed.data.items
+    .map((item) => ({
+      contestId: item.contestId,
+      candidateIds: uniqueStrings(item.candidateIds),
+    }))
+    .filter((item) => item.candidateIds.length > 0);
+
+  if (normalizedItems.length === 0) {
+    return voteError("请选择要补投真爱票的候选项。");
+  }
+
+  const canParticipate = await canParticipateContestGroup({
+    contestGroupId: parsed.data.groupId,
+    profile: user,
+  });
+
+  if (!canParticipate) {
+    return voteError("你暂时没有参与该活动组投票的权限。");
+  }
+
+  const supabase = createRequiredServiceClient();
+  const { data: insertedCount, error } = await supabase.rpc("supplement_love_votes", {
+    p_group_id: parsed.data.groupId,
+    p_voter_id: user.id,
+    p_requests: normalizedItems as unknown as Json,
+  });
+
+  if (error) {
+    return voteError(friendlyVoteWriteError(error));
+  }
+
+  const contestIds = uniqueStrings(normalizedItems.map((item) => item.contestId));
+  for (const contestId of contestIds) {
+    revalidatePath(`/contests/${contestId}`);
+    revalidatePath(`/contests/${contestId}/vote`);
+    revalidatePath(`/contests/${contestId}/results`);
+  }
+  revalidatePath(`/groups/${parsed.data.groupId}`);
+  revalidatePath(`/groups/${parsed.data.groupId}/vote`);
+  revalidatePath(`/groups/${parsed.data.groupId}/results`);
+
+  return {
+    ok: true as const,
+    message: `已补投 ${insertedCount ?? 0} 张真爱票。`,
+  };
 }
 
 export type VoteFormType = VoteType;

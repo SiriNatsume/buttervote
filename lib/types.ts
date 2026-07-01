@@ -707,6 +707,14 @@ export type Database = {
         };
         Returns: number;
       };
+      supplement_love_votes: {
+        Args: {
+          p_group_id: string;
+          p_voter_id: string;
+          p_requests: Json;
+        };
+        Returns: number;
+      };
       review_nominations_atomic: {
         Args: {
           p_nomination_ids: string[];

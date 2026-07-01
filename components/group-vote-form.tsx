@@ -10,6 +10,7 @@ import { getPublicImageUrl } from "@/lib/image/image-url";
 import type { Candidate, Contest, ContestGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { LoveVoteConfirmDialog } from "@/components/love-vote-confirm-dialog";
+import { LoveVoteSupplementPanel } from "@/components/love-vote-supplement-panel";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,8 @@ type GroupVoteCandidate = Pick<
 type ContestWithCandidates = GroupVoteContest & {
   candidates: GroupVoteCandidate[];
   existingVoteId?: string | null;
+  selectedCandidateIds?: string[];
+  alreadyLoveCandidateIds?: string[];
 };
 
 type ContestSelection = {
@@ -204,6 +207,28 @@ export function GroupVoteForm({
   const availableLoveVotes = Math.max(0, loveVoteRemaining - selectedLoveCount);
   const unvotedContests = contests.filter(
     (contest) => !contest.existingVoteId && contest.candidates.length > 0,
+  );
+  const supplementContests = useMemo(
+    () =>
+      contests
+        .filter(
+          (contest) =>
+            contest.existingVoteId &&
+            contest.love_vote_enabled !== false &&
+            (contest.selectedCandidateIds ?? []).length > 0,
+        )
+        .map((contest) => {
+          const selectedSet = new Set(contest.selectedCandidateIds ?? []);
+          return {
+            ...contest,
+            candidates: contest.candidates.filter((candidate) =>
+              selectedSet.has(candidate.id),
+            ),
+            alreadyLoveCandidateIds: contest.alreadyLoveCandidateIds ?? [],
+          };
+        })
+        .filter((contest) => contest.candidates.length > 0),
+    [contests],
   );
   const candidateNameById = useMemo(() => {
     const entries = contests.flatMap((contest) =>
@@ -474,6 +499,17 @@ export function GroupVoteForm({
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
+      ) : null}
+
+      {supplementContests.length > 0 ? (
+        <LoveVoteSupplementPanel
+          groupId={group.id}
+          quota={group.love_vote_quota}
+          weight={Number(group.love_vote_weight)}
+          used={usedLoveVotes}
+          reservedLoveVotes={selectedLoveCount}
+          contests={supplementContests}
+        />
       ) : null}
 
       {contests.map((contest) => {

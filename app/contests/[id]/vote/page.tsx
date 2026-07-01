@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Countdown } from "@/components/countdown";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
+import { LoveVoteSupplementPanel } from "@/components/love-vote-supplement-panel";
 import { VoteForm } from "@/components/vote-form";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
@@ -10,6 +11,7 @@ import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transiti
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
+import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
 import { formatDateTime } from "@/lib/time";
 import type { LoveVoteAllocation, Vote } from "@/lib/types";
 
@@ -35,7 +37,7 @@ export default async function VotePage({
         .maybeSingle(),
       supabase
         .from("votes")
-        .select("id")
+        .select("id,payload")
         .eq("contest_id", id)
         .eq("voter_id", user.id)
         .maybeSingle(),
@@ -97,12 +99,28 @@ export default async function VotePage({
       : null;
 
   if (existingVote) {
+    const selectedCandidateIds = selectedCandidateIdsFromVotePayload(
+      contest.vote_type,
+      existingVote.payload,
+    );
+    const selectedCandidateIdSet = new Set(selectedCandidateIds);
+    const { data: existingLoveRows } =
+      loveVoteInfo && selectedCandidateIds.length > 0
+        ? await supabase
+            .from("love_vote_allocations")
+            .select("candidate_id")
+            .eq("vote_id", existingVote.id)
+        : { data: [] };
+    const supplementCandidates = (candidates ?? []).filter((candidate) =>
+      selectedCandidateIdSet.has(candidate.id),
+    );
+
     return (
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
         <div className="butter-panel p-8">
           <h1 className="text-2xl font-semibold tracking-normal">已投票</h1>
           <p className="mt-3 leading-7 text-muted-foreground">
-            你已经参与过该活动投票，不能重复投票。
+            你已经参与过该活动投票，不能重复提交普通投票。
           </p>
           {query.error ? (
             <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -113,6 +131,29 @@ export default async function VotePage({
             <Link href={`/contests/${contest.id}`}>返回活动详情</Link>
           </Button>
         </div>
+
+        {loveVoteInfo ? (
+          <LoveVoteSupplementPanel
+            className="mt-6"
+            groupId={loveVoteInfo.groupId}
+            quota={loveVoteInfo.quota}
+            weight={loveVoteInfo.weight}
+            used={loveVoteInfo.used}
+            contests={[
+              {
+                id: contest.id,
+                title: contest.title,
+                show_candidate_image: contest.show_candidate_image,
+                show_candidate_description: contest.show_candidate_description,
+                show_nominator_info: contest.show_nominator_info,
+                candidates: supplementCandidates,
+                alreadyLoveCandidateIds: (existingLoveRows ?? []).map(
+                  (row) => row.candidate_id,
+                ),
+              },
+            ]}
+          />
+        ) : null}
       </div>
     );
   }
