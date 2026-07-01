@@ -228,14 +228,17 @@ export default async function ResultsPage({
     }
   }
 
+  const shouldHideLoveWeight = !isAdmin && contest.status !== "published";
   const results = tallyVotes({
     voteType: contest.vote_type,
     candidates: visibleCandidates,
     votes,
     loveVoteWeight: group ? Number(group.love_vote_weight) : null,
+    loveVoteScoreMode: shouldHideLoveWeight ? "base" : "weighted",
     loveAllocations,
   });
-  const showLoveBreakdown = canReadAllVotes && contest.status !== "voting";
+  const showLoveBreakdown =
+    canReadAllVotes && !shouldHideLoveWeight && contest.status !== "voting";
   const totalLoveVotes = loveAllocations.length;
   const entryByCandidateId = new Map<string, TournamentEntry>();
 
@@ -277,7 +280,7 @@ export default async function ResultsPage({
         <div className="mb-4 flex flex-wrap gap-2">
           <StatusBadge status={contest.status} />
           <VoteTypeBadge voteType={contest.vote_type} />
-          {group ? (
+          {group && !shouldHideLoveWeight ? (
             <Badge variant="love">
               <Heart className="mr-1 size-3 fill-current" />
               真爱票权重 x{Number(group.love_vote_weight)}
@@ -367,6 +370,7 @@ export default async function ResultsPage({
               showDescription={contest.show_candidate_description}
               showNominatorInfo={contest.show_nominator_info}
               showLoveBreakdown={showLoveBreakdown}
+              scoreLabel={shouldHideLoveWeight ? "实时总分" : "总分"}
             />
           ) : (
             <div className="rounded-2xl border p-8 text-muted-foreground">

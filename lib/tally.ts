@@ -10,6 +10,7 @@ export type TallyResult = {
   score: number;
   normalScore: number;
   loveScore: number;
+  loveBaseScore: number;
   loveVoteCount: number;
   lastVoteAt: string | null;
   /**
@@ -41,6 +42,7 @@ export function tallyVotes(params: {
   >;
   votes: Vote[];
   loveVoteWeight?: number | null;
+  loveVoteScoreMode?: "weighted" | "base";
   loveAllocations?: Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>;
 }): TallyResult[] {
   const {
@@ -48,11 +50,15 @@ export function tallyVotes(params: {
     candidates,
     votes,
     loveVoteWeight,
+    loveVoteScoreMode = "weighted",
     loveAllocations = [],
   } = params;
   const candidateIds = new Set(candidates.map((candidate) => candidate.id));
   const normalScores = new Map(candidates.map((candidate) => [candidate.id, 0]));
   const loveScores = new Map(candidates.map((candidate) => [candidate.id, 0]));
+  const loveBaseScores = new Map(
+    candidates.map((candidate) => [candidate.id, 0]),
+  );
   const loveVoteCounts = new Map(
     candidates.map((candidate) => [candidate.id, 0]),
   );
@@ -94,9 +100,15 @@ export function tallyVotes(params: {
     recordLastVoteAt(candidateId, votedAt);
 
     if (isLoveVote && effectiveLoveVoteWeight !== null) {
+      const lovePointMultiplier =
+        loveVoteScoreMode === "base" ? 1 : effectiveLoveVoteWeight;
+      loveBaseScores.set(
+        candidateId,
+        (loveBaseScores.get(candidateId) ?? 0) + points,
+      );
       loveScores.set(
         candidateId,
-        (loveScores.get(candidateId) ?? 0) + points * effectiveLoveVoteWeight,
+        (loveScores.get(candidateId) ?? 0) + points * lovePointMultiplier,
       );
       loveVoteCounts.set(
         candidateId,
@@ -154,6 +166,7 @@ export function tallyVotes(params: {
       isActive: candidate.is_active,
       normalScore: normalScores.get(candidate.id) ?? 0,
       loveScore: loveScores.get(candidate.id) ?? 0,
+      loveBaseScore: loveBaseScores.get(candidate.id) ?? 0,
       loveVoteCount: loveVoteCounts.get(candidate.id) ?? 0,
       lastVoteAt: lastVoteAtByCandidate.get(candidate.id) ?? null,
       score:

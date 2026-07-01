@@ -150,11 +150,13 @@ export default async function GroupResultsPage({
 
   const summaries: GroupContestResultSummary[] = visibleContests
     .map((contest) => {
+      const shouldHideLoveWeight = !isAdmin && contest.status !== "published";
       const results = tallyVotes({
         voteType: contest.vote_type,
         candidates: candidatesByContest.get(contest.id) ?? [],
         votes: votesByContest.get(contest.id) ?? [],
         loveVoteWeight: contest.group_id ? Number(group.love_vote_weight) : null,
+        loveVoteScoreMode: shouldHideLoveWeight ? "base" : "weighted",
         loveAllocations: loveAllocationsByContest.get(contest.id) ?? [],
       });
       const resultPublishedAt = contest.updated_at ?? contest.created_at ?? null;

@@ -116,14 +116,21 @@ function CandidateInfo({
   contest,
   candidate,
   compact = false,
+  realtimeScore,
 }: {
   contest: GroupVoteContest;
   candidate: GroupVoteCandidate;
   compact?: boolean;
+  realtimeScore?: number;
 }) {
   return (
     <div className="min-w-0">
       <div className="font-medium">{candidate.name}</div>
+      {typeof realtimeScore === "number" ? (
+        <div className="mt-2 inline-flex w-fit items-center rounded-full border border-[#EED8AA]/70 bg-[#FFF8E8]/80 px-2.5 py-1 text-xs font-semibold text-[#8A5A1F]">
+          实时总分 {realtimeScore}
+        </div>
+      ) : null}
       {contest.show_candidate_description ? (
         <div
           className={
@@ -148,6 +155,7 @@ export function GroupVoteForm({
   group,
   contests,
   usedLoveVotes,
+  realtimeScoresByContestId,
 }: {
   group: Pick<
     ContestGroup,
@@ -155,6 +163,7 @@ export function GroupVoteForm({
   >;
   contests: ContestWithCandidates[];
   usedLoveVotes: number;
+  realtimeScoresByContestId?: Record<string, Record<string, number>>;
 }) {
   const router = useRouter();
   const [selections, setSelections] = useState<Record<string, ContestSelection>>(
@@ -452,6 +461,7 @@ export function GroupVoteForm({
       {contests.map((contest) => {
         const selection = getSelection(contest.id);
         const selectedRanking = selection.ranking.filter(Boolean);
+        const realtimeScores = realtimeScoresByContestId?.[contest.id];
 
         return (
           <Card
@@ -507,7 +517,11 @@ export function GroupVoteForm({
                           candidate={candidate}
                           show={contest.show_candidate_image}
                         />
-                        <CandidateInfo contest={contest} candidate={candidate} />
+                        <CandidateInfo
+                          contest={contest}
+                          candidate={candidate}
+                          realtimeScore={realtimeScores?.[candidate.id]}
+                        />
                       </div>
                       {renderLoveCheckbox(contest, candidate.id)}
                     </Label>
@@ -554,7 +568,11 @@ export function GroupVoteForm({
                             candidate={candidate}
                             show={contest.show_candidate_image}
                           />
-                          <CandidateInfo contest={contest} candidate={candidate} />
+                          <CandidateInfo
+                            contest={contest}
+                            candidate={candidate}
+                            realtimeScore={realtimeScores?.[candidate.id]}
+                          />
                         </div>
                         {renderLoveCheckbox(contest, candidate.id)}
                       </Label>
@@ -582,6 +600,7 @@ export function GroupVoteForm({
                             contest={contest}
                             candidate={candidate}
                             compact
+                            realtimeScore={realtimeScores?.[candidate.id]}
                           />
                         </div>
                         {renderLoveCheckbox(contest, candidate.id)}

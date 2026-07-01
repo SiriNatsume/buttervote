@@ -314,6 +314,7 @@ async function tallyVisibleContestScores(
           loveVoteWeight: contest.group_id
             ? loveVoteWeightByGroup.get(contest.group_id) ?? null
             : null,
+          loveVoteScoreMode: contest.status === "published" ? "weighted" : "base",
           loveAllocations: loveRowsByContest.get(contest.id) ?? [],
         }).map((result) => [result.candidateId, result.score]),
       ),

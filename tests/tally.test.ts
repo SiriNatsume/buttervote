@@ -95,4 +95,77 @@ function vote(id: string, candidateId: string, createdAt: string) {
   );
 }
 
+{
+  const candidates = [candidate("a", "Alpha"), candidate("b", "Beta")];
+  const votes = [
+    vote("vote-a", "a", "2026-06-01T10:00:00.000Z"),
+    vote("vote-b", "b", "2026-06-01T09:00:00.000Z"),
+  ];
+  const loveAllocations = [{ vote_id: "vote-a", candidate_id: "a" }];
+
+  const weightedResults = tallyVotes({
+    voteType: "single",
+    candidates,
+    votes,
+    loveVoteWeight: 3,
+    loveAllocations,
+  });
+  assert.equal(weightedResults[0]?.candidateId, "a");
+  assert.equal(weightedResults[0]?.score, 3);
+  assert.equal(weightedResults[0]?.loveScore, 3);
+  assert.equal(weightedResults[0]?.loveBaseScore, 1);
+  assert.equal(weightedResults[0]?.loveVoteCount, 1);
+
+  const liveResults = tallyVotes({
+    voteType: "single",
+    candidates,
+    votes,
+    loveVoteWeight: 3,
+    loveVoteScoreMode: "base",
+    loveAllocations,
+  });
+  assert.deepEqual(
+    liveResults.map((result) => result.candidateId),
+    ["b", "a"],
+  );
+  assert.equal(
+    liveResults.find((result) => result.candidateId === "a")?.score,
+    1,
+  );
+  assert.equal(
+    liveResults.find((result) => result.candidateId === "a")?.loveScore,
+    1,
+  );
+}
+
+{
+  const results = tallyVotes({
+    voteType: "ranked",
+    candidates: [candidate("a", "Alpha"), candidate("b", "Beta")],
+    votes: [
+      {
+        id: "vote-ranked",
+        contest_id: "contest",
+        voter_id: "voter-ranked",
+        payload: { ranking: ["a", "b"] },
+        created_at: "2026-06-01T10:00:00.000Z",
+      },
+    ],
+    loveVoteWeight: 4,
+    loveVoteScoreMode: "base",
+    loveAllocations: [
+      { vote_id: "vote-ranked", candidate_id: "a" },
+      { vote_id: "vote-ranked", candidate_id: "b" },
+    ],
+  });
+
+  const first = results.find((result) => result.candidateId === "a");
+  const second = results.find((result) => result.candidateId === "b");
+  assert.equal(first?.score, 3);
+  assert.equal(first?.loveScore, 3);
+  assert.equal(first?.loveBaseScore, 3);
+  assert.equal(second?.score, 2);
+  assert.equal(second?.loveScore, 2);
+  assert.equal(second?.loveBaseScore, 2);
+}
 console.log("tally tests passed");

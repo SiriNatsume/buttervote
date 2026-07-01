@@ -8,7 +8,10 @@ import { requireUser } from "@/lib/auth";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { fetchAllRows } from "@/lib/supabase-pagination";
+import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
+import type { LoveVoteAllocation, Vote } from "@/lib/types";
 
 export default async function VotePage({
   params,
@@ -26,7 +29,7 @@ export default async function VotePage({
       supabase
         .from("contests")
         .select(
-          "id,title,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,show_candidate_image,show_candidate_description,show_nominator_info,voting_ends_at,archived_at",
+          "id,title,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,live_results_enabled,show_candidate_image,show_candidate_description,show_nominator_info,voting_ends_at,archived_at",
         )
         .eq("id", id)
         .maybeSingle(),
@@ -38,7 +41,7 @@ export default async function VotePage({
         .maybeSingle(),
       supabase
         .from("candidates")
-        .select("id,name,description,image_path,nominator_display_name,created_at")
+        .select("id,name,description,image_path,nominator_display_name,is_active,created_at")
         .eq("contest_id", id)
         .eq("is_active", true)
         .order("created_at", { ascending: true }),
@@ -114,6 +117,51 @@ export default async function VotePage({
     );
   }
 
+  let realtimeScores: Record<string, number> | undefined;
+
+  if (contest.live_results_enabled) {
+    const [
+      { data: voteRows, error: voteRowsError },
+      { data: loveRows, error: loveRowsError },
+    ] = await Promise.all([
+      fetchAllRows<Vote>(() =>
+        supabase
+          .from("votes")
+          .select("id,contest_id,voter_id,payload,created_at")
+          .eq("contest_id", id)
+          .order("created_at", { ascending: true }),
+      ),
+      contest.group_id
+        ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
+            () =>
+              supabase
+                .from("love_vote_allocations")
+                .select("vote_id,candidate_id")
+                .eq("contest_id", id),
+          )
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (voteRowsError || loveRowsError) {
+      console.error(
+        "Failed to load live vote page scores.",
+        voteRowsError?.message ?? loveRowsError?.message,
+      );
+    } else {
+      const results = tallyVotes({
+        voteType: contest.vote_type,
+        candidates: candidates ?? [],
+        votes: voteRows ?? [],
+        loveVoteWeight: group ? Number(group.love_vote_weight) : null,
+        loveVoteScoreMode: "base",
+        loveAllocations: loveRows ?? [],
+      });
+
+      realtimeScores = Object.fromEntries(
+        results.map((result) => [result.candidateId, result.score]),
+      );
+    }
+  }
   const validVotingDeadline =
     contest.voting_ends_at &&
     new Date(contest.voting_ends_at).getTime() > Date.now()
@@ -151,6 +199,7 @@ export default async function VotePage({
         candidates={candidates ?? []}
         error={query.error}
         loveVoteInfo={loveVoteInfo}
+        realtimeScores={realtimeScores}
       />
     </div>
   );

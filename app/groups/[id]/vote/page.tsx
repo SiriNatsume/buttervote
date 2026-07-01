@@ -10,7 +10,15 @@ import { getPublicImageUrl } from "@/lib/image/image-url";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { fetchAllRows } from "@/lib/supabase-pagination";
+import { tallyVotes } from "@/lib/tally";
 import { getTournamentBracketsForGroup } from "@/lib/tournament-bracket";
+import type { LoveVoteAllocation, Vote } from "@/lib/types";
+
+type GroupLoveVoteRow = Pick<
+  LoveVoteAllocation,
+  "contest_id" | "vote_id" | "candidate_id"
+>;
 
 export default async function GroupVotePage({
   params,
@@ -30,7 +38,7 @@ export default async function GroupVotePage({
     supabase
       .from("contests")
       .select(
-        "id,title,status,vote_type,max_choices,require_exact_choices,show_candidate_image,show_candidate_description,show_nominator_info,love_vote_enabled,created_at",
+        "id,title,status,vote_type,max_choices,require_exact_choices,show_candidate_image,show_candidate_description,show_nominator_info,love_vote_enabled,live_results_enabled,created_at",
       )
       .eq("group_id", id)
       .is("archived_at", null)
@@ -62,7 +70,7 @@ export default async function GroupVotePage({
       ? await Promise.all([
           supabase
             .from("candidates")
-            .select("id,contest_id,name,description,image_path,nominator_display_name,created_at")
+            .select("id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at")
             .in("contest_id", contestIds)
             .eq("is_active", true)
             .order("created_at", { ascending: true }),
@@ -93,6 +101,84 @@ export default async function GroupVotePage({
     candidates: candidatesByContest.get(contest.id) ?? [],
     existingVoteId: voteByContest.get(contest.id) ?? null,
   }));
+  const liveResultContestIds = contestsWithCandidates
+    .filter((contest) => contest.live_results_enabled)
+    .map((contest) => contest.id);
+  let realtimeScoresByContestId:
+    | Record<string, Record<string, number>>
+    | undefined;
+
+  if (liveResultContestIds.length > 0) {
+    const [
+      { data: voteRows, error: voteRowsError },
+      { data: loveRows, error: loveRowsError },
+    ] = await Promise.all([
+      fetchAllRows<Vote>(() =>
+        supabase
+          .from("votes")
+          .select("id,contest_id,voter_id,payload,created_at")
+          .in("contest_id", liveResultContestIds)
+          .order("created_at", { ascending: true }),
+      ),
+      fetchAllRows<GroupLoveVoteRow>(() =>
+        supabase
+          .from("love_vote_allocations")
+          .select("contest_id,vote_id,candidate_id")
+          .in("contest_id", liveResultContestIds),
+      ),
+    ]);
+
+    if (voteRowsError || loveRowsError) {
+      console.error(
+        "Failed to load live group vote scores.",
+        voteRowsError?.message ?? loveRowsError?.message,
+      );
+    } else {
+      const votesByContest = new Map<string, Vote[]>();
+      const loveAllocationsByContest = new Map<
+        string,
+        Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>
+      >();
+
+      for (const vote of voteRows ?? []) {
+        const current = votesByContest.get(vote.contest_id) ?? [];
+        current.push(vote);
+        votesByContest.set(vote.contest_id, current);
+      }
+
+      for (const loveRow of loveRows ?? []) {
+        const current = loveAllocationsByContest.get(loveRow.contest_id) ?? [];
+        current.push({
+          vote_id: loveRow.vote_id,
+          candidate_id: loveRow.candidate_id,
+        });
+        loveAllocationsByContest.set(loveRow.contest_id, current);
+      }
+
+      realtimeScoresByContestId = Object.fromEntries(
+        contestsWithCandidates
+          .filter((contest) => contest.live_results_enabled)
+          .map((contest) => {
+            const results = tallyVotes({
+              voteType: contest.vote_type,
+              candidates: contest.candidates,
+              votes: votesByContest.get(contest.id) ?? [],
+              loveVoteWeight: Number(group.love_vote_weight),
+              loveVoteScoreMode: "base",
+              loveAllocations: loveAllocationsByContest.get(contest.id) ?? [],
+            });
+
+            return [
+              contest.id,
+              Object.fromEntries(
+                results.map((result) => [result.candidateId, result.score]),
+              ),
+            ];
+          }),
+      );
+    }
+  }
+
   const tournamentBrackets = await getTournamentBracketsForGroup(supabase, id);
   const coverUrl = getPublicImageUrl(group.cover_image_path);
 
@@ -146,6 +232,7 @@ export default async function GroupVotePage({
           group={group}
           contests={contestsWithCandidates}
           usedLoveVotes={usedLoveVotes ?? 0}
+          realtimeScoresByContestId={realtimeScoresByContestId}
         />
       ) : (
         <div className="rounded-2xl border p-8 text-muted-foreground">

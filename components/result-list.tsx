@@ -11,12 +11,14 @@ export function ResultList({
   showDescription = true,
   showNominatorInfo = true,
   showLoveBreakdown = true,
+  scoreLabel = "总分",
 }: {
   results: TallyResult[];
   showImage?: boolean;
   showDescription?: boolean;
   showNominatorInfo?: boolean;
   showLoveBreakdown?: boolean;
+  scoreLabel?: string;
 }) {
   const topScore = Math.max(...results.map((item) => item.score), 1);
 
@@ -101,7 +103,7 @@ export function ResultList({
               </div>
               <div className="text-right text-sm">
                 <div className="text-2xl font-semibold">{result.score}</div>
-                <div className="text-muted-foreground">总分</div>
+                <div className="text-muted-foreground">{scoreLabel}</div>
               </div>
             </div>
             <Progress

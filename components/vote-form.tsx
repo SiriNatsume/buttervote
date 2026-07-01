@@ -73,14 +73,21 @@ function CandidateText({
   candidate,
   showDescription,
   showNominatorInfo,
+  realtimeScore,
 }: {
   candidate: VoteFormCandidate;
   showDescription: boolean;
   showNominatorInfo: boolean;
+  realtimeScore?: number;
 }) {
   return (
     <span className="min-w-0">
       <span className="block font-medium">{candidate.name}</span>
+      {typeof realtimeScore === "number" ? (
+        <span className="mt-2 inline-flex w-fit items-center rounded-full border border-[#EED8AA]/70 bg-[#FFF8E8]/80 px-2.5 py-1 text-xs font-semibold text-[#8A5A1F]">
+          实时总分 {realtimeScore}
+        </span>
+      ) : null}
       {showDescription ? (
         <span className="mt-1 block text-sm font-normal leading-6 text-muted-foreground">
           {candidate.description || "暂无简介。"}
@@ -100,6 +107,7 @@ export function VoteForm({
   candidates,
   error,
   loveVoteInfo,
+  realtimeScores,
 }: {
   contest: VoteFormContest;
   candidates: VoteFormCandidate[];
@@ -111,6 +119,7 @@ export function VoteForm({
     weight: number;
     used: number;
   } | null;
+  realtimeScores?: Record<string, number>;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -365,6 +374,7 @@ export function VoteForm({
                     candidate={candidate}
                     showDescription={showDescription}
                     showNominatorInfo={showNominatorInfo}
+                    realtimeScore={realtimeScores?.[candidate.id]}
                   />
                 </div>
                 {renderLoveCheckbox(candidate.id)}
@@ -409,6 +419,7 @@ export function VoteForm({
                       candidate={candidate}
                       showDescription={showDescription}
                       showNominatorInfo={showNominatorInfo}
+                      realtimeScore={realtimeScores?.[candidate.id]}
                     />
                   </div>
                   {renderLoveCheckbox(candidate.id)}
@@ -434,6 +445,11 @@ export function VoteForm({
                     <CandidateThumb candidate={candidate} show={showImage} />
                     <div className="min-w-0">
                       <div className="font-medium">{candidate.name}</div>
+                      {typeof realtimeScores?.[candidate.id] === "number" ? (
+                        <div className="mt-2 inline-flex w-fit items-center rounded-full border border-[#EED8AA]/70 bg-[#FFF8E8]/80 px-2.5 py-1 text-xs font-semibold text-[#8A5A1F]">
+                          实时总分 {realtimeScores[candidate.id]}
+                        </div>
+                      ) : null}
                       {showDescription ? (
                         <div className="line-clamp-2 text-sm leading-5 text-muted-foreground">
                           {candidate.description || "暂无简介。"}
