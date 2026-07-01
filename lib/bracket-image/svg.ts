@@ -432,8 +432,16 @@ function renderParticipantRow(params: {
   const avatarX = x + 8;
   const avatarY = y + 4;
   const scoreVisible = resultVisible && participant.score !== null;
-  const scoreWidth = scoreVisible ? 42 : 0;
-  const textMaxUnits = scoreVisible ? 7.8 : 10.6;
+  const scoreText = scoreVisible ? String(participant.score) : "";
+  const scoreWidth = scoreVisible
+    ? Math.max(38, scoreText.length * 12 + 20)
+    : 0;
+  const scoreX = x + width - scoreWidth - 10;
+  const textX = x + 76;
+  const textRight = scoreVisible ? scoreX - 8 : x + width - 10;
+  const textWidth = Math.max(72, textRight - textX);
+  const nameMaxUnits = Math.max(4.5, textWidth / 19);
+  const metaMaxUnits = Math.max(6.5, textWidth / 12);
   const rowFill =
     participant.isWinner && resultVisible ? "#F7FEF5" : "#FFFFFF";
   const rowStroke =
@@ -458,13 +466,13 @@ function renderParticipantRow(params: {
     <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="14" fill="${rowFill}" fill-opacity="0.88" stroke="${rowStroke}" stroke-width="2" />
     ${leftStripe}
     ${image}
-    <text x="${x + 76}" y="${y + 25}" font-size="19" font-weight="800" fill="#3F2418">${escapeXml(fitText(participant.name, textMaxUnits))}</text>
-    <text x="${x + 76}" y="${y + 48}" font-size="12" font-weight="700" fill="#7A6040">${escapeXml(fitText(formatMeta(participant), scoreVisible ? 15.2 : 18.4))}</text>
+    <text x="${textX}" y="${y + 25}" font-size="19" font-weight="800" fill="#3F2418">${escapeXml(fitText(participant.name, nameMaxUnits))}</text>
+    <text x="${textX}" y="${y + 48}" font-size="12" font-weight="700" fill="#7A6040">${escapeXml(fitText(formatMeta(participant), metaMaxUnits))}</text>
     ${
       scoreVisible
         ? `
-          <rect x="${x + width - scoreWidth - 10}" y="${y + 11}" width="${scoreWidth}" height="40" rx="11" fill="#FFF8E8" stroke="#EED8AA" />
-          <text x="${x + width - scoreWidth / 2 - 10}" y="${y + 35}" text-anchor="middle" font-size="18" font-weight="900" fill="${participant.isWinner ? "#2F7A42" : "#5C321E"}">${participant.score}</text>
+          <rect x="${scoreX}" y="${y + 11}" width="${scoreWidth}" height="40" rx="11" fill="#FFF8E8" stroke="#EED8AA" />
+          <text x="${scoreX + scoreWidth / 2}" y="${y + 35}" text-anchor="middle" font-size="18" font-weight="900" fill="${participant.isWinner ? "#2F7A42" : "#5C321E"}">${scoreText}</text>
         `
         : ""
     }
