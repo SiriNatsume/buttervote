@@ -4,6 +4,7 @@ import { ImageIcon, Pencil } from "lucide-react";
 import { ArchiveContestDialog } from "@/components/archive-contest-dialog";
 import { DeleteContestGroupDialog } from "@/components/delete-contest-group-dialog";
 import { ContestForm } from "@/components/contest-form";
+import { GroupContestSettingsBatchPanel } from "@/components/group-contest-settings-batch-panel";
 import { GroupScheduleBatchPanel } from "@/components/group-schedule-batch-panel";
 import { InheritCandidatesForm } from "@/components/inherit-candidates-form";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
@@ -48,7 +49,7 @@ export default async function AdminGroupDetailPage({
     supabase
       .from("contests")
       .select(
-        "id,title,status,vote_type,max_choices,voting_starts_at,voting_ends_at,created_at",
+        "id,title,status,vote_type,max_choices,love_vote_enabled,live_results_enabled,voting_starts_at,voting_ends_at,created_at",
       )
       .eq("group_id", id)
       .is("archived_at", null)
@@ -168,6 +169,23 @@ export default async function AdminGroupDetailPage({
               status: contest.status,
               voting_starts_at: contest.voting_starts_at,
               voting_ends_at: contest.voting_ends_at,
+            }))}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>批量投票设置</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-6">
+          <GroupContestSettingsBatchPanel
+            groupId={group.id}
+            contests={(contests ?? []).map((contest) => ({
+              id: contest.id,
+              title: contest.title,
+              love_vote_enabled: contest.love_vote_enabled,
+              live_results_enabled: contest.live_results_enabled,
             }))}
           />
         </CardContent>

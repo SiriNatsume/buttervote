@@ -73,21 +73,14 @@ function CandidateText({
   candidate,
   showDescription,
   showNominatorInfo,
-  realtimeScore,
 }: {
   candidate: VoteFormCandidate;
   showDescription: boolean;
   showNominatorInfo: boolean;
-  realtimeScore?: number;
 }) {
   return (
-    <span className="min-w-0">
+    <span className="min-w-0 flex-1">
       <span className="block font-medium">{candidate.name}</span>
-      {typeof realtimeScore === "number" ? (
-        <span className="mt-2 inline-flex w-fit items-center rounded-full border border-[#EED8AA]/70 bg-[#FFF8E8]/80 px-2.5 py-1 text-xs font-semibold text-[#8A5A1F]">
-          实时总分 {realtimeScore}
-        </span>
-      ) : null}
       {showDescription ? (
         <span className="mt-1 block text-sm font-normal leading-6 text-muted-foreground">
           {candidate.description || "暂无简介。"}
@@ -99,6 +92,31 @@ function CandidateText({
         </span>
       ) : null}
     </span>
+  );
+}
+
+function RealtimeScoreBlock({ score }: { score?: number }) {
+  if (typeof score !== "number") {
+    return null;
+  }
+
+  return (
+    <div className="ml-auto shrink-0 text-right text-sm">
+      <div className="text-2xl font-semibold">{score}</div>
+      <div className="text-muted-foreground">实时总分</div>
+    </div>
+  );
+}
+
+function RealtimeScoreNote({ score }: { score?: number }) {
+  if (typeof score !== "number") {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 text-right text-[11px] leading-4 text-muted-foreground">
+      实时总分不含真爱票
+    </div>
   );
 }
 
@@ -374,10 +392,11 @@ export function VoteForm({
                     candidate={candidate}
                     showDescription={showDescription}
                     showNominatorInfo={showNominatorInfo}
-                    realtimeScore={realtimeScores?.[candidate.id]}
                   />
+                  <RealtimeScoreBlock score={realtimeScores?.[candidate.id]} />
                 </div>
                 {renderLoveCheckbox(candidate.id)}
+                <RealtimeScoreNote score={realtimeScores?.[candidate.id]} />
               </Label>
             ))}
           </RadioGroup>
@@ -419,10 +438,11 @@ export function VoteForm({
                       candidate={candidate}
                       showDescription={showDescription}
                       showNominatorInfo={showNominatorInfo}
-                      realtimeScore={realtimeScores?.[candidate.id]}
                     />
+                    <RealtimeScoreBlock score={realtimeScores?.[candidate.id]} />
                   </div>
                   {renderLoveCheckbox(candidate.id)}
+                  <RealtimeScoreNote score={realtimeScores?.[candidate.id]} />
                 </Label>
               );
             })}
@@ -441,15 +461,10 @@ export function VoteForm({
                       "butter-option-selected scale-[1.01]",
                   )}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-start gap-3">
                     <CandidateThumb candidate={candidate} show={showImage} />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="font-medium">{candidate.name}</div>
-                      {typeof realtimeScores?.[candidate.id] === "number" ? (
-                        <div className="mt-2 inline-flex w-fit items-center rounded-full border border-[#EED8AA]/70 bg-[#FFF8E8]/80 px-2.5 py-1 text-xs font-semibold text-[#8A5A1F]">
-                          实时总分 {realtimeScores[candidate.id]}
-                        </div>
-                      ) : null}
                       {showDescription ? (
                         <div className="line-clamp-2 text-sm leading-5 text-muted-foreground">
                           {candidate.description || "暂无简介。"}
@@ -461,8 +476,10 @@ export function VoteForm({
                         </div>
                       ) : null}
                     </div>
+                    <RealtimeScoreBlock score={realtimeScores?.[candidate.id]} />
                   </div>
                   {renderLoveCheckbox(candidate.id)}
+                  <RealtimeScoreNote score={realtimeScores?.[candidate.id]} />
                 </div>
               ))}
             </div>

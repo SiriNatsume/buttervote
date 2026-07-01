@@ -146,6 +146,13 @@ const batchGroupScheduleSchema = z.object({
   votingEndAt: z.string().nullable().optional(),
 });
 
+const batchGroupVotingSettingsSchema = z.object({
+  groupId: z.string().uuid(),
+  contestIds: z.array(z.string().uuid()).min(1, "请至少选择一个活动"),
+  loveVoteEnabled: z.boolean().optional(),
+  liveResultsEnabled: z.boolean().optional(),
+});
+
 function optionalUuidFromForm(value: FormDataEntryValue | null) {
   const text = String(value ?? "");
   return text && text !== "none" ? text : null;
@@ -1266,6 +1273,81 @@ export async function batchUpdateGroupContestSchedule(input: unknown) {
   }
 
   return actionSuccess("批量设置已保存", { updatedCount: contestIds.length });
+}
+
+export async function batchUpdateGroupContestVotingSettings(input: unknown) {
+  const adminResult = await getActionAdmin();
+  if (!adminResult.ok) {
+    return actionFailure(adminResult.error);
+  }
+  const parsed = batchGroupVotingSettingsSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return actionFailure(
+      parsed.error.issues[0]?.message ?? "批量投票设置请求无效。",
+    );
+  }
+
+  const contestIds = [...new Set(parsed.data.contestIds)];
+  if (contestIds.length === 0) {
+    return actionFailure("请至少选择一个活动。");
+  }
+
+  const contestUpdate: Record<string, unknown> = {};
+  if (typeof parsed.data.loveVoteEnabled === "boolean") {
+    contestUpdate.love_vote_enabled = parsed.data.loveVoteEnabled;
+  }
+  if (typeof parsed.data.liveResultsEnabled === "boolean") {
+    contestUpdate.live_results_enabled = parsed.data.liveResultsEnabled;
+  }
+
+  if (Object.keys(contestUpdate).length === 0) {
+    return actionFailure("请至少选择一个要批量更新的项目。");
+  }
+
+  const supabase = await createServerDataClient();
+  const { data: contests, error: contestsError } = await supabase
+    .from("contests")
+    .select("id,group_id")
+    .is("archived_at", null)
+    .in("id", contestIds);
+
+  if (contestsError) {
+    return actionFailure(contestsError.message);
+  }
+
+  if ((contests ?? []).length !== contestIds.length) {
+    return actionFailure("部分活动不存在，无法批量设置。");
+  }
+
+  if ((contests ?? []).some((contest) => contest.group_id !== parsed.data.groupId)) {
+    return actionFailure("所选活动必须全部属于当前活动组。");
+  }
+
+  const { error } = await supabase
+    .from("contests")
+    .update(contestUpdate)
+    .is("archived_at", null)
+    .eq("group_id", parsed.data.groupId)
+    .in("id", contestIds);
+
+  if (error) {
+    return actionFailure(error.message);
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/groups");
+  revalidatePath(`/admin/groups/${parsed.data.groupId}`);
+  revalidatePath(`/groups/${parsed.data.groupId}`);
+  revalidatePath(`/groups/${parsed.data.groupId}/vote`);
+  revalidatePath(`/groups/${parsed.data.groupId}/results`);
+  for (const contestId of contestIds) {
+    revalidateContest(contestId);
+  }
+
+  return actionSuccess("批量投票设置已保存", {
+    updatedCount: contestIds.length,
+  });
 }
 
 export async function reviewNominationAction(formData: FormData) {
