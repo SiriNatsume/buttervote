@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BarChart3, CalendarClock, ImageIcon, Send, Trophy } from "lucide-react";
+import {
+  BarChart3,
+  CalendarClock,
+  Heart,
+  ImageIcon,
+  Send,
+  Trophy,
+} from "lucide-react";
 import { CandidateCard } from "@/components/candidate-card";
 import { Countdown } from "@/components/countdown";
 import { ExistingNominationsList } from "@/components/existing-nominations-list";
@@ -15,6 +22,7 @@ import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transiti
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { formatDateTime } from "@/lib/time";
+import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
 
 export default async function ContestDetailPage({
   params,
@@ -48,7 +56,7 @@ export default async function ContestDetailPage({
   const { data: group } = contest.group_id
     ? await supabase
         .from("contest_groups")
-        .select("id,name,access_mode")
+        .select("id,name,access_mode,love_vote_quota,love_vote_weight")
         .eq("id", contest.group_id)
         .maybeSingle()
     : { data: null };
@@ -59,7 +67,7 @@ export default async function ContestDetailPage({
   const { data: existingVote } = profile
     ? await dataClient
         .from("votes")
-        .select("id")
+        .select("id,payload")
         .eq("contest_id", contest.id)
         .eq("voter_id", profile.id)
         .maybeSingle()
@@ -121,6 +129,58 @@ export default async function ContestDetailPage({
       nominationLimitText = nominationLimitReached
         ? "你在该活动中的提名数量已达上限。"
         : `你还可以提名 ${remaining} 个。`;
+    }
+  }
+
+  let canSupplementLoveVote = false;
+  const loveVoteFeatureEnabled =
+    contest.status === "voting" &&
+    hasVoted &&
+    Boolean(profile) &&
+    Boolean(existingVote) &&
+    Boolean(group) &&
+    canUseGroupParticipation &&
+    contest.love_vote_enabled !== false &&
+    Number(group?.love_vote_weight) > 1 &&
+    Number(group?.love_vote_quota) > 0;
+
+  if (loveVoteFeatureEnabled && profile && group && existingVote) {
+    const selectedCandidateIds = selectedCandidateIdsFromVotePayload(
+      contest.vote_type,
+      existingVote.payload,
+    );
+
+    if (selectedCandidateIds.length > 0) {
+      const [{ count: usedLoveVotes }, { data: existingLoveRows }] =
+        await Promise.all([
+          dataClient
+            .from("love_vote_allocations")
+            .select("id", { count: "exact", head: true })
+            .eq("group_id", group.id)
+            .eq("voter_id", profile.id),
+          dataClient
+            .from("love_vote_allocations")
+            .select("candidate_id")
+            .eq("vote_id", existingVote.id),
+        ]);
+      const remainingLoveVotes = Math.max(
+        0,
+        Number(group.love_vote_quota) - (usedLoveVotes ?? 0),
+      );
+      const activeCandidateIds = new Set(
+        (candidates ?? []).map((candidate) => candidate.id),
+      );
+      const alreadyLoveCandidateIds = new Set(
+        (existingLoveRows ?? []).map((row) => row.candidate_id),
+      );
+
+      canSupplementLoveVote =
+        remainingLoveVotes > 0 &&
+        selectedCandidateIds.some(
+          (candidateId) =>
+            activeCandidateIds.has(candidateId) &&
+            !alreadyLoveCandidateIds.has(candidateId),
+        );
     }
   }
 
@@ -256,6 +316,14 @@ export default async function ContestDetailPage({
               {contest.status === "voting" && hasVoted ? (
                 <Button size="lg" disabled>
                   已投票
+                </Button>
+              ) : null}
+              {canSupplementLoveVote ? (
+                <Button asChild size="lg" variant="love">
+                  <Link href={`/contests/${contest.id}/vote`}>
+                    <Heart className="size-4 fill-current" />
+                    补投真爱票
+                  </Link>
                 </Button>
               ) : null}
               {cta && CtaIcon ? (
