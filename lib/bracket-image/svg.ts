@@ -48,10 +48,10 @@ const NODE = {
 };
 
 const CHAMPION_SLOT = {
-  x: 1052,
-  y: 146,
-  width: 296,
-  height: 190,
+  x: 1050,
+  y: 118,
+  width: 300,
+  height: 252,
 };
 
 const POSITIONS: MatchPosition[] = [
@@ -372,25 +372,31 @@ function renderCrown(cx: number, y: number) {
   `;
 }
 
-function renderChampionSlot(champion: RenderParticipant | null) {
+function renderChampionSlot(champion: RenderParticipant | null, tournamentName: string) {
   const { x, y, width, height } = CHAMPION_SLOT;
   const centerX = x + width / 2;
   const crownY = y - 27;
-  const imageFrameSize = 132;
-  const imageSize = 120;
+  const imageFrameSize = 134;
+  const imageSize = 122;
   const imageFrameX = centerX - imageFrameSize / 2;
-  const imageFrameY = y + 18;
+  const imageFrameY = y + 30;
   const imageX = centerX - imageSize / 2;
   const imageY = imageFrameY + 6;
-  const nameY = y + 166;
+  const placeholderY = imageFrameY + imageFrameSize / 2 + 8;
+  const labelY = imageFrameY + imageFrameSize + 22;
+  const nameY = labelY + 31;
+  const subtitleY = nameY + 27;
+  const subtitle = `${fitText(tournamentName, 13)}\u51a0\u519b`;
 
   if (!champion) {
     return `
       <g>
         ${renderCrown(centerX, crownY)}
-        <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="28" fill="#FFF4D8" stroke="#F0C45C" stroke-width="3.5" />
-        <rect x="${imageFrameX}" y="${imageFrameY}" width="${imageFrameSize}" height="${imageFrameSize}" rx="30" fill="#FFFCF4" stroke="#F0C45C" stroke-width="3" stroke-dasharray="9 8" />
-        <text x="${centerX}" y="${imageFrameY + 78}" text-anchor="middle" font-size="22" font-weight="900" fill="#B9854C">\u5f85\u5b9a</text>
+        <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="28" fill="#FFF4D8" stroke="#F0C45C" stroke-width="3" />
+        <rect x="${imageFrameX}" y="${imageFrameY}" width="${imageFrameSize}" height="${imageFrameSize}" rx="28" fill="#FFFCF4" stroke="#F0C45C" stroke-width="3" stroke-dasharray="9 8" />
+        <text x="${centerX}" y="${placeholderY}" text-anchor="middle" font-size="22" font-weight="900" fill="#B9854C">\u5f85\u5b9a</text>
+        <text x="${centerX}" y="${labelY}" text-anchor="middle" font-size="15" font-weight="900" fill="#B9854C">\u51a0\u519b</text>
+        <text x="${centerX}" y="${nameY}" text-anchor="middle" font-size="26" font-weight="900" fill="#3F2418">\u5f85\u5b9a</text>
       </g>
     `;
   }
@@ -398,19 +404,21 @@ function renderChampionSlot(champion: RenderParticipant | null) {
   return `
     <g>
       ${renderCrown(centerX, crownY)}
-      <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="28" fill="#FFF4D8" stroke="#F0C45C" stroke-width="3.5" />
-      <rect x="${imageFrameX}" y="${imageFrameY}" width="${imageFrameSize}" height="${imageFrameSize}" rx="30" fill="#FFFCF4" stroke="#F0C45C" stroke-width="3" />
+      <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="28" fill="#FFF4D8" stroke="#F0C45C" stroke-width="3" />
+      <rect x="${imageFrameX}" y="${imageFrameY}" width="${imageFrameSize}" height="${imageFrameSize}" rx="28" fill="#FFFCF4" stroke="#F0C45C" stroke-width="3" />
       ${
         champion.imageDataUrl
           ? `
             <clipPath id="champion-image-clip">
-              <rect x="${imageX}" y="${imageY}" width="${imageSize}" height="${imageSize}" rx="27" />
+              <rect x="${imageX}" y="${imageY}" width="${imageSize}" height="${imageSize}" rx="25" />
             </clipPath>
             <image href="${escapeXml(champion.imageDataUrl)}" x="${imageX}" y="${imageY}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid slice" image-rendering="optimizeQuality" clip-path="url(#champion-image-clip)" />
           `
-          : `<text x="${centerX}" y="${imageFrameY + 78}" text-anchor="middle" font-size="26" font-weight="900" fill="#B9854C">BV</text>`
+          : `<text x="${centerX}" y="${placeholderY}" text-anchor="middle" font-size="26" font-weight="900" fill="#B9854C">BV</text>`
       }
-      <text x="${centerX}" y="${nameY}" text-anchor="middle" font-size="26" font-weight="900" fill="#3F2418">${escapeXml(fitText(champion.name, 10))}</text>
+      <text x="${centerX}" y="${labelY}" text-anchor="middle" font-size="15" font-weight="900" fill="#B9854C">\u51a0\u519b</text>
+      <text x="${centerX}" y="${nameY}" text-anchor="middle" font-size="28" font-weight="900" fill="#3F2418">${escapeXml(fitText(champion.name, 10.5))}</text>
+      <text x="${centerX}" y="${subtitleY}" text-anchor="middle" font-size="15" font-weight="800" fill="#B9854C">${escapeXml(subtitle)}</text>
     </g>
   `;
 }
@@ -580,7 +588,7 @@ export async function renderBracketImageSvg(data: BracketImageData) {
   <rect x="38" y="36" width="${CANVAS.width - 76}" height="1170" rx="36" fill="#FFFCF4" fill-opacity="0.72" stroke="#EED8AA" stroke-width="2" />
   ${renderChampionConnector()}
   <g opacity="1">${connectors}</g>
-  ${renderChampionSlot(champion)}
+  ${renderChampionSlot(champion, data.tournamentName)}
   <g>${nodes}</g>
   <text x="${CANVAS.width / 2}" y="940" text-anchor="middle" font-size="44" font-weight="900" fill="#4A2B1B">${escapeXml(fitText(data.tournamentName, 30))}</text>
   ${renderLegend(CANVAS.width / 2 - 151, 968)}
