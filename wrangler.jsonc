@@ -12,6 +12,9 @@
       "invocation_logs": true
     }
   },
+  "cache": {
+    "enabled": true
+  },
   "routes": [
     {
       "pattern": "buttervote.com",

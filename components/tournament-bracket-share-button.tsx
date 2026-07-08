@@ -35,7 +35,7 @@ function bracketImageUrl(bracket: ShareBracket) {
 }
 
 async function fetchBracketPng(url: string) {
-  const response = await fetch(url, { cache: "no-store" });
+  const response = await fetch(url);
 
   if (!response.ok) {
     const message = await response.text().catch(() => "");

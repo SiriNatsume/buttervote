@@ -195,8 +195,8 @@ type CloudflareImageRequestInit = RequestInit & {
   };
 };
 
-const MAX_EMBEDDED_IMAGE_BYTES = 4 * 1024 * 1024;
-const EMBEDDED_PARTICIPANT_IMAGE_SIZE = 512;
+const MAX_EMBEDDED_IMAGE_BYTES = 2 * 1024 * 1024;
+const EMBEDDED_PARTICIPANT_IMAGE_SIZE = 256;
 
 function imageUrlForPath(imagePath: string) {
   if (/^https?:\/\//i.test(imagePath) || imagePath.startsWith("data:")) {
@@ -239,7 +239,7 @@ function imageFetchInit(signal: AbortSignal): CloudflareImageRequestInit {
         height: EMBEDDED_PARTICIPANT_IMAGE_SIZE,
         fit: "cover",
         format: "jpeg",
-        quality: 92,
+        quality: 86,
       },
     },
   };

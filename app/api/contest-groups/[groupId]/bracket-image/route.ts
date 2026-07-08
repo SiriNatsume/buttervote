@@ -7,6 +7,13 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const BRACKET_IMAGE_CACHE_SECONDS = 5 * 60;
+const BRACKET_IMAGE_CACHE_CONTROL =
+  "public, max-age=" +
+  BRACKET_IMAGE_CACHE_SECONDS +
+  ", stale-while-revalidate=" +
+  BRACKET_IMAGE_CACHE_SECONDS;
+
 type RouteContext = {
   params: Promise<{
     groupId: string;
@@ -51,7 +58,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     return new NextResponse(new Uint8Array(png), {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": BRACKET_IMAGE_CACHE_CONTROL,
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
           filename,
         )}`,
