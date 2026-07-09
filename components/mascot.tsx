@@ -167,7 +167,11 @@ export function MascotEmptyState({
               {children}
             </div>
           ) : null}
-          {actions ? <div className="mt-5 flex flex-wrap gap-3">{actions}</div> : null}
+          {actions ? (
+            <div className="mt-5 flex w-full flex-wrap justify-center gap-3 sm:justify-start">
+              {actions}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
