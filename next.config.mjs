@@ -6,7 +6,6 @@ const nextConfig = {
     ],
     "/api/contests/[contestId]/calling-image": [
       "./lib/bracket-image/resvg.wasm",
-      "./img/share.png",
     ],
   },
 };

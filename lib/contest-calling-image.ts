@@ -1,5 +1,6 @@
 import "server-only";
 
+import { CALLING_SHARE_BACKGROUND_DATA_URL } from "@/lib/export-image/calling-share-background-data";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import type {
   ContestCallingEventPayload,
@@ -24,12 +25,10 @@ const CANVAS = {
   background: "#FFF8E8",
 };
 
-const MAX_BACKGROUND_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const EMBEDDED_IMAGE_SIZE = 220;
 const SCORE_ROW_COUNT = 4;
 
-let shareBackgroundDataUrlPromise: Promise<string | null> | null = null;
 
 function escapeXml(value: string) {
   return value
@@ -131,28 +130,6 @@ function supportedImageContentType(bytes: Uint8Array, responseType: string) {
     return normalized;
   }
   return null;
-}
-
-async function loadShareBackgroundDataUrl() {
-  shareBackgroundDataUrlPromise ??= (async () => {
-    try {
-      const [{ readFile }, path] = await Promise.all([
-        import("node:fs/promises"),
-        import("node:path"),
-      ]);
-      const bytes = await readFile(path.join(process.cwd(), "img", "share.png"));
-      if (bytes.byteLength > MAX_BACKGROUND_BYTES) {
-        console.warn("Calling share background is too large to embed.");
-        return null;
-      }
-      return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
-    } catch (error) {
-      console.warn("Failed to load calling share background; using fallback.", error);
-      return null;
-    }
-  })();
-
-  return shareBackgroundDataUrlPromise;
 }
 
 async function fetchImageDataUrl(imagePath: string | null) {
@@ -299,7 +276,7 @@ export async function renderContestCallingSvg(params: {
 }) {
   const event = params.event;
   const [backgroundDataUrl, candidateImageDataUrl] = await Promise.all([
-    loadShareBackgroundDataUrl(),
+    Promise.resolve(CALLING_SHARE_BACKGROUND_DATA_URL),
     event ? fetchImageDataUrl(event.candidateSnapshot.imagePath) : Promise.resolve(null),
   ]);
   const lovePhaseProgress =
