@@ -8,13 +8,43 @@ import {
 
 let initPromise: Promise<void> | null = null;
 
-async function ensureResvgInitialized() {
-  // This file is inlined into the API route bundle. Keep the wasm import relative
-  // to the emitted .next/server/app/.../bracket-image/route.js file so Wrangler
-  // can collect it as a compiled wasm module instead of a runtime-fetched asset.
-  initPromise ??= import(
+async function initWasmFromNodeFile() {
+  const [{ readFile }, path] = await Promise.all([
+    import("node:fs/promises"),
+    import("node:path"),
+  ]);
+  const wasm = await readFile(
+    path.join(
+      process.cwd(),
+      "node_modules",
+      "@resvg",
+      "resvg-wasm",
+      "index_bg.wasm",
+    ),
+  );
+  await initWasm(wasm);
+}
+
+async function initWasmFromBundledModule() {
+  const { default: wasmModule } = await import(
     /* webpackIgnore: true */ "../../../../../../../lib/bracket-image/resvg.wasm?module"
-  ).then(({ default: wasmModule }) => initWasm(wasmModule));
+  );
+  await initWasm(wasmModule);
+}
+
+async function ensureResvgInitialized() {
+  // This file is inlined into the API route bundle. Keep the production wasm
+  // import relative to the emitted .next/server/app/... route file so Wrangler
+  // can collect it as a compiled wasm module instead of a runtime-fetched asset.
+  initPromise ??=
+    process.env.NODE_ENV === "development"
+      ? initWasmFromNodeFile()
+      : initWasmFromBundledModule().catch((error) => {
+          if (process.env.NODE_ENV === "production") {
+            throw error;
+          }
+          return initWasmFromNodeFile();
+        });
   await initPromise;
 }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ImageIcon, Search, Trophy } from "lucide-react";
+import { ImageIcon, Megaphone, Search, Trophy } from "lucide-react";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ import { statusLabel, voteTypeLabel } from "@/lib/contest-rules";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { formatDateTime } from "@/lib/time";
 import type { TallyResult } from "@/lib/tally";
-import type { Contest, ContestStatus, VoteType } from "@/lib/types";
+import type { Contest, ContestCallingStatus, ContestStatus, VoteType } from "@/lib/types";
 
 type ResultSummaryContest = Pick<
   Contest,
@@ -29,6 +29,11 @@ type ResultSummaryContest = Pick<
 export type GroupContestResultSummary = {
   contest: ResultSummaryContest;
   topResults: TallyResult[];
+  calling?: {
+    status: ContestCallingStatus;
+    currentStep: number;
+    totalSteps: number;
+  } | null;
 };
 
 type GroupResultSummaryListProps = {
@@ -43,6 +48,7 @@ function summarySearchText(summary: GroupContestResultSummary) {
     contest.description,
     statusLabel[contest.status as ContestStatus],
     voteTypeLabel[contest.vote_type as VoteType],
+    summary.calling ? "唱票 唱票中 唱票完成" : null,
     ...topResults.flatMap((result) => [result.name, result.description]),
   ]
     .filter(Boolean)
@@ -112,7 +118,11 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
         </div>
       ) : filteredSummaries.length > 0 ? (
         <div className="grid gap-5 md:grid-cols-2">
-          {filteredSummaries.map(({ contest, topResults }) => (
+          {filteredSummaries.map(({ contest, topResults, calling }) => {
+            const callingInProgress =
+              calling?.status === "active" || calling?.status === "paused";
+
+            return (
             <Card
               key={contest.id}
               className="flex h-full min-w-0 flex-col overflow-hidden border-[#EED8AA]/70 bg-[#FFFCF4]/90"
@@ -121,6 +131,12 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
                 <div className="mb-3 flex flex-wrap gap-2">
                   <StatusBadge status={contest.status} />
                   <VoteTypeBadge voteType={contest.vote_type} />
+                  {callingInProgress ? (
+                    <div className="inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full border border-[#F0D08A] bg-[#FFF3D0] px-2.5 py-0.5 text-xs font-semibold text-[#6A3E21]">
+                      <Megaphone className="mr-1 size-3" />
+                      唱票中
+                    </div>
+                  ) : null}
                 </div>
                 <CardTitle className="break-words leading-tight">
                   {contest.title}
@@ -135,7 +151,14 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
                 <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
                   {contest.description || "暂无简介。"}
                 </p>
-                {topResults.length > 0 ? (
+                {callingInProgress ? (
+                  <div className="rounded-2xl border border-[#F0D08A] bg-[#FFF8E8] p-4 text-sm leading-6 text-[#6A3E21]">
+                    <div className="font-medium">该活动正在唱票</div>
+                    <div className="mt-1 text-muted-foreground">
+                      当前第 {calling?.currentStep ?? 0} 张 / 共 {calling?.totalSteps ?? 0} 张。完整结果会在唱票完成后显示。
+                    </div>
+                  </div>
+                ) : topResults.length > 0 ? (
                   <div className="min-w-0 space-y-2">
                     {topResults.map((result) => (
                       <div
@@ -176,7 +199,8 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
                 </Button>
               </CardFooter>
             </Card>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-2xl border p-8 text-muted-foreground">

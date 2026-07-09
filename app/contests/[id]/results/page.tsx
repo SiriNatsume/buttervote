@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  ContestCallingAutoRefresh,
+  type ContestCallingRefreshWatch,
+} from "@/components/contest-calling-auto-refresh";
+import { ContestCallingAdminPanel } from "@/components/contest-calling-admin-panel";
+import { ContestCallingStage } from "@/components/contest-calling-stage";
 import { ResultList } from "@/components/result-list";
 import { TournamentDrawSummaryCard } from "@/components/tournament-draw-summary-card";
 import { Heart } from "lucide-react";
@@ -14,11 +20,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 import { fetchAllRows } from "@/lib/supabase-pagination";
+import { normalizeContestCallingEvent } from "@/lib/contest-calling";
 import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
 import { buildPublicDrawSummaries } from "@/lib/tournament-draw-summary";
-import type { LoveVoteAllocation, TournamentEntry, Vote } from "@/lib/types";
+import type { ContestCallingEvent, ContestCallingSession, LoveVoteAllocation, TournamentEntry, Vote } from "@/lib/types";
 
 type VoteProfile = {
   id: string;
@@ -85,6 +92,68 @@ export default async function ResultsPage({
   const isAdmin = profile?.role === "admin";
   const canReadAllVotes = canViewResults(contest, profile);
   const dataClient = isAdmin ? await createServerDataClient() : supabase;
+  let callingSessionQuery = dataClient
+    .from("contest_calling_sessions")
+    .select(
+      "id,contest_id,status,current_step,total_steps,play_mode,auto_interval_seconds,seed,metadata,created_by,started_at,completed_at,archived_at,created_at,updated_at",
+    )
+    .eq("contest_id", id)
+    .is("archived_at", null);
+
+  if (!isAdmin) {
+    callingSessionQuery = callingSessionQuery.in("status", [
+      "active",
+      "paused",
+      "completed",
+    ]);
+  }
+
+  const { data: callingSessions } = await callingSessionQuery
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const callingSession =
+    ((callingSessions?.[0] ?? null) as ContestCallingSession | null) ?? null;
+  const callingCurrentStep = Math.max(
+    0,
+    Number(callingSession?.current_step ?? 0) || 0,
+  );
+  const { data: callingEventRow } =
+    callingSession && callingCurrentStep > 0
+      ? await dataClient
+          .from("contest_calling_events")
+          .select(
+            "sequence,phase,candidate_id,delta_score,candidate_snapshot,scores,metadata",
+          )
+          .eq("session_id", callingSession.id)
+          .eq("sequence", callingCurrentStep)
+          .maybeSingle()
+      : { data: null };
+  const currentCallingEvent = callingEventRow
+    ? normalizeContestCallingEvent(callingEventRow as ContestCallingEvent)
+    : null;
+  const callingIsPublicProgress =
+    !isAdmin &&
+    callingSession !== null &&
+    (callingSession.status === "active" || callingSession.status === "paused");
+  const callingIsCompleted = callingSession?.status === "completed";
+  const canDisplayFullResults = canReadAllVotes || callingIsCompleted;
+  const canGenerateCalling = contest.status === "closed" || contest.status === "published";
+  const callingAutoRefreshWatches: ContestCallingRefreshWatch[] =
+    !isAdmin &&
+    callingSession &&
+    (callingSession.status === "active" || callingSession.status === "paused")
+      ? [
+          {
+            contestId: contest.id,
+            sessionId: callingSession.id,
+            status: callingSession.status,
+            currentStep: callingCurrentStep,
+            totalSteps: Math.max(0, Number(callingSession.total_steps) || 0),
+            updatedAt: callingSession.updated_at ?? null,
+          },
+        ]
+      : [];
+
   const { data: candidates } = await dataClient
     .from("candidates")
     .select("id,name,description,image_path,nominator_display_name,is_active,created_at")
@@ -195,22 +264,26 @@ export default async function ResultsPage({
       votes = adminVoteRows;
       loveAllocations = loveRows ?? [];
     }
-  } else if (canReadAllVotes) {
+  } else if (canDisplayFullResults) {
+    const publicResultClient = await createServerDataClient();
     const [
       { data: voteRows, error: voteRowsError },
       { data: loveRows, error: loveRowsError },
     ] = await Promise.all([
       fetchAllRows<PublicVoteRow>(() =>
-        supabase.rpc("get_contest_vote_payloads", {
-          p_contest_id: id,
-        }),
+        publicResultClient
+          .from("votes")
+          .select("id,contest_id,payload,created_at")
+          .eq("contest_id", id)
+          .order("created_at", { ascending: true }),
       ),
       contest.group_id
         ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
             () =>
-              supabase.rpc("get_contest_love_vote_allocations", {
-                p_contest_id: id,
-              }),
+              publicResultClient
+                .from("love_vote_allocations")
+                .select("vote_id,candidate_id")
+                .eq("contest_id", id),
           )
         : Promise.resolve({ data: [], error: null }),
     ]);
@@ -228,7 +301,7 @@ export default async function ResultsPage({
     }
   }
 
-  const shouldHideLoveWeight = !isAdmin && contest.status !== "published";
+  const shouldHideLoveWeight = !isAdmin && contest.status !== "published" && !callingIsCompleted;
   const results = tallyVotes({
     voteType: contest.vote_type,
     candidates: visibleCandidates,
@@ -238,7 +311,7 @@ export default async function ResultsPage({
     loveAllocations,
   });
   const showLoveBreakdown =
-    canReadAllVotes && !shouldHideLoveWeight && contest.status !== "voting";
+    canDisplayFullResults && !shouldHideLoveWeight && contest.status !== "voting";
   const totalLoveVotes = loveAllocations.length;
   const entryByCandidateId = new Map<string, TournamentEntry>();
 
@@ -276,6 +349,7 @@ export default async function ResultsPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
+      <ContestCallingAutoRefresh watches={callingAutoRefreshWatches} />
       <div className="butter-panel mb-8 p-8">
         <div className="mb-4 flex flex-wrap gap-2">
           <StatusBadge status={contest.status} />
@@ -295,12 +369,37 @@ export default async function ResultsPage({
         </p>
       </div>
 
-      {!canReadAllVotes ? (
+      {isAdmin ? (
+        <div className="mb-6">
+          <ContestCallingAdminPanel
+            contestId={contest.id}
+            session={callingSession}
+            canGenerate={canGenerateCalling}
+          />
+        </div>
+      ) : null}
+
+      {callingIsPublicProgress && callingSession ? (
+        <div className="space-y-6">
+          <ContestCallingStage
+            contestId={contest.id}
+            session={callingSession}
+            event={currentCallingEvent}
+          />
+        </div>
+      ) : !canDisplayFullResults ? (
         <div className="butter-panel p-8 text-muted-foreground">
           当前活动结果暂未公开。公开后你可以在这里查看完整结果。
         </div>
       ) : (
         <div className="space-y-6">
+          {callingSession ? (
+            <ContestCallingStage
+              contestId={contest.id}
+              session={callingSession}
+              event={currentCallingEvent}
+            />
+          ) : null}
           <TournamentDrawSummaryCard summaries={publicDrawSummaries} />
 
           {showLoveBreakdown && contest.group_id && totalLoveVotes > 0 ? (
