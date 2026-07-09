@@ -4,6 +4,12 @@ import { useState } from "react";
 import { Download, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  copyPngBlobToClipboard,
+  downloadBlob,
+  fetchPngBlob,
+  safeFilenamePart,
+} from "@/lib/generated-image-share";
 
 type ShareBracket = {
   groupId: string | null;
@@ -12,16 +18,6 @@ type ShareBracket = {
     name: string;
   };
 };
-
-function safeFilenamePart(value: string) {
-  return (
-    value
-      .replace(/[\\/:*?"<>|]+/g, "-")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 80) || "tournament"
-  );
-}
 
 function bracketImageUrl(bracket: ShareBracket) {
   if (!bracket.groupId) {
@@ -35,43 +31,7 @@ function bracketImageUrl(bracket: ShareBracket) {
 }
 
 async function fetchBracketPng(url: string) {
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    const message = await response.text().catch(() => "");
-    throw new Error(message || "\u5bf9\u9635\u56fe\u751f\u6210\u5931\u8d25\u3002");
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("image/png")) {
-    throw new Error("\u670d\u52a1\u7aef\u672a\u8fd4\u56de PNG \u56fe\u7247\u3002");
-  }
-
-  return response.blob();
-}
-
-function downloadBlob(blob: Blob, tournamentName: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `buttervote-${safeFilenamePart(tournamentName)}-bracket.png`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function copyBlob(blob: Blob) {
-  if (!navigator.clipboard || !("ClipboardItem" in window)) {
-    return false;
-  }
-
-  await navigator.clipboard.write([
-    new ClipboardItem({
-      "image/png": blob,
-    }),
-  ]);
-  return true;
+  return fetchPngBlob(url, "\u5bf9\u9635\u56fe\u751f\u6210\u5931\u8d25\u3002");
 }
 
 export function TournamentBracketShareButton({
@@ -93,14 +53,20 @@ export function TournamentBracketShareButton({
     setIsGenerating(true);
     try {
       const blob = await fetchBracketPng(imageUrl);
-      const copied = await copyBlob(blob).catch(() => false);
+      const copied = await copyPngBlobToClipboard(blob).catch(() => false);
 
       if (copied) {
         toast.success(
           "\u5bf9\u9635\u56fe\u56fe\u7247\u5df2\u590d\u5236\uff0c\u53ef\u4ee5\u76f4\u63a5\u7c98\u8d34\u5206\u4eab\u3002",
         );
       } else {
-        downloadBlob(blob, bracket.tournament.name);
+        downloadBlob(
+          blob,
+          `buttervote-${safeFilenamePart(
+            bracket.tournament.name,
+            "tournament",
+          )}-bracket.png`,
+        );
         toast.success(
           "\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u76f4\u63a5\u590d\u5236\uff0c\u5df2\u4e0b\u8f7d\u5bf9\u9635\u56fe\u56fe\u7247\u3002",
         );

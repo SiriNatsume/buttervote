@@ -389,6 +389,7 @@ export default async function ResultsPage({
         <div className="space-y-6">
           <ContestCallingStage
             contestId={contest.id}
+            contestTitle={contest.title}
             session={callingSession}
             event={currentCallingEvent}
           />
@@ -402,6 +403,7 @@ export default async function ResultsPage({
           {callingSession ? (
             <ContestCallingStage
               contestId={contest.id}
+              contestTitle={contest.title}
               session={callingSession}
               event={currentCallingEvent}
             />
