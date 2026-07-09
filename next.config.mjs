@@ -4,6 +4,10 @@ const nextConfig = {
     "/api/contest-groups/[groupId]/bracket-image": [
       "./lib/bracket-image/resvg.wasm",
     ],
+    "/api/contests/[contestId]/calling-image": [
+      "./lib/bracket-image/resvg.wasm",
+      "./img/share.png",
+    ],
   },
 };
 
