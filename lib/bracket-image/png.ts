@@ -27,15 +27,15 @@ async function initWasmFromNodeFile() {
 
 async function initWasmFromBundledModule() {
   const { default: wasmModule } = await import(
-    /* webpackIgnore: true */ "../../../../../../../lib/bracket-image/resvg.wasm?module"
+    /* webpackIgnore: true */ "../../../lib/bracket-image/resvg.wasm?module"
   );
   await initWasm(wasmModule);
 }
 
 async function ensureResvgInitialized() {
-  // This file is inlined into the API route bundle. Keep the production wasm
-  // import relative to the emitted .next/server/app/... route file so Wrangler
-  // can collect it as a compiled wasm module instead of a runtime-fetched asset.
+  // Next emits this helper into .next/server/chunks inside the OpenNext
+  // server-function folder. Import the wasm relative to that chunk location;
+  // outputFileTracingIncludes copies the file to ../../../lib/bracket-image.
   initPromise ??=
     process.env.NODE_ENV === "development"
       ? initWasmFromNodeFile()
