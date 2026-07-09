@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { normalizeContestCallingEvent } from "@/lib/contest-calling";
+import {
+  normalizeContestCallingEvent,
+  withContestCallingPhaseProgress,
+} from "@/lib/contest-calling";
 import { renderContestCallingSvg } from "@/lib/contest-calling-image";
 import { getCurrentProfile } from "@/lib/auth";
 import { svgToPng } from "@/lib/bracket-image/png";
@@ -54,7 +57,7 @@ export async function GET(
   let sessionQuery = supabase
     .from("contest_calling_sessions")
     .select(
-      "id,contest_id,status,current_step,total_steps,archived_at,created_at",
+      "id,contest_id,status,current_step,total_steps,metadata,archived_at,created_at",
     )
     .eq("contest_id", contestId)
     .is("archived_at", null);
@@ -102,7 +105,10 @@ export async function GET(
     return new Response("Not found", { status: 404 });
   }
 
-  const normalizedEvent = event.data ? normalizeContestCallingEvent(event.data) : null;
+  const normalizedEvent = withContestCallingPhaseProgress(
+    event.data ? normalizeContestCallingEvent(event.data) : null,
+    session.metadata,
+  );
   const svg = await renderContestCallingSvg({
     contestTitle: contest.title,
     sessionStatus: session.status,

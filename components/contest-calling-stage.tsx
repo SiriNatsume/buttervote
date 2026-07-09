@@ -86,6 +86,14 @@ export function ContestCallingStage({
   const currentStep = Math.max(0, Number(session.current_step) || 0);
   const totalSteps = Math.max(0, Number(session.total_steps) || 0);
   const progress = totalSteps === 0 ? 0 : (currentStep / totalSteps) * 100;
+  const lovePhaseProgress =
+    event?.phase === "love_bonus" &&
+    typeof event.metadata.phaseStep === "number" &&
+    typeof event.metadata.phaseTotal === "number" &&
+    event.metadata.phaseStep > 0 &&
+    event.metadata.phaseTotal > 0
+      ? `真爱票第 ${event.metadata.phaseStep} 张 / 共 ${event.metadata.phaseTotal} 张`
+      : null;
   const imageUrl = event ? getPublicImageUrl(event.candidateSnapshot.imagePath) : null;
   const shareUrl = `/api/contests/${contestId}/calling-image?sessionId=${session.id}&step=${currentStep}`;
   const footerText =
@@ -105,6 +113,11 @@ export function ContestCallingStage({
           <Badge variant="outline">
             第 {currentStep} 张 / 共 {totalSteps} 张
           </Badge>
+          {lovePhaseProgress ? (
+            <Badge variant="outline" className="border-[#FFB3C1] text-[#C73555]">
+              {lovePhaseProgress}
+            </Badge>
+          ) : null}
         </div>
         <CardTitle>唱票进度</CardTitle>
         <Progress value={progress} />
@@ -129,7 +142,9 @@ export function ContestCallingStage({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-[#B9854C]">
-                    {event.phase === "love_bonus" ? "真爱票补充加权" : "基础唱票"}
+                    {event.phase === "love_bonus"
+                      ? (lovePhaseProgress ?? "真爱票补充加权")
+                      : "基础唱票"}
                   </div>
                   <div className="mt-1 break-words text-2xl font-semibold text-[#5C321E]">
                     {event.candidateSnapshot.name}

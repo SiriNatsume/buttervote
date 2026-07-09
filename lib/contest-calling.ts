@@ -39,6 +39,8 @@ export type ContestCallingEventMetadata = {
   voteId: string;
   basePoints: number;
   loveVoteWeight: number | null;
+  phaseStep: number | null;
+  phaseTotal: number | null;
   label: string;
 };
 
@@ -69,6 +71,13 @@ type PendingCallingEvent = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function shouldPauseAutoCallingAtPhaseBoundary(
+  currentPhase: ContestCallingPhase | null | undefined,
+  nextPhase: ContestCallingPhase | null | undefined,
+) {
+  return currentPhase === "base" && nextPhase === "love_bonus";
 }
 
 function hashSeed(seed: string) {
@@ -255,6 +264,17 @@ export function buildContestCallingEvents(params: {
     ),
     ...shuffleWithSeed(loveBonusPoints, `${params.seed}:love_bonus`),
   ];
+  const phaseTotals = pendingEvents.reduce(
+    (totals, event) => {
+      totals[event.phase] += 1;
+      return totals;
+    },
+    { base: 0, love_bonus: 0 } satisfies Record<ContestCallingPhase, number>,
+  );
+  const phaseSteps = { base: 0, love_bonus: 0 } satisfies Record<
+    ContestCallingPhase,
+    number
+  >;
   const scores = new Map(activeCandidates.map((candidate) => [candidate.id, 0]));
 
   return pendingEvents.flatMap((event, index) => {
@@ -262,6 +282,7 @@ export function buildContestCallingEvents(params: {
     if (!candidate) {
       return [];
     }
+    const phaseStep = (phaseSteps[event.phase] += 1);
 
     scores.set(event.candidateId, (scores.get(event.candidateId) ?? 0) + event.deltaScore);
 
@@ -277,11 +298,59 @@ export function buildContestCallingEvents(params: {
           voteId: event.voteId,
           basePoints: event.basePoints,
           loveVoteWeight: effectiveLoveVoteWeight,
+          phaseStep,
+          phaseTotal: phaseTotals[event.phase],
           label: event.phase === "base" ? "实时总分" : "真爱票加权",
         },
       },
     ];
   });
+}
+
+function readMetadataNumber(metadata: unknown, key: string) {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+  const value = metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function withContestCallingPhaseProgress(
+  event: ContestCallingEventPayload | null,
+  sessionMetadata: Json | null | undefined,
+): ContestCallingEventPayload | null {
+  if (!event) {
+    return null;
+  }
+  if (
+    typeof event.metadata.phaseStep === "number" &&
+    event.metadata.phaseStep > 0 &&
+    typeof event.metadata.phaseTotal === "number" &&
+    event.metadata.phaseTotal > 0
+  ) {
+    return event;
+  }
+
+  const baseEventCount = readMetadataNumber(sessionMetadata, "baseEventCount");
+  const loveBonusEventCount = readMetadataNumber(sessionMetadata, "loveBonusEventCount");
+  const phaseTotal = event.phase === "base" ? baseEventCount : loveBonusEventCount;
+  const phaseStep =
+    event.phase === "base"
+      ? event.sequence
+      : event.sequence - (baseEventCount ?? 0);
+
+  if (!phaseTotal || phaseStep <= 0 || phaseStep > phaseTotal) {
+    return event;
+  }
+
+  return {
+    ...event,
+    metadata: {
+      ...event.metadata,
+      phaseStep,
+      phaseTotal,
+    },
+  };
 }
 
 export function normalizeContestCallingEvent(
@@ -363,6 +432,8 @@ export function normalizeContestCallingEvent(
       basePoints: typeof metadata.basePoints === "number" ? metadata.basePoints : 0,
       loveVoteWeight:
         typeof metadata.loveVoteWeight === "number" ? metadata.loveVoteWeight : null,
+      phaseStep: typeof metadata.phaseStep === "number" ? metadata.phaseStep : null,
+      phaseTotal: typeof metadata.phaseTotal === "number" ? metadata.phaseTotal : null,
       label: typeof metadata.label === "string" ? metadata.label : "唱票",
     },
   };

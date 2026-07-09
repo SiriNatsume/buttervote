@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import {
   buildContestCallingEvents,
   normalizeContestCallingEvent,
+  shouldPauseAutoCallingAtPhaseBoundary,
+  withContestCallingPhaseProgress,
 } from "../lib/contest-calling.ts";
 import type { Candidate, Vote } from "../lib/types.ts";
+
+assert.equal(shouldPauseAutoCallingAtPhaseBoundary("base", "love_bonus"), true);
+assert.equal(shouldPauseAutoCallingAtPhaseBoundary("base", "base"), false);
+assert.equal(shouldPauseAutoCallingAtPhaseBoundary("love_bonus", "love_bonus"), false);
 
 const baseCandidate = {
   contest_id: "contest",
@@ -56,6 +62,14 @@ function singleVote(id: string, candidateId: string, createdAt: string): Vote {
   assert.deepEqual(
     events.map((event) => event.phase),
     ["base", "base", "love_bonus"],
+  );
+  assert.deepEqual(
+    events.map((event) => [event.metadata.phaseStep, event.metadata.phaseTotal]),
+    [
+      [1, 2],
+      [2, 2],
+      [1, 1],
+    ],
   );
   assert.equal(events[2]?.candidateId, "a");
   assert.equal(events[2]?.deltaScore, 2);
@@ -134,6 +148,13 @@ function singleVote(id: string, candidateId: string, createdAt: string): Vote {
     loveEvents.map((event) => event.deltaScore),
     [2, 2],
   );
+  assert.deepEqual(
+    loveEvents.map((event) => [event.metadata.phaseStep, event.metadata.phaseTotal]),
+    [
+      [1, 2],
+      [2, 2],
+    ],
+  );
   assert.equal(
     events.at(-1)?.scores.find((score) => score.candidateId === "a")?.score,
     6,
@@ -159,7 +180,31 @@ function singleVote(id: string, candidateId: string, createdAt: string): Vote {
   });
 
   assert.equal(normalized?.candidateSnapshot.name, "Alpha");
+  assert.equal(normalized?.metadata.phaseStep, 1);
+  assert.equal(normalized?.metadata.phaseTotal, 1);
   assert.equal(normalized?.scores[0]?.score, 1);
+
+  const legacyEvent = normalizeContestCallingEvent({
+    sequence: 3,
+    phase: "love_bonus",
+    candidate_id: event.candidateId,
+    delta_score: event.deltaScore,
+    candidate_snapshot: event.candidateSnapshot,
+    scores: event.scores,
+    metadata: {
+      voteId: "legacy-love",
+      basePoints: 1,
+      loveVoteWeight: 3,
+      label: "真爱票加权",
+    },
+  });
+  const compatibleEvent = withContestCallingPhaseProgress(legacyEvent, {
+    baseEventCount: 2,
+    loveBonusEventCount: 4,
+  });
+
+  assert.equal(compatibleEvent?.metadata.phaseStep, 1);
+  assert.equal(compatibleEvent?.metadata.phaseTotal, 4);
 }
 
 console.log("contest calling tests passed");

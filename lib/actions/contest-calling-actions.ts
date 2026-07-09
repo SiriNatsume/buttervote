@@ -7,6 +7,7 @@ import { toUserFacingError } from "@/lib/action-error";
 import {
   buildContestCallingEvents,
   contestCallingEventToInsert,
+  shouldPauseAutoCallingAtPhaseBoundary,
 } from "@/lib/contest-calling";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 import { fetchAllRows } from "@/lib/supabase-pagination";
@@ -32,6 +33,7 @@ const controlCallingSchema = z.object({
     "archive",
   ]),
   autoIntervalSeconds: z.coerce.number().int().min(2).max(60).optional(),
+  source: z.enum(["manual", "auto"]).default("manual"),
 });
 
 type ActionResult<T extends Record<string, unknown> = Record<string, unknown>> =
@@ -249,6 +251,7 @@ export async function controlContestCallingSessionAction(
     sessionId: formData.get("sessionId"),
     intent: formData.get("intent"),
     autoIntervalSeconds: formData.get("autoIntervalSeconds") || undefined,
+    source: formData.get("source") || undefined,
   });
 
   if (!parsed.success) {
@@ -296,6 +299,36 @@ export async function controlContestCallingSessionAction(
       break;
     case "next": {
       const nextStep = Math.min(totalSteps, currentStep + 1);
+
+      if (parsed.data.source === "auto" && currentStep > 0 && nextStep > currentStep) {
+        const { data: boundaryEvents, error: boundaryError } = await supabase
+          .from("contest_calling_events")
+          .select("sequence,phase")
+          .eq("session_id", session.id)
+          .in("sequence", [currentStep, nextStep]);
+
+        if (boundaryError) {
+          return actionFailure(boundaryError.message || "读取唱票阶段失败。");
+        }
+
+        const currentPhase = boundaryEvents?.find(
+          (event) => Number(event.sequence) === currentStep,
+        )?.phase;
+        const nextPhase = boundaryEvents?.find(
+          (event) => Number(event.sequence) === nextStep,
+        )?.phase;
+
+        if (shouldPauseAutoCallingAtPhaseBoundary(currentPhase, nextPhase)) {
+          update.current_step = currentStep;
+          update.status = "paused";
+          update.play_mode = "manual";
+          update.started_at = session.started_at ?? now;
+          update.completed_at = null;
+          message = "普通票已唱完，请手动进入真爱票。";
+          break;
+        }
+      }
+
       update.current_step = nextStep;
       update.status = nextStep >= totalSteps ? "completed" : "active";
       update.play_mode = session.play_mode;

@@ -122,7 +122,7 @@ export function ContestCallingAdminPanel({
     }
 
     const timeout = window.setTimeout(() => {
-      control("next");
+      control("next", { source: "auto" });
     }, Math.max(2, Number(session.auto_interval_seconds) || 5) * 1000);
 
     return () => window.clearTimeout(timeout);

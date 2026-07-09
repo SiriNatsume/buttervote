@@ -171,7 +171,16 @@ export async function renderContestCallingSvg(params: {
     ? await fetchImageDataUrl(event.candidateSnapshot.imagePath)
     : null;
   const logoDataUrl = await loadButterVoteLogoDataUrl();
+  const lovePhaseProgress =
+    event?.phase === "love_bonus" &&
+    typeof event.metadata.phaseStep === "number" &&
+    typeof event.metadata.phaseTotal === "number" &&
+    event.metadata.phaseStep > 0 &&
+    event.metadata.phaseTotal > 0
+      ? `真爱票第 ${event.metadata.phaseStep} 张 / 共 ${event.metadata.phaseTotal} 张`
+      : null;
   const phaseLabel = event?.phase === "love_bonus" ? "真爱票加权" : "实时总分";
+  const phaseDetailLabel = lovePhaseProgress ?? phaseLabel;
   const deltaLabel = event
     ? `${event.deltaScore > 0 ? "+" : ""}${event.deltaScore} 分`
     : "等待开始";
@@ -196,7 +205,7 @@ export async function renderContestCallingSvg(params: {
   </style>
   <rect x="52" y="46" width="1096" height="86" rx="26" fill="#FFFDF7" stroke="#EED8AA" stroke-width="2" />
   <text x="84" y="84" font-size="26" font-weight="900" fill="#5C321E">${escapeXml(params.contestTitle)}</text>
-  <text x="84" y="112" font-size="18" font-weight="700" fill="#9A6A35">第 ${params.currentStep} 张 / 共 ${params.totalSteps} 张 · ${escapeXml(statusLabel)}</text>
+  <text x="84" y="112" font-size="18" font-weight="700" fill="#9A6A35">${escapeXml(`第 ${params.currentStep} 张 / 共 ${params.totalSteps} 张 · ${statusLabel}${lovePhaseProgress ? ` · ${lovePhaseProgress}` : ""}`)}</text>
   <rect x="946" y="68" width="156" height="36" rx="18" fill="${event?.phase === "love_bonus" ? "#FFE4EA" : "#ECFDF3"}" stroke="${event?.phase === "love_bonus" ? "#FFB3C1" : "#9AD7A8"}" />
   <text x="1024" y="92" text-anchor="middle" font-size="18" font-weight="900" fill="${event?.phase === "love_bonus" ? "#C73555" : "#2F7A45"}">${escapeXml(phaseLabel)}</text>
 
@@ -205,7 +214,7 @@ export async function renderContestCallingSvg(params: {
     event
       ? `
         ${renderAvatar({ x: 110, y: 222, size: 152, imageDataUrl: candidateImageDataUrl, name: event.candidateSnapshot.name })}
-        <text x="292" y="258" font-size="22" font-weight="800" fill="#9A6A35">${escapeXml(phaseLabel)}</text>
+        <text x="292" y="258" font-size="22" font-weight="800" fill="#9A6A35">${escapeXml(phaseDetailLabel)}</text>
         <text x="292" y="306" font-size="40" font-weight="950" fill="#5C321E">${escapeXml(event.candidateSnapshot.name)}</text>
         <text x="292" y="356" font-size="34" font-weight="950" fill="${event.phase === "love_bonus" ? "#C73555" : "#2F7A45"}">${escapeXml(deltaLabel)}</text>
         <text x="110" y="434" font-size="22" font-weight="700" fill="#6A3E21">${escapeXml(note)}</text>

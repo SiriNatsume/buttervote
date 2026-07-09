@@ -20,7 +20,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 import { fetchAllRows } from "@/lib/supabase-pagination";
-import { normalizeContestCallingEvent } from "@/lib/contest-calling";
+import {
+  normalizeContestCallingEvent,
+  withContestCallingPhaseProgress,
+} from "@/lib/contest-calling";
 import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
@@ -128,9 +131,12 @@ export default async function ResultsPage({
           .eq("sequence", callingCurrentStep)
           .maybeSingle()
       : { data: null };
-  const currentCallingEvent = callingEventRow
-    ? normalizeContestCallingEvent(callingEventRow as ContestCallingEvent)
-    : null;
+  const currentCallingEvent = withContestCallingPhaseProgress(
+    callingEventRow
+      ? normalizeContestCallingEvent(callingEventRow as ContestCallingEvent)
+      : null,
+    callingSession?.metadata,
+  );
   const callingIsPublicProgress =
     !isAdmin &&
     callingSession !== null &&
