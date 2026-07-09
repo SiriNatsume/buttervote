@@ -1,6 +1,5 @@
 import "server-only";
 
-import { CALLING_SHARE_BACKGROUND_DATA_URL } from "@/lib/export-image/calling-share-background-data";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import type {
   ContestCallingEventPayload,
@@ -273,10 +272,11 @@ export async function renderContestCallingSvg(params: {
   currentStep: number;
   totalSteps: number;
   event: ContestCallingEventPayload | null;
+  backgroundDataUrl?: string | null;
 }) {
   const event = params.event;
   const [backgroundDataUrl, candidateImageDataUrl] = await Promise.all([
-    Promise.resolve(CALLING_SHARE_BACKGROUND_DATA_URL),
+    Promise.resolve(params.backgroundDataUrl ?? null),
     event ? fetchImageDataUrl(event.candidateSnapshot.imagePath) : Promise.resolve(null),
   ]);
   const lovePhaseProgress =

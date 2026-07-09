@@ -4,6 +4,7 @@ import {
   withContestCallingPhaseProgress,
 } from "@/lib/contest-calling";
 import { renderContestCallingSvg } from "@/lib/contest-calling-image";
+import { getCallingShareBackgroundDataUrl } from "@/lib/calling-share-background";
 import { getCurrentProfile } from "@/lib/auth";
 import { svgToPng } from "@/lib/bracket-image/png";
 import { createClient } from "@/lib/supabase/server";
@@ -109,12 +110,14 @@ export async function GET(
     event.data ? normalizeContestCallingEvent(event.data) : null,
     session.metadata,
   );
+  const backgroundDataUrl = await getCallingShareBackgroundDataUrl(request.nextUrl.origin);
   const svg = await renderContestCallingSvg({
     contestTitle: contest.title,
     sessionStatus: session.status,
     currentStep: step,
     totalSteps,
     event: normalizedEvent,
+    backgroundDataUrl,
   });
   const png = await svgToPng(svg);
 
