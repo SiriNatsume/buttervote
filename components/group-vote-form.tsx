@@ -11,6 +11,7 @@ import type { Candidate, Contest, ContestGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { LoveVoteConfirmDialog } from "@/components/love-vote-confirm-dialog";
 import { LoveVoteSupplementPanel } from "@/components/love-vote-supplement-panel";
+import { MascotEmptyState } from "@/components/mascot";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
@@ -542,9 +543,14 @@ export function GroupVoteForm({
                   你已经在这个活动中投过票。
                 </div>
               ) : contest.candidates.length === 0 ? (
-                <div className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFF8E8]/70 p-4 text-sm text-muted-foreground">
-                  当前活动暂无候选项，暂时不能提交这一项投票。
-                </div>
+                <MascotEmptyState
+                  kind="emptyCandidates"
+                  title="当前活动暂无候选项"
+                  compact
+                  imageClassName="h-20 w-20 sm:h-24 sm:w-24"
+                >
+                  暂时不能提交这一项投票。
+                </MascotEmptyState>
               ) : contest.vote_type === "single" ? (
                 <RadioGroup
                   value={selection.candidateId}

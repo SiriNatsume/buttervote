@@ -11,6 +11,7 @@ import {
 import { CandidateCard } from "@/components/candidate-card";
 import { Countdown } from "@/components/countdown";
 import { ExistingNominationsList } from "@/components/existing-nominations-list";
+import { MascotEmptyState } from "@/components/mascot";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -379,9 +380,9 @@ export default async function ContestDetailPage({
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          当前活动暂无候选项。请在提名或后台添加候选项后再投票。
-        </div>
+        <MascotEmptyState kind="emptyCandidates" title="当前活动暂无候选项">
+          请在提名或后台添加候选项后再投票。
+        </MascotEmptyState>
       )}
     </div>
   );

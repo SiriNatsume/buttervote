@@ -6,6 +6,7 @@ import {
 } from "@/components/contest-calling-auto-refresh";
 import { ContestCallingAdminPanel } from "@/components/contest-calling-admin-panel";
 import { ContestCallingStage } from "@/components/contest-calling-stage";
+import { MascotEmptyState } from "@/components/mascot";
 import { ResultList } from "@/components/result-list";
 import { TournamentDrawSummaryCard } from "@/components/tournament-draw-summary-card";
 import { Heart } from "lucide-react";
@@ -20,7 +21,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 import { fetchAllRows } from "@/lib/supabase-pagination";
-import { normalizeContestCallingEvent } from "@/lib/contest-calling";
+import {
+  normalizeContestCallingEvent,
+  withContestCallingPhaseProgress,
+} from "@/lib/contest-calling";
 import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
@@ -128,9 +132,12 @@ export default async function ResultsPage({
           .eq("sequence", callingCurrentStep)
           .maybeSingle()
       : { data: null };
-  const currentCallingEvent = callingEventRow
-    ? normalizeContestCallingEvent(callingEventRow as ContestCallingEvent)
-    : null;
+  const currentCallingEvent = withContestCallingPhaseProgress(
+    callingEventRow
+      ? normalizeContestCallingEvent(callingEventRow as ContestCallingEvent)
+      : null,
+    callingSession?.metadata,
+  );
   const callingIsPublicProgress =
     !isAdmin &&
     callingSession !== null &&
@@ -388,9 +395,9 @@ export default async function ResultsPage({
           />
         </div>
       ) : !canDisplayFullResults ? (
-        <div className="butter-panel p-8 text-muted-foreground">
-          当前活动结果暂未公开。公开后你可以在这里查看完整结果。
-        </div>
+        <MascotEmptyState kind="restrictedAccess" title="当前活动结果暂未公开">
+          公开后你可以在这里查看完整结果。
+        </MascotEmptyState>
       ) : (
         <div className="space-y-6">
           {callingSession ? (
@@ -472,9 +479,9 @@ export default async function ResultsPage({
               scoreLabel={shouldHideLoveWeight ? "实时总分" : "总分"}
             />
           ) : (
-            <div className="rounded-2xl border p-8 text-muted-foreground">
-              暂无候选项或投票。候选项和有效投票产生后会显示结果。
-            </div>
+            <MascotEmptyState kind="championCelebration" title="暂无候选项或投票">
+              候选项和有效投票产生后会显示结果。
+            </MascotEmptyState>
           )}
 
           {isAdmin && adminVoteRows.length > 0 ? (

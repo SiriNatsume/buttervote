@@ -1,9 +1,16 @@
+import { MascotFigure } from "@/components/mascot";
+
 export function SiteFooter() {
   const currentYear = new Date().getFullYear();
   const yearText = currentYear > 2026 ? `2026-${currentYear}` : "2026";
 
   return (
     <footer className="mx-auto mt-12 w-full max-w-6xl border-t border-[#EED8AA]/70 px-4 py-8 text-center text-sm leading-7 text-muted-foreground sm:px-6">
+      <MascotFigure
+        kind="avatarIcon"
+        decorative
+        className="mx-auto mb-3 h-14 w-14 opacity-95"
+      />
       <p>
         © {yearText}{" "}
         <a

@@ -7,6 +7,7 @@ import type {
 } from "@/lib/tournament-bracket";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { MascotEmptyState } from "@/components/mascot";
 import { TournamentBracketShareButton } from "@/components/tournament-bracket-share-button";
 
 function ParticipantRow({
@@ -421,7 +422,14 @@ export function TournamentBracket({
   bracket: TournamentBracketData;
 }) {
   if (bracket.rounds.length === 0) {
-    return null;
+    return (
+      <MascotEmptyState
+        kind="bracketNotReady"
+        title={`${bracket.tournament.name} 的赛程图还没准备好`}
+      >
+        等待赛事抽签或上一轮结果生成后，对阵图会显示在这里。
+      </MascotEmptyState>
+    );
   }
 
   const matches = matchByRoundSlot(bracket);

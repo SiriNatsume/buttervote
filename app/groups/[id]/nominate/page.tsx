@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ImageIcon, LogIn, Send } from "lucide-react";
 import { StatusBadge } from "@/components/contest-badges";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
+import { MascotEmptyState } from "@/components/mascot";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -230,9 +231,9 @@ export default async function GroupNominatePage({
           })}
         </div>
       ) : (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          当前活动组暂无可提名活动。可能尚未进入提名阶段，或你的提名数量已达上限。
-        </div>
+        <MascotEmptyState kind="emptyCandidates" title="当前活动组暂无可提名活动">
+          可能尚未进入提名阶段，或你的提名数量已达上限。
+        </MascotEmptyState>
       )}
     </div>
   );
