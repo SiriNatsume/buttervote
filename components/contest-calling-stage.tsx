@@ -1,7 +1,6 @@
-﻿import Link from "next/link";
-import { Heart, ImageIcon, Megaphone, Share2 } from "lucide-react";
+import { Heart, ImageIcon, Megaphone } from "lucide-react";
+import { ContestCallingShareButton } from "@/components/contest-calling-share-button";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getPublicImageUrl } from "@/lib/image/image-url";
@@ -76,10 +75,12 @@ function ScoreRows({ scores }: { scores: ContestCallingScoreSnapshot[] }) {
 
 export function ContestCallingStage({
   contestId,
+  contestTitle,
   session,
   event,
 }: {
   contestId: string;
+  contestTitle: string;
   session: CallingSessionView;
   event: ContestCallingEventPayload | null;
 }) {
@@ -179,12 +180,11 @@ export function ContestCallingStage({
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#EED8AA]/70 bg-[#FFFCF4]/80 p-4 text-sm text-muted-foreground">
           <span>{footerText}</span>
-          <Button asChild variant="outline" size="sm">
-            <Link href={shareUrl} target="_blank">
-              <Share2 className="size-4" />
-              分享当前图
-            </Link>
-          </Button>
+          <ContestCallingShareButton
+            contestTitle={contestTitle}
+            imageUrl={shareUrl}
+            step={currentStep}
+          />
         </div>
       </CardContent>
     </Card>
