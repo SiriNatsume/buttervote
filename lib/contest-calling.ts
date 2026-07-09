@@ -76,9 +76,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function shouldPauseAutoCallingAtPhaseBoundary(
   currentPhase: ContestCallingPhase | null | undefined,
   nextPhase: ContestCallingPhase | null | undefined,
+  isAutoAdvance = true,
 ) {
-  return currentPhase === "base" && nextPhase === "love_bonus";
+  return isAutoAdvance && currentPhase === "base" && nextPhase === "love_bonus";
 }
+
+export type ContestCallingPhaseProgress = {
+  phase: ContestCallingPhase;
+  phaseStep: number;
+  phaseTotal: number;
+};
 
 function hashSeed(seed: string) {
   let hash = 2166136261;
@@ -315,6 +322,40 @@ function readMetadataNumber(metadata: unknown, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+export function getContestCallingPhaseProgress(
+  sessionMetadata: Json | null | undefined,
+  currentStep: number,
+): ContestCallingPhaseProgress | null {
+  if (!Number.isFinite(currentStep) || currentStep <= 0) {
+    return null;
+  }
+
+  const baseEventCount = readMetadataNumber(sessionMetadata, "baseEventCount");
+  const loveBonusEventCount = readMetadataNumber(sessionMetadata, "loveBonusEventCount");
+
+  if (baseEventCount && currentStep <= baseEventCount) {
+    return {
+      phase: "base",
+      phaseStep: currentStep,
+      phaseTotal: baseEventCount,
+    };
+  }
+
+  if (
+    baseEventCount &&
+    loveBonusEventCount &&
+    currentStep <= baseEventCount + loveBonusEventCount
+  ) {
+    return {
+      phase: "love_bonus",
+      phaseStep: currentStep - baseEventCount,
+      phaseTotal: loveBonusEventCount,
+    };
+  }
+
+  return null;
+}
+
 export function withContestCallingPhaseProgress(
   event: ContestCallingEventPayload | null,
   sessionMetadata: Json | null | undefined,
@@ -331,15 +372,9 @@ export function withContestCallingPhaseProgress(
     return event;
   }
 
-  const baseEventCount = readMetadataNumber(sessionMetadata, "baseEventCount");
-  const loveBonusEventCount = readMetadataNumber(sessionMetadata, "loveBonusEventCount");
-  const phaseTotal = event.phase === "base" ? baseEventCount : loveBonusEventCount;
-  const phaseStep =
-    event.phase === "base"
-      ? event.sequence
-      : event.sequence - (baseEventCount ?? 0);
+  const phaseProgress = getContestCallingPhaseProgress(sessionMetadata, event.sequence);
 
-  if (!phaseTotal || phaseStep <= 0 || phaseStep > phaseTotal) {
+  if (!phaseProgress || phaseProgress.phase !== event.phase) {
     return event;
   }
 
@@ -347,8 +382,8 @@ export function withContestCallingPhaseProgress(
     ...event,
     metadata: {
       ...event.metadata,
-      phaseStep,
-      phaseTotal,
+      phaseStep: phaseProgress.phaseStep,
+      phaseTotal: phaseProgress.phaseTotal,
     },
   };
 }

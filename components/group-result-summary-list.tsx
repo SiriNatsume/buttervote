@@ -17,7 +17,13 @@ import { statusLabel, voteTypeLabel } from "@/lib/contest-rules";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { formatDateTime } from "@/lib/time";
 import type { TallyResult } from "@/lib/tally";
-import type { Contest, ContestCallingStatus, ContestStatus, VoteType } from "@/lib/types";
+import type {
+  Contest,
+  ContestCallingPhase,
+  ContestCallingStatus,
+  ContestStatus,
+  VoteType,
+} from "@/lib/types";
 
 type ResultSummaryContest = Pick<
   Contest,
@@ -33,6 +39,9 @@ export type GroupContestResultSummary = {
     status: ContestCallingStatus;
     currentStep: number;
     totalSteps: number;
+    phase: ContestCallingPhase | null;
+    phaseStep: number | null;
+    phaseTotal: number | null;
   } | null;
 };
 
@@ -121,6 +130,14 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
           {filteredSummaries.map(({ contest, topResults, calling }) => {
             const callingInProgress =
               calling?.status === "active" || calling?.status === "paused";
+            const lovePhaseProgress =
+              calling?.phase === "love_bonus" &&
+              typeof calling.phaseStep === "number" &&
+              typeof calling.phaseTotal === "number" &&
+              calling.phaseStep > 0 &&
+              calling.phaseTotal > 0
+                ? "真爱票第 " + calling.phaseStep + " 张 / 共 " + calling.phaseTotal + " 张"
+                : null;
 
             return (
             <Card
@@ -134,7 +151,7 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
                   {callingInProgress ? (
                     <div className="inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full border border-[#F0D08A] bg-[#FFF3D0] px-2.5 py-0.5 text-xs font-semibold text-[#6A3E21]">
                       <Megaphone className="mr-1 size-3" />
-                      唱票中
+                      {lovePhaseProgress ?? "唱票中"}
                     </div>
                   ) : null}
                 </div>
@@ -155,7 +172,9 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
                   <div className="rounded-2xl border border-[#F0D08A] bg-[#FFF8E8] p-4 text-sm leading-6 text-[#6A3E21]">
                     <div className="font-medium">该活动正在唱票</div>
                     <div className="mt-1 text-muted-foreground">
-                      当前第 {calling?.currentStep ?? 0} 张 / 共 {calling?.totalSteps ?? 0} 张。完整结果会在唱票完成后显示。
+                      当前第 {calling?.currentStep ?? 0} 张 / 共 {calling?.totalSteps ?? 0} 张。
+                      {lovePhaseProgress ? lovePhaseProgress + "。" : null}
+                      完整结果会在唱票完成后显示。
                     </div>
                   </div>
                 ) : topResults.length > 0 ? (

@@ -300,7 +300,9 @@ export async function controlContestCallingSessionAction(
     case "next": {
       const nextStep = Math.min(totalSteps, currentStep + 1);
 
-      if (parsed.data.source === "auto" && currentStep > 0 && nextStep > currentStep) {
+      const isAutoAdvance = parsed.data.source === "auto" || session.play_mode === "auto";
+
+      if (isAutoAdvance && currentStep > 0 && nextStep > currentStep) {
         const { data: boundaryEvents, error: boundaryError } = await supabase
           .from("contest_calling_events")
           .select("sequence,phase")
@@ -318,7 +320,7 @@ export async function controlContestCallingSessionAction(
           (event) => Number(event.sequence) === nextStep,
         )?.phase;
 
-        if (shouldPauseAutoCallingAtPhaseBoundary(currentPhase, nextPhase)) {
+        if (shouldPauseAutoCallingAtPhaseBoundary(currentPhase, nextPhase, isAutoAdvance)) {
           update.current_step = currentStep;
           update.status = "paused";
           update.play_mode = "manual";

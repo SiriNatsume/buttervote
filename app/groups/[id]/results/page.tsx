@@ -11,6 +11,7 @@ import {
   type GroupContestResultSummary,
 } from "@/components/group-result-summary-list";
 import { canViewResults } from "@/lib/contest-rules";
+import { getContestCallingPhaseProgress } from "@/lib/contest-calling";
 import { getCurrentProfile } from "@/lib/auth";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
@@ -110,6 +111,15 @@ export default async function GroupResultsPage({
       callingSessionByContest.set(session.contest_id, session);
     }
   }
+  const callingPhaseProgressByContest = new Map(
+    Array.from(callingSessionByContest.values()).flatMap((session) => {
+      const progress = getContestCallingPhaseProgress(
+        session.metadata,
+        Math.max(0, Number(session.current_step) || 0),
+      );
+      return progress ? [[session.contest_id, progress] as const] : [];
+    }),
+  );
 
   const visibleContests = (contests ?? []).filter((contest) => {
     if (canViewResults(contest, profile)) {
@@ -217,6 +227,9 @@ export default async function GroupResultsPage({
         !isAdmin &&
         (callingSession?.status === "active" || callingSession?.status === "paused");
       const callingCompleted = callingSession?.status === "completed";
+      const callingPhaseProgress = callingSession
+        ? (callingPhaseProgressByContest.get(contest.id) ?? null)
+        : null;
       const shouldHideLoveWeight = !isAdmin && contest.status !== "published" && !callingCompleted;
       const results = tallyVotes({
         voteType: contest.vote_type,
@@ -243,6 +256,9 @@ export default async function GroupResultsPage({
               status: callingSession.status,
               currentStep: callingSession.current_step,
               totalSteps: callingSession.total_steps,
+              phase: callingPhaseProgress?.phase ?? null,
+              phaseStep: callingPhaseProgress?.phaseStep ?? null,
+              phaseTotal: callingPhaseProgress?.phaseTotal ?? null,
             }
           : null,
       };

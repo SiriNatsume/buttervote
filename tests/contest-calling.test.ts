@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   buildContestCallingEvents,
+  getContestCallingPhaseProgress,
   normalizeContestCallingEvent,
   shouldPauseAutoCallingAtPhaseBoundary,
   withContestCallingPhaseProgress,
@@ -8,8 +9,19 @@ import {
 import type { Candidate, Vote } from "../lib/types.ts";
 
 assert.equal(shouldPauseAutoCallingAtPhaseBoundary("base", "love_bonus"), true);
+assert.equal(shouldPauseAutoCallingAtPhaseBoundary("base", "love_bonus", false), false);
 assert.equal(shouldPauseAutoCallingAtPhaseBoundary("base", "base"), false);
 assert.equal(shouldPauseAutoCallingAtPhaseBoundary("love_bonus", "love_bonus"), false);
+assert.deepEqual(getContestCallingPhaseProgress({ baseEventCount: 2, loveBonusEventCount: 3 }, 2), {
+  phase: "base",
+  phaseStep: 2,
+  phaseTotal: 2,
+});
+assert.deepEqual(getContestCallingPhaseProgress({ baseEventCount: 2, loveBonusEventCount: 3 }, 3), {
+  phase: "love_bonus",
+  phaseStep: 1,
+  phaseTotal: 3,
+});
 
 const baseCandidate = {
   contest_id: "contest",
