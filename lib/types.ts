@@ -33,6 +33,14 @@ export type TournamentStageStatus =
   | "voting"
   | "closed"
   | "published";
+export type ContestCallingStatus =
+  | "draft"
+  | "active"
+  | "paused"
+  | "completed"
+  | "archived";
+export type ContestCallingPlayMode = "manual" | "auto";
+export type ContestCallingPhase = "base" | "love_bonus";
 export type TournamentEntryStatus =
   | "screening"
   | "preliminary"
@@ -301,6 +309,38 @@ export type TournamentMatch = {
   metadata: Json;
   created_at: string;
   updated_at: string;
+} & Record<string, unknown>;
+
+export type ContestCallingSession = {
+  id: string;
+  contest_id: string;
+  status: ContestCallingStatus;
+  current_step: number;
+  total_steps: number;
+  play_mode: ContestCallingPlayMode;
+  auto_interval_seconds: number;
+  seed: string;
+  metadata: Json;
+  created_by: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type ContestCallingEvent = {
+  id: string;
+  session_id: string;
+  contest_id: string;
+  sequence: number;
+  phase: ContestCallingPhase;
+  candidate_id: string | null;
+  delta_score: number;
+  candidate_snapshot: Json;
+  scores: Json;
+  metadata: Json;
+  created_at: string;
 } & Record<string, unknown>;
 
 type Table<
@@ -637,6 +677,44 @@ type Tables = {
       updated_at?: string;
     },
     Partial<Omit<TournamentMatch, "id" | "created_at">>
+  >;
+  contest_calling_sessions: Table<
+    ContestCallingSession,
+    {
+      id?: string;
+      contest_id: string;
+      status?: ContestCallingStatus;
+      current_step?: number;
+      total_steps?: number;
+      play_mode?: ContestCallingPlayMode;
+      auto_interval_seconds?: number;
+      seed: string;
+      metadata?: Json;
+      created_by?: string | null;
+      started_at?: string | null;
+      completed_at?: string | null;
+      archived_at?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<ContestCallingSession, "id" | "created_at">>
+  >;
+  contest_calling_events: Table<
+    ContestCallingEvent,
+    {
+      id?: string;
+      session_id: string;
+      contest_id: string;
+      sequence: number;
+      phase: ContestCallingPhase;
+      candidate_id?: string | null;
+      delta_score?: number;
+      candidate_snapshot?: Json;
+      scores?: Json;
+      metadata?: Json;
+      created_at?: string;
+    },
+    Partial<Omit<ContestCallingEvent, "id" | "created_at">>
   >;
 };
 

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ImageIcon } from "lucide-react";
+import {
+  ContestCallingAutoRefresh,
+  type ContestCallingRefreshWatch,
+} from "@/components/contest-calling-auto-refresh";
 import { Button } from "@/components/ui/button";
 import {
   GroupResultSummaryList,
@@ -14,7 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
-import type { Candidate, Contest, LoveVoteAllocation, Vote } from "@/lib/types";
+import type { Candidate, Contest, ContestCallingSession, LoveVoteAllocation, Vote } from "@/lib/types";
 
 type ResultCandidate = Pick<
   Candidate,
@@ -75,11 +79,69 @@ export default async function GroupResultsPage({
   }
 
   const isAdmin = profile?.role === "admin";
-  const visibleContests = (contests ?? []).filter((contest) =>
-    canViewResults(contest, profile),
-  );
+  const contestIds = (contests ?? []).map((contest) => contest.id);
+  let callingSessionQuery = dataClient
+    .from("contest_calling_sessions")
+    .select(
+      "id,contest_id,status,current_step,total_steps,play_mode,auto_interval_seconds,seed,metadata,created_by,started_at,completed_at,archived_at,created_at,updated_at",
+    )
+    .is("archived_at", null);
+
+  if (contestIds.length > 0) {
+    callingSessionQuery = callingSessionQuery.in("contest_id", contestIds);
+  }
+
+  if (!isAdmin) {
+    callingSessionQuery = callingSessionQuery.in("status", [
+      "active",
+      "paused",
+      "completed",
+    ]);
+  }
+
+  const { data: callingSessionRows } =
+    contestIds.length > 0
+      ? await callingSessionQuery.order("created_at", { ascending: false })
+      : { data: [] };
+  const callingSessionByContest = new Map<string, ContestCallingSession>();
+
+  for (const session of (callingSessionRows ?? []) as ContestCallingSession[]) {
+    if (!callingSessionByContest.has(session.contest_id)) {
+      callingSessionByContest.set(session.contest_id, session);
+    }
+  }
+
+  const visibleContests = (contests ?? []).filter((contest) => {
+    if (canViewResults(contest, profile)) {
+      return true;
+    }
+    const callingSession = callingSessionByContest.get(contest.id);
+    return (
+      callingSession?.status === "active" ||
+      callingSession?.status === "paused" ||
+      callingSession?.status === "completed"
+    );
+  });
   const visibleContestIds = visibleContests.map((contest) => contest.id);
-  const candidateClient = isAdmin ? dataClient : supabase;
+  const callingAutoRefreshWatches: ContestCallingRefreshWatch[] = !isAdmin
+    ? visibleContests.flatMap((contest) => {
+        const session = callingSessionByContest.get(contest.id);
+        if (!session || (session.status !== "active" && session.status !== "paused")) {
+          return [];
+        }
+        return [
+          {
+            contestId: contest.id,
+            sessionId: session.id,
+            status: session.status,
+            currentStep: Math.max(0, Number(session.current_step) || 0),
+            totalSteps: Math.max(0, Number(session.total_steps) || 0),
+            updatedAt: session.updated_at ?? null,
+          },
+        ];
+      })
+    : [];
+  const candidateClient = dataClient;
   const { data: candidateRows } =
     visibleContestIds.length > 0
       ? await candidateClient
@@ -150,7 +212,12 @@ export default async function GroupResultsPage({
 
   const summaries: GroupContestResultSummary[] = visibleContests
     .map((contest) => {
-      const shouldHideLoveWeight = !isAdmin && contest.status !== "published";
+      const callingSession = callingSessionByContest.get(contest.id) ?? null;
+      const callingInProgress =
+        !isAdmin &&
+        (callingSession?.status === "active" || callingSession?.status === "paused");
+      const callingCompleted = callingSession?.status === "completed";
+      const shouldHideLoveWeight = !isAdmin && contest.status !== "published" && !callingCompleted;
       const results = tallyVotes({
         voteType: contest.vote_type,
         candidates: candidatesByContest.get(contest.id) ?? [],
@@ -170,7 +237,14 @@ export default async function GroupResultsPage({
           vote_type: contest.vote_type,
           resultPublishedAt,
         },
-        topResults: results.slice(0, 4),
+        topResults: callingInProgress ? [] : results.slice(0, 4),
+        calling: callingSession
+          ? {
+              status: callingSession.status,
+              currentStep: callingSession.current_step,
+              totalSteps: callingSession.total_steps,
+            }
+          : null,
       };
     })
     .sort((a, b) => {
@@ -187,6 +261,7 @@ export default async function GroupResultsPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+      <ContestCallingAutoRefresh watches={callingAutoRefreshWatches} />
       <div className="mb-8 overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFFCF4]/90 shadow-sm">
         <div className="aspect-video bg-muted">
           {coverUrl ? (
