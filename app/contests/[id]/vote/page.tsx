@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Countdown } from "@/components/countdown";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
 import { LoveVoteSupplementPanel } from "@/components/love-vote-supplement-panel";
+import { MascotEmptyState } from "@/components/mascot";
 import { VoteForm } from "@/components/vote-form";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
@@ -117,20 +118,22 @@ export default async function VotePage({
 
     return (
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
-        <div className="butter-panel p-8">
-          <h1 className="text-2xl font-semibold tracking-normal">已投票</h1>
-          <p className="mt-3 leading-7 text-muted-foreground">
-            你已经参与过该活动投票，不能重复提交普通投票。
-          </p>
+        <MascotEmptyState
+          kind="voteSuccess"
+          title="已投票"
+          actions={
+            <Button asChild>
+              <Link href={`/contests/${contest.id}`}>返回活动详情</Link>
+            </Button>
+          }
+        >
+          <p>你已经参与过该活动投票，不能重复提交普通投票。</p>
           {query.error ? (
             <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {query.error}
             </div>
           ) : null}
-          <Button asChild className="mt-6">
-            <Link href={`/contests/${contest.id}`}>返回活动详情</Link>
-          </Button>
-        </div>
+        </MascotEmptyState>
 
         {loveVoteInfo ? (
           <LoveVoteSupplementPanel

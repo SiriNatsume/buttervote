@@ -1,6 +1,6 @@
-import Image from "next/image";
 import { ContestCard } from "@/components/contest-card";
 import { HomepageHeroPanel } from "@/components/homepage-hero-panel";
+import { MascotEmptyState, MascotFigure } from "@/components/mascot";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
@@ -8,7 +8,6 @@ import { createClient } from "@/lib/supabase/server";
 import { getTournamentBracket } from "@/lib/tournament-bracket";
 import type { TournamentBracketData } from "@/lib/tournament-bracket";
 import type { HomepageBracketValue, HomepageHeroValue } from "@/lib/types";
-import logo from "@/img/网站logo.png";
 
 type Hero = {
   title: string;
@@ -149,12 +148,11 @@ export default async function HomePage() {
                 className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain"
               />
             ) : (
-              <div className="butter-placeholder flex min-h-[220px] w-full items-center justify-center p-8 sm:min-h-[420px]">
-                <Image
-                  src={logo}
-                  alt="Butter Vote logo"
-                  className="w-[min(72%,520px)] object-contain opacity-90"
-                  priority
+              <div className="butter-placeholder flex min-h-[260px] w-full items-end justify-center px-6 pt-8 sm:min-h-[420px] sm:px-10 sm:pt-10">
+                <MascotFigure
+                  kind="homepageWelcome"
+                  eager
+                  className="h-[240px] w-auto sm:h-[390px]"
                 />
               </div>
             )}
@@ -191,9 +189,9 @@ export default async function HomePage() {
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          暂无公开活动。活动发布后会显示在这里，请稍后再来查看。
-        </div>
+        <MascotEmptyState kind="emptyContests" title="暂无公开活动">
+          活动发布后会显示在这里，请稍后再来查看。
+        </MascotEmptyState>
       )}
     </div>
   );

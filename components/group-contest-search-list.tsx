@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { ContestCard, type ContestCardContest } from "@/components/contest-card";
+import { MascotEmptyState } from "@/components/mascot";
 import { Input } from "@/components/ui/input";
 import { statusLabel, voteTypeLabel } from "@/lib/contest-rules";
 
@@ -59,9 +60,9 @@ export function GroupContestSearchList({ contests }: GroupContestSearchListProps
       </div>
 
       {contests.length === 0 ? (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          该活动组暂无公开活动。活动发布后会在这里展示。
-        </div>
+        <MascotEmptyState kind="emptyContests" title="该活动组暂无公开活动">
+          活动发布后会在这里展示。
+        </MascotEmptyState>
       ) : filteredContests.length > 0 ? (
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {filteredContests.map((contest) => (
@@ -69,9 +70,9 @@ export function GroupContestSearchList({ contests }: GroupContestSearchListProps
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          没有找到匹配的活动。
-        </div>
+        <MascotEmptyState kind="emptyContests" title="没有找到匹配的活动" compact>
+          试试换个关键词，或清空搜索条件。
+        </MascotEmptyState>
       )}
     </section>
   );

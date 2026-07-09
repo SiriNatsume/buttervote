@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ImageIcon, Megaphone, Search, Trophy } from "lucide-react";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
+import { MascotEmptyState } from "@/components/mascot";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -122,9 +123,9 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
       </div>
 
       {summaries.length === 0 ? (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          当前活动组暂无可查看结果。结果公开后会在这里显示。
-        </div>
+        <MascotEmptyState kind="championCelebration" title="当前活动组暂无可查看结果">
+          结果公开后会在这里显示。
+        </MascotEmptyState>
       ) : filteredSummaries.length > 0 ? (
         <div className="grid gap-5 md:grid-cols-2">
           {filteredSummaries.map(({ contest, topResults, calling }) => {
@@ -205,9 +206,12 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
-                    暂无候选项或票数。
-                  </div>
+                  <MascotEmptyState
+                    kind="emptyCandidates"
+                    title="暂无候选项或票数"
+                    compact
+                    imageClassName="h-20 w-20 sm:h-24 sm:w-24"
+                  />
                 )}
               </CardContent>
               <CardFooter className="min-w-0">
@@ -222,9 +226,9 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
           })}
         </div>
       ) : (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          没有找到匹配的活动结果。
-        </div>
+        <MascotEmptyState kind="emptyContests" title="没有找到匹配的活动结果" compact>
+          试试换个关键词，或清空搜索条件。
+        </MascotEmptyState>
       )}
     </section>
   );

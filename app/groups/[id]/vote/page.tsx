@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ImageIcon } from "lucide-react";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
+import { MascotEmptyState } from "@/components/mascot";
 import { GroupVoteForm } from "@/components/group-vote-form";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { Button } from "@/components/ui/button";
@@ -264,9 +265,9 @@ export default async function GroupVotePage({
           realtimeScoresByContestId={realtimeScoresByContestId}
         />
       ) : (
-        <div className="rounded-2xl border p-8 text-muted-foreground">
-          当前活动组暂无可投票活动。请返回活动组查看提名或结果阶段。
-        </div>
+        <MascotEmptyState kind="emptyContests" title="当前活动组暂无可投票活动">
+          请返回活动组查看提名或结果阶段。
+        </MascotEmptyState>
       )}
     </div>
   );

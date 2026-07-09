@@ -10,6 +10,7 @@ import { getPublicImageUrl } from "@/lib/image/image-url";
 import type { Candidate, Contest } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { LoveVoteConfirmDialog } from "@/components/love-vote-confirm-dialog";
+import { MascotEmptyState } from "@/components/mascot";
 import { LoadingButton } from "@/components/loading-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -359,9 +360,14 @@ export function VoteForm({
         ) : null}
 
         {candidates.length === 0 ? (
-          <div className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFF8E8]/70 p-4 text-sm text-muted-foreground">
-            当前活动暂无候选项，暂时不能投票。请返回活动详情稍后再试。
-          </div>
+          <MascotEmptyState
+            kind="emptyCandidates"
+            title="当前活动暂无候选项"
+            compact
+            imageClassName="h-20 w-20 sm:h-24 sm:w-24"
+          >
+            暂时不能投票，请返回活动详情稍后再试。
+          </MascotEmptyState>
         ) : null}
 
         {contest.vote_type === "single" ? (
