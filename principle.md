@@ -211,6 +211,15 @@ export async function saveThingAction(formData: FormData): Promise<ActionResult>
 - Supabase 查询错误不能被无声吞掉；管理后台应显示可理解错误或抛出明确错误。
 - Cron 和 fallback 路径需要可观测日志，但不能打印 secret。
 
+## 本地 Supabase 原则
+
+- 贡献者默认使用 `npm run setup:local` 和 `npm run dev:local`，不得依赖或共享生产 `SUPABASE_SERVICE_ROLE_KEY`。
+- 本地数据库生成物、key 和应用环境只能写入已忽略的 `.local/`，不得覆盖维护者已有的 `.env.local`。
+- 本地脚本只能接受 `localhost`、`127.0.0.1` 或 `::1`，重置命令必须固定 `--local`，不得提供 `--linked` 或任意远端数据库 URL 入口。
+- `supabase/schema.sql` 仅在隔离 workdir 中作为本地基础 migration；不得直接加入生产 migration 队列或在既有生产库重放。
+- 新 migration 必须通过项目封装的 Supabase CLI 命令创建，并验证从空本地数据库执行基础 schema、全部 migrations、seed 后能够完整启动。
+- 本地测试账号和固定密码只能用于本机 Docker 环境，不能复用到测试、预发布或生产环境。
+
 ## 上线配置原则
 
 上线前必须确认：

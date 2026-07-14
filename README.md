@@ -14,13 +14,34 @@
 
 ## 本地运行
 
+本项目提供与生产环境完全隔离的本地 Supabase。需要 Node.js 20+、Docker Desktop：
+
 ```bash
 npm install
-cp .env.example .env.local
-npm run dev
+npm run setup:local
+npm run dev:local
 ```
 
-打开 `http://localhost:3000`。
+打开 `http://localhost:3000`。`setup:local` 会从 `supabase/schema.sql` 和全部 migrations 重建纯本地数据库，创建示例数据与测试账号，并把本地密钥写入被 Git 忽略的 `.local/`。`dev:local` 会优先注入这些本地变量，不修改现有 `.env.local`，并拒绝连接非回环地址的 Supabase。
+
+本地测试账号：
+
+| 角色 | 邮箱 | 密码 |
+| --- | --- | --- |
+| 管理员 | `admin@buttervote.local` | `ButterVoteAdmin123!` |
+| 普通用户 | `user@buttervote.local` | `ButterVoteUser123!` |
+
+Supabase Studio 位于 `http://127.0.0.1:54323`，测试邮件界面位于 `http://127.0.0.1:54324`。常用验证命令：
+
+```bash
+npm test
+npm run typecheck
+npm run build:local
+```
+
+开发结束后可以运行 `npm run supabase:local:stop` 停止本地容器；下次使用 `npm run supabase:local:start` 恢复现有本地数据。
+
+完整命令、测试账号和数据库变更流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。原有 `npm run dev`、`npm run build` 和部署命令保持不变，供已配置托管环境的维护者使用。
 
 ## 环境变量
 
@@ -37,45 +58,20 @@ USER_GROUP_MEMBERSHIP_DAYS=7
 NEXT_PUBLIC_SITE_URL=
 ```
 
-`CRON_SECRET` 用于保护定时任务接口。`BOT_API_SECRET` 用于保护 QQ bot 生成登录链接接口。`NEXT_PUBLIC_SITE_URL` 用于拼接完整登录链接，例如 `https://example.com`。`USER_GROUP_MEMBERSHIP_DAYS` 控制 QQ ticket 登录后用户组身份续期天数，默认 7 天。`SUPABASE_SERVICE_ROLE_KEY` 只在服务端使用，不要暴露给前端。
+这些变量用于托管或自定义环境；本地贡献流程会自动生成独立值。`CRON_SECRET` 用于保护定时任务接口。`BOT_API_SECRET` 用于保护 QQ bot 生成登录链接接口。`NEXT_PUBLIC_SITE_URL` 用于拼接完整登录链接，例如 `https://example.com`。`USER_GROUP_MEMBERSHIP_DAYS` 控制 QQ ticket 登录后用户组身份续期天数，默认 7 天。`SUPABASE_SERVICE_ROLE_KEY` 只在服务端使用，不要暴露给前端或提交到 Git。
 
 ## Supabase 初始化和迁移
 
-新项目依次执行：
+新数据库必须先应用 `supabase/schema.sql`，再按文件名顺序应用 `supabase/migrations/*.sql`。本地工具会在 `.local/` 生成隔离 workdir，并自动完成这个顺序；基础 schema 不会被加入生产 migration 目录，也不会被线上部署误执行。
 
-```sql
--- Supabase SQL Editor
--- 1. supabase/schema.sql
--- 2. supabase/migrations/202605110001_add_vote_images.sql
--- 3. supabase/migrations/202605110002_groups_love_votes_homepage.sql
--- 4. supabase/migrations/202605120001_operation_enhancements.sql
--- 5. supabase/migrations/202605120002_fix_scheduled_transition_execution.sql
--- 6. supabase/migrations/202605120003_qq_bot_login.sql
--- 7. supabase/migrations/202605120004_nomination_visibility_and_description_limit.sql
--- 8. supabase/migrations/202605120005_delete_group_set_null.sql
--- 9. supabase/migrations/202605140001_allow_past_scheduled_transition_run_at.sql
--- 10. supabase/migrations/202605140002_add_contest_love_vote_enabled.sql
--- 11. supabase/migrations/202605140003_user_group_access_control.sql
--- 12. supabase/migrations/202605140004_launch_hardening_indexes_and_atomic_votes.sql
--- 13. 可选：supabase/seed.sql
+新增数据库变更使用：
+
+```bash
+npm run migration:new -- descriptive_change
+npm run supabase:local:reset
 ```
 
-已有项目只需继续执行最新 migration：
-
-```sql
-supabase/migrations/202605120001_operation_enhancements.sql
-supabase/migrations/202605120002_fix_scheduled_transition_execution.sql
-supabase/migrations/202605120003_qq_bot_login.sql
-supabase/migrations/202605120004_nomination_visibility_and_description_limit.sql
-supabase/migrations/202605120005_delete_group_set_null.sql
-supabase/migrations/202605140001_allow_past_scheduled_transition_run_at.sql
-supabase/migrations/202605140002_add_contest_love_vote_enabled.sql
-supabase/migrations/202605140003_user_group_access_control.sql
-supabase/migrations/202605140004_launch_hardening_indexes_and_atomic_votes.sql
-```
-
-这些迁移新增活动运营设置、提名者信息、候选项软删除、定时状态转换表、QQ bot 登录表、用户组访问控制、结果可见性 RPC 和相关 RLS policy。
-`202605140004_launch_hardening_indexes_and_atomic_votes.sql` 额外补充上线索引、对齐 `vote-images` bucket 限制，并新增仅授权给 `service_role` 的原子投票 / 组内投票 / 提名审核 RPC。浏览器端不应直接调用这些 RPC，所有写入仍必须走 Server Action 或 Route Handler。
+现有生产项目只应用经过审查的待执行 migration。不要将 `setup:local`、`supabase:local:reset` 或任何 `--linked` reset 用于生产项目。浏览器端不得直接调用 service-role-only RPC，所有写入仍必须走 Server Action 或 Route Handler。
 
 ## QQ Bot 一次性链接登录
 
