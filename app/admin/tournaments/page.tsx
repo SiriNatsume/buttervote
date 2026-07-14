@@ -588,7 +588,12 @@ export default async function AdminTournamentsPage() {
                           <div className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
                               <Badge variant="outline">{log.kind}</Badge>
-                              <Badge variant="secondary">seed：{log.seed}</Badge>
+                              <Badge
+                                variant="secondary"
+                                className="min-w-0 max-w-full shrink whitespace-normal break-all text-left"
+                              >
+                                seed：{log.seed}
+                              </Badge>
                               <span className="text-muted-foreground">
                                 {formatDateTime(log.created_at)}
                               </span>

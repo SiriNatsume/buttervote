@@ -60,7 +60,12 @@ export function TournamentDrawSummaryCard({
                   {summary.title}
                 </div>
                 <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-xs">
-                  <Badge variant="secondary" className="min-w-0 shrink whitespace-normal break-all text-left">seed：{summary.seed}</Badge>
+                  <Badge
+                    variant="secondary"
+                    className="min-w-0 max-w-full shrink whitespace-normal break-all text-left"
+                  >
+                    seed：{summary.seed}
+                  </Badge>
                   <Badge variant="outline" className="min-w-0 shrink whitespace-normal text-left">抽签方法：{summary.methodLabel}</Badge>
                   <Badge variant="outline" className="min-w-0 shrink whitespace-normal text-left">
                     生成时间：{formatDateTime(summary.createdAt)}
