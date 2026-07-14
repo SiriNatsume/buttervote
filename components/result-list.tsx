@@ -1,47 +1,66 @@
 import { Heart, ImageIcon, Trophy } from "lucide-react";
 import { getPublicImageUrl } from "@/lib/image/image-url";
+import { buildResultScoreProgressModel } from "@/lib/result-score-progress";
 import type { TallyResult } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { Badge } from "@/components/ui/badge";
 
 function ScoreBreakdownProgress({
+  score,
   normalScore,
   loveScore,
   topScore,
+  scoreLabel,
+  showLoveBreakdown,
 }: {
+  score: number;
   normalScore: number;
   loveScore: number;
   topScore: number;
+  scoreLabel: string;
+  showLoveBreakdown: boolean;
 }) {
+  const progress = buildResultScoreProgressModel({
+    score,
+    normalScore,
+    loveScore,
+    scoreLabel,
+    showLoveBreakdown,
+  });
   const safeTopScore = Math.max(topScore, 1);
   const normalPercent = Math.min(
     100,
-    Math.max(0, (normalScore / safeTopScore) * 100),
+    Math.max(0, (progress.primaryScore / safeTopScore) * 100),
   );
   const lovePercent = Math.min(
     100 - normalPercent,
-    Math.max(0, (loveScore / safeTopScore) * 100),
+    Math.max(0, (progress.loveScore / safeTopScore) * 100),
   );
 
   return (
     <div
       className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-[#FFE7B0]"
       role="progressbar"
-      aria-label={`得分进度：普通得分 ${normalScore}，真爱票得分 ${loveScore}`}
+      aria-label={progress.ariaLabel}
       aria-valuemin={0}
       aria-valuemax={safeTopScore}
-      aria-valuenow={Math.min(safeTopScore, normalScore + loveScore)}
+      aria-valuenow={Math.min(
+        safeTopScore,
+        progress.primaryScore + progress.loveScore,
+      )}
     >
       <div
         className="h-full shrink-0 bg-[#3F7FA6] transition-[width]"
         style={{ width: `${normalPercent}%` }}
-        title={`普通得分 ${normalScore}`}
+        title={progress.primaryTitle}
       />
-      <div
-        className="h-full shrink-0 bg-[#D6405A] transition-[width]"
-        style={{ width: `${lovePercent}%` }}
-        title={`真爱票得分 ${loveScore}`}
-      />
+      {progress.loveTitle ? (
+        <div
+          className="h-full shrink-0 bg-[#D6405A] transition-[width]"
+          style={{ width: `${lovePercent}%` }}
+          title={progress.loveTitle}
+        />
+      ) : null}
     </div>
   );
 }
@@ -148,9 +167,12 @@ export function ResultList({
               </div>
             </div>
             <ScoreBreakdownProgress
+              score={result.score}
               normalScore={result.normalScore}
               loveScore={result.loveScore}
               topScore={topScore}
+              scoreLabel={scoreLabel}
+              showLoveBreakdown={showLoveBreakdown}
             />
           </div>
         );
