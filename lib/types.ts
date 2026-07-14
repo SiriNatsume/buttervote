@@ -343,6 +343,21 @@ export type ContestCallingEvent = {
   created_at: string;
 } & Record<string, unknown>;
 
+export type HallOfFameEntry = {
+  id: string;
+  contest_id: string | null;
+  event_title: string;
+  winner_name: string;
+  description: string;
+  poster_path: string;
+  poster_mime_type: "image/jpeg" | "image/png" | "image/webp";
+  poster_size: number;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
 type Table<
   Row extends Record<string, unknown>,
   Insert extends Record<string, unknown>,
@@ -364,6 +379,33 @@ type Relationship = {
 };
 
 type Tables = {
+  hall_of_fame_entries: Table<
+    HallOfFameEntry,
+    {
+      id?: string;
+      contest_id?: string | null;
+      event_title: string;
+      winner_name: string;
+      description?: string;
+      poster_path: string;
+      poster_mime_type: "image/jpeg" | "image/png" | "image/webp";
+      poster_size: number;
+      sort_order?: number;
+      created_by?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<HallOfFameEntry, "id" | "created_at">>,
+    [
+      {
+        foreignKeyName: "hall_of_fame_entries_contest_id_fkey";
+        columns: ["contest_id"];
+        isOneToOne: false;
+        referencedRelation: "contests";
+        referencedColumns: ["id"];
+      },
+    ]
+  >;
   profiles: Table<
     Profile,
     {
@@ -723,6 +765,12 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      reorder_hall_of_fame_entries: {
+        Args: {
+          p_entry_ids: string[];
+        };
+        Returns: undefined;
+      };
       get_contest_vote_payloads: {
         Args: {
           p_contest_id: string;

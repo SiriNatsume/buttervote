@@ -140,7 +140,13 @@ function ensureDockerIsRunning() {
     { capture: true, allowFailure: true },
   );
 
-  if (result.status !== 0) {
+  const serverVersion = String(result.stdout ?? "").trim();
+  const diagnostic = String(result.stderr ?? "").trim();
+  if (
+    result.status !== 0 ||
+    !serverVersion ||
+    /error response from daemon|unable to start|permission denied/i.test(diagnostic)
+  ) {
     throw new Error("Docker 尚未运行。请先启动 Docker Desktop，再重新执行此命令。");
   }
 }
