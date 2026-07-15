@@ -44,5 +44,6 @@ export type BracketImageData = {
   groupId: string;
   groupName: string;
   generatedAt: string;
+  visibilityVersion: string;
   matches: BracketImageMatch[];
 };

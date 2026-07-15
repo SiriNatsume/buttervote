@@ -19,13 +19,28 @@ function getSupabaseConnectSources() {
   }
 }
 
+function getSupabaseImageSource() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  if (!supabaseUrl) {
+    return "";
+  }
+
+  try {
+    return new URL(supabaseUrl).origin;
+  } catch {
+    return "";
+  }
+}
+
 function applySecurityHeaders(response: NextResponse) {
   const supabaseConnectSources = getSupabaseConnectSources();
+  const supabaseImageSource = getSupabaseImageSource();
   const csp = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
+    `img-src 'self' data: blob: https: ${supabaseImageSource}`.trim(),
     "font-src 'self' data:",
     `connect-src 'self' ${supabaseConnectSources}`,
     "media-src 'self' https:",

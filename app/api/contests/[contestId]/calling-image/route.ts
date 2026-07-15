@@ -68,7 +68,12 @@ export async function GET(
   }
 
   if (!isAdmin) {
-    sessionQuery = sessionQuery.in("status", ["active", "paused", "completed"]);
+    sessionQuery = sessionQuery.in("status", [
+      "draft",
+      "active",
+      "paused",
+      "completed",
+    ]);
   }
 
   const { data: sessions, error: sessionError } = await sessionQuery

@@ -130,7 +130,9 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
         <div className="grid gap-5 md:grid-cols-2">
           {filteredSummaries.map(({ contest, topResults, calling }) => {
             const callingInProgress =
-              calling?.status === "active" || calling?.status === "paused";
+              calling?.status === "draft" ||
+              calling?.status === "active" ||
+              calling?.status === "paused";
             const lovePhaseProgress =
               calling?.phase === "love_bonus" &&
               typeof calling.phaseStep === "number" &&
@@ -217,7 +219,7 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
               <CardFooter className="min-w-0">
                 <Button asChild className="w-full" variant="outline">
                   <Link href={`/contests/${contest.id}/results`}>
-                    查看完整结果
+                    {callingInProgress ? "观看唱票" : "查看完整结果"}
                   </Link>
                 </Button>
               </CardFooter>

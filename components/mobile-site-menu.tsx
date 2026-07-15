@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Home,
+  ChevronDown,
   LogIn,
   LogOut,
-  Menu,
+  Trophy,
   Settings,
   UserRound,
   UsersRound,
@@ -22,6 +22,41 @@ type MobileMenuProfile = {
   avatarUrl: string | null;
   hasRejectedNominations: boolean;
 } | null;
+
+export function MobileContentMenu() {
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  return (
+    <details
+      name="site-header-navigation"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className="relative xl:hidden"
+    >
+      <summary
+        className="flex size-9 cursor-pointer list-none items-center justify-center rounded-full text-[#6A3E21] transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden"
+        aria-label="打开内容导航"
+      >
+        <ChevronDown
+          className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </summary>
+      <div className="absolute left-0 top-full z-50 mt-3 w-48 rounded-2xl border border-[#EED8AA]/80 bg-[#FFFCF4] p-2 shadow-xl">
+        <Button asChild variant="ghost" className="w-full justify-start">
+          <Link href="/hall-of-fame" onClick={() => setOpen(false)}>
+            <Trophy className="size-4" />
+            冠军英灵殿
+          </Link>
+        </Button>
+      </div>
+    </details>
+  );
+}
 
 export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
   const [open, setOpen] = useState(false);
@@ -38,13 +73,14 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
 
   return (
     <details
+      name="site-header-navigation"
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
-      className="relative md:hidden"
+      className="relative xl:hidden"
     >
       <summary className="relative flex shrink-0 cursor-pointer list-none items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA]/80 bg-[#FFF8E8] px-3 py-2 text-sm font-medium text-[#6A3E21] shadow-sm transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
-        <Menu className="size-4" />
-        <span>菜单</span>
+        <UserRound className="size-4" />
+        <span>账户</span>
         {hasRejectedNominations ? (
           <span className="absolute -right-1 -top-1 size-2.5 rounded-full bg-red-500 ring-2 ring-[#FFFCF4]">
             <span className="sr-only">有被拒绝的提名</span>
@@ -73,12 +109,6 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
         ) : null}
 
         <div className="grid gap-2">
-          <Button asChild variant="ghost" className="justify-start">
-            <Link href="/" onClick={close}>
-              <Home className="size-4" />
-              首页
-            </Link>
-          </Button>
           {profile ? (
             <Button asChild variant="ghost" className="justify-start">
               <Link

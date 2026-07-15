@@ -10,15 +10,18 @@ import {
 } from "lucide-react";
 import { CandidateCard } from "@/components/candidate-card";
 import { Countdown } from "@/components/countdown";
-import { ExistingNominationsList } from "@/components/existing-nominations-list";
+import {
+  ExistingNominationsList,
+  type ExistingNomination,
+} from "@/components/existing-nominations-list";
 import { MascotEmptyState } from "@/components/mascot";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { canViewResults } from "@/lib/contest-rules";
 import { getCurrentProfile } from "@/lib/auth";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
+import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
@@ -37,7 +40,7 @@ export default async function ContestDetailPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,max_choices,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,archived_at",
+        "id,title,description,status,vote_type,max_choices,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,archived_at",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -63,8 +66,15 @@ export default async function ContestDetailPage({
     : { data: null };
   const imageUrl = getPublicImageUrl(contest.image_path);
   const isAdmin = profile?.role === "admin";
-  const resultsVisible = canViewResults(contest, profile);
   const dataClient = await createServerDataClient();
+  const resultVisibilityByContest = await loadContestResultVisibilityByContest(
+    isAdmin ? dataClient : supabase,
+    [contest],
+    { includeAdminOverride: isAdmin },
+  );
+  const resultVisibility = resultVisibilityByContest.get(contest.id);
+  const resultsVisible = resultVisibility?.fullResultsVisible === true;
+  const resultPageVisible = resultVisibility?.resultPageVisible === true;
   const { data: existingVote } = profile
     ? await dataClient
         .from("votes")
@@ -87,14 +97,32 @@ export default async function ContestDetailPage({
   const canShowExistingNominations =
     ["nominating", "admin_nominating", "waiting"].includes(contest.status) &&
     (isAdmin || contest.show_existing_nominations === true);
-  const { data: existingNominations } = canShowExistingNominations
-    ? await dataClient
+  let existingNominations: ExistingNomination[] = [];
+  if (canShowExistingNominations) {
+    if (isAdmin) {
+      const { data, error } = await dataClient
         .from("nominations")
         .select("id,name,description,status,nominator_display_name,created_at")
         .eq("contest_id", contest.id)
         .neq("status", "draft")
-        .order("created_at", { ascending: true })
-    : { data: [] };
+        .order("created_at", { ascending: true });
+      if (error) {
+        console.error("Failed to load admin contest nominations.", error.message);
+      } else {
+        existingNominations = data ?? [];
+      }
+    } else {
+      const { data, error } = await supabase.rpc(
+        "get_visible_contest_nominations",
+        { p_contest_id: contest.id },
+      );
+      if (error) {
+        console.error("Failed to load public contest nominations.", error.message);
+      } else {
+        existingNominations = data ?? [];
+      }
+    }
+  }
   const validVotingDeadline =
     contest.status === "voting" &&
     contest.voting_ends_at &&
@@ -210,10 +238,12 @@ export default async function ContestDetailPage({
             }
           : contest.status === "voting"
             ? null
-          : resultsVisible
+          : resultPageVisible
             ? {
                 href: `/contests/${contest.id}/results`,
-                label: "查看结果",
+                label: resultVisibility?.callingProgressVisible
+                  ? "观看唱票"
+                  : "查看结果",
                 icon: Trophy,
               }
             : null;
@@ -284,7 +314,7 @@ export default async function ContestDetailPage({
                     />
                   </p>
                 ) : null}
-                {contest.status === "voting" && contest.live_results_enabled ? (
+                {contest.status === "voting" && resultsVisible ? (
                   <p>
                     实时票数已公开，可以
                     <Link
@@ -308,7 +338,7 @@ export default async function ContestDetailPage({
                     当前未设置投票截止时间
                   </p>
                 ) : null}
-                {contest.status === "closed" && !resultsVisible ? (
+                {contest.status === "closed" && !resultPageVisible ? (
                   <p>当前活动结果暂未公开。</p>
                 ) : null}
               </div>
@@ -353,7 +383,7 @@ export default async function ContestDetailPage({
       {canShowExistingNominations ? (
         <div className="mb-8">
           <ExistingNominationsList
-            nominations={existingNominations ?? []}
+            nominations={existingNominations}
             showNominatorInfo={contest.show_nominator_info !== false}
             defaultOpen={false}
           />

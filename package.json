@@ -18,6 +18,7 @@
     "migration:new": "node ./scripts/local-supabase.mjs migration-new",
     "test": "tsx --test tests/*.test.ts tests/*.test.mjs",
     "test:local-tools": "node --test tests/local-supabase-tools.test.mjs",
+    "test:result-visibility:local": "node --env-file=.local/supabase-app.env ./scripts/verify-result-visibility.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental false",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",

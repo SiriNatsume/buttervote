@@ -81,11 +81,16 @@
 
 ## 结果可见性原则
 
-- 结果页不能向普通用户泄露未公开票数。
-- 普通用户只有在以下情况可看结果：
+- 所有公开结果入口必须调用数据库 `get_contest_result_visibility`，不得在页面、组件或导出接口中自行组合活动字段推断可见性。
+- 统一状态只有 `hidden`、`calling_progress`、`full`；存在未归档的 `draft` / `active` / `paused` 唱票时必须覆盖活动原有公开设置，进入 `calling_progress`。其中 `draft` 允许用户进入结果页等待开始，但不得读取任何完整结果或未揭晓唱票事件。
+- 普通用户只有在以下情况进入 `full`：
   - 活动 `published`。
   - 活动 `closed` 且 `closed_result_visibility = "public"`。
   - 活动 `voting` 且 `live_results_enabled = true`。
+- “唱票完成”是显式数据库状态迁移：应用通过 `complete_contest_calling_session` 在同一事务内把会话设为 `completed`、把活动设为 `published`，数据库触发器同时约束其他写入路径；单独的 `completed` 会话不能作为公开依据。
+- 公开票数和真爱票只能通过受统一状态约束的 RPC 读取，公开页面不得使用 `service_role` 直读票表。
+- 管理员覆盖默认关闭；后台读取必须显式申请覆盖，`service_role` 本身不能让公开组件自动进入 `full`。
+- 对阵图、分享图、继承候选、自动复制的提名和后续轮次都属于结果公开面；上游结果未进入 `full` 时，不得显示胜负、分数或由胜负确定的下游参赛者。
 - 管理员可查看完整结果和非 active 候选项历史。
 - 结果未公开时，页面只能显示明确中文提示，不能渲染票数、排名、真爱票统计。
 

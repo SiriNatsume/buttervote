@@ -87,6 +87,11 @@ export type ContestCallingPhaseProgress = {
   phaseTotal: number;
 };
 
+export type ContestCallingPhaseCounts = {
+  baseEventCount: number;
+  loveBonusEventCount: number;
+};
+
 function hashSeed(seed: string) {
   let hash = 2166136261;
   for (let index = 0; index < seed.length; index += 1) {
@@ -322,6 +327,46 @@ function readMetadataNumber(metadata: unknown, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+export function getContestCallingPhaseCounts(
+  sessionMetadata: Json | null | undefined,
+): ContestCallingPhaseCounts {
+  return {
+    baseEventCount: Math.max(
+      0,
+      Math.trunc(readMetadataNumber(sessionMetadata, "baseEventCount") ?? 0),
+    ),
+    loveBonusEventCount: Math.max(
+      0,
+      Math.trunc(
+        readMetadataNumber(sessionMetadata, "loveBonusEventCount") ?? 0,
+      ),
+    ),
+  };
+}
+
+export function advanceContestCallingStep(
+  currentStep: number,
+  totalSteps: number,
+  count: number,
+) {
+  const safeCurrentStep = Math.max(0, Math.trunc(currentStep) || 0);
+  const safeTotalSteps = Math.max(0, Math.trunc(totalSteps) || 0);
+  const safeCount = Math.max(1, Math.trunc(count) || 1);
+
+  return Math.min(safeTotalSteps, safeCurrentStep + safeCount);
+}
+
+export function getContestCallingLoveStartStep(
+  sessionMetadata: Json | null | undefined,
+) {
+  const { baseEventCount, loveBonusEventCount } =
+    getContestCallingPhaseCounts(sessionMetadata);
+
+  return baseEventCount > 0 && loveBonusEventCount > 0
+    ? baseEventCount
+    : null;
+}
+
 export function getContestCallingPhaseProgress(
   sessionMetadata: Json | null | undefined,
   currentStep: number,
@@ -330,8 +375,8 @@ export function getContestCallingPhaseProgress(
     return null;
   }
 
-  const baseEventCount = readMetadataNumber(sessionMetadata, "baseEventCount");
-  const loveBonusEventCount = readMetadataNumber(sessionMetadata, "loveBonusEventCount");
+  const { baseEventCount, loveBonusEventCount } =
+    getContestCallingPhaseCounts(sessionMetadata);
 
   if (baseEventCount && currentStep <= baseEventCount) {
     return {

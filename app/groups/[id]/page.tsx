@@ -4,10 +4,11 @@ import { BarChart3, ImageIcon, Send, Trophy } from "lucide-react";
 import { GroupContestSearchList } from "@/components/group-contest-search-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { canNominateByStatus, canViewResults } from "@/lib/contest-rules";
+import { canNominateByStatus } from "@/lib/contest-rules";
 import { getCurrentProfile } from "@/lib/auth";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
+import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
@@ -29,7 +30,7 @@ export default async function GroupDetailPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,image_path,max_nominations_per_user,closed_result_visibility,live_results_enabled",
+        "id,title,description,status,vote_type,image_path,max_nominations_per_user",
       )
       .eq("group_id", id)
       .is("archived_at", null)
@@ -56,8 +57,17 @@ export default async function GroupDetailPage({
   const hasVotingContest = visibleContests.some(
     (contest) => contest.status === "voting",
   );
-  const hasResultsContest = visibleContests.some((contest) =>
-    canViewResults(contest, profile),
+  const visibilityClient = isAdmin
+    ? await createServerDataClient()
+    : supabase;
+  const resultVisibilityByContest = await loadContestResultVisibilityByContest(
+    visibilityClient,
+    visibleContests,
+    { includeAdminOverride: isAdmin },
+  );
+  const hasResultsContest = visibleContests.some(
+    (contest) =>
+      resultVisibilityByContest.get(contest.id)?.resultPageVisible === true,
   );
   const hasVotingEntry = hasVotingContest && (!isRestricted || canParticipate);
   let nominatableContests = visibleContests.filter((contest) =>

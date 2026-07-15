@@ -1,11 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
-import { LogIn, LogOut, Settings, UserRound, UsersRound } from "lucide-react";
+import { LogIn, LogOut, Trophy, Settings, UserRound, UsersRound } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth-actions";
 import { getCurrentProfile } from "@/lib/auth";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { FormSubmitButton } from "@/components/form-submit-button";
-import { MobileSiteMenu } from "@/components/mobile-site-menu";
+import {
+  MobileContentMenu,
+  MobileSiteMenu,
+} from "@/components/mobile-site-menu";
 import { Button } from "@/components/ui/button";
 import logo from "@/img/网站logo.png";
 
@@ -33,23 +36,32 @@ export async function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-[#EED8AA]/70 bg-[#FFFCF4]/80 backdrop-blur">
       <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <Link
-          href="/"
-          className="flex items-center rounded-full px-1 transition-colors hover:bg-[#FFF3D0]"
-          aria-label="Butter Vote 首页"
-        >
-          <Image
-            src={logo}
-            alt="Butter Vote logo"
-            className="h-12 w-auto rounded-2xl object-contain"
-            priority
-          />
-        </Link>
+        <div className="flex items-center gap-1">
+          <Link
+            href="/"
+            className="flex items-center rounded-full px-1 transition-colors hover:bg-[#FFF3D0]"
+            aria-label="Butter Vote 首页"
+          >
+            <Image
+              src={logo}
+              alt="Butter Vote logo"
+              className="h-12 w-auto rounded-2xl object-contain"
+              priority
+            />
+          </Link>
+          <MobileContentMenu />
+        </div>
 
-        <nav className="hidden items-center justify-end gap-2 md:flex">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/">首页</Link>
-          </Button>
+        <nav className="hidden min-w-0 flex-1 items-center gap-8 xl:flex">
+          <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/hall-of-fame">
+                <Trophy className="size-4" />
+                冠军英灵殿
+              </Link>
+            </Button>
+          </div>
+          <div className="ml-auto flex min-w-0 items-center justify-end gap-2">
           {profile ? (
             <Button asChild variant="ghost" size="sm">
               <Link href="/me/nominations" className="relative">
@@ -108,6 +120,7 @@ export async function SiteHeader() {
               </Link>
             </Button>
           )}
+          </div>
         </nav>
 
         <MobileSiteMenu
