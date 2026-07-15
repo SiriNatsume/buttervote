@@ -68,11 +68,13 @@ function buildSeed(contestId: string) {
 }
 
 function revalidateCallingPaths(contest: Pick<Contest, "id" | "group_id">) {
+  revalidatePath("/");
   revalidatePath(`/contests/${contest.id}`);
   revalidatePath(`/contests/${contest.id}/results`);
   if (contest.group_id) {
     revalidatePath(`/groups/${contest.group_id}`);
     revalidatePath(`/groups/${contest.group_id}/results`);
+    revalidatePath(`/groups/${contest.group_id}/vote`);
   }
 }
 
@@ -81,7 +83,7 @@ async function loadContestForCalling(contestId: string) {
   const { data: contest, error } = await supabase
     .from("contests")
     .select(
-      "id,title,status,vote_type,group_id,love_vote_enabled,archived_at,closed_result_visibility",
+      "id,title,status,vote_type,group_id,love_vote_enabled,archived_at",
     )
     .eq("id", contestId)
     .maybeSingle();
@@ -280,6 +282,7 @@ export async function controlContestCallingSessionAction(
   const currentStep = Math.max(0, Number(session.current_step) || 0);
   const totalSteps = Math.max(0, Number(session.total_steps) || 0);
   const update: Record<string, unknown> = {};
+  let completeAndPublish = false;
   let message = "唱票状态已更新。";
 
   switch (parsed.data.intent) {
@@ -336,6 +339,7 @@ export async function controlContestCallingSessionAction(
       update.play_mode = session.play_mode;
       update.started_at = session.started_at ?? now;
       update.completed_at = nextStep >= totalSteps ? now : null;
+      completeAndPublish = nextStep >= totalSteps;
       message = nextStep >= totalSteps ? "唱票已完成。" : "已进入下一张。";
       break;
     }
@@ -367,6 +371,7 @@ export async function controlContestCallingSessionAction(
       update.current_step = totalSteps;
       update.started_at = session.started_at ?? now;
       update.completed_at = now;
+      completeAndPublish = true;
       message = "唱票已完成。";
       break;
     case "archive":
@@ -379,10 +384,14 @@ export async function controlContestCallingSessionAction(
       return actionFailure("未知唱票操作。");
   }
 
-  const { error } = await supabase
-    .from("contest_calling_sessions")
-    .update(update)
-    .eq("id", session.id);
+  const { error } = completeAndPublish
+    ? await supabase.rpc("complete_contest_calling_session", {
+        p_session_id: session.id,
+      })
+    : await supabase
+        .from("contest_calling_sessions")
+        .update(update)
+        .eq("id", session.id);
 
   if (error) {
     return actionFailure(error.message || "更新唱票状态失败。");

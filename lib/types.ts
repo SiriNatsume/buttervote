@@ -41,6 +41,10 @@ export type ContestCallingStatus =
   | "archived";
 export type ContestCallingPlayMode = "manual" | "auto";
 export type ContestCallingPhase = "base" | "love_bonus";
+export type ContestResultVisibilityState =
+  | "hidden"
+  | "calling_progress"
+  | "full";
 export type TournamentEntryStatus =
   | "screening"
   | "preliminary"
@@ -723,6 +727,48 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      get_contest_result_visibility: {
+        Args: {
+          p_contest_ids: string[];
+          p_include_admin_override?: boolean;
+        };
+        Returns: Array<{
+          contest_id: string;
+          visibility_state: ContestResultVisibilityState;
+          result_page_visible: boolean;
+          full_results_visible: boolean;
+          calling_progress_visible: boolean;
+          full_results_blocked_by_calling: boolean;
+          show_weighted_love_score: boolean;
+          reason: string;
+          calling_session_id: string | null;
+          calling_session_status: string | null;
+          visibility_version: string | null;
+        }>;
+      };
+      get_visible_contest_vote_payloads: {
+        Args: {
+          p_contest_ids: string[];
+          p_include_admin_override?: boolean;
+        };
+        Returns: Array<{
+          id: string;
+          contest_id: string;
+          payload: Json;
+          created_at: string;
+        }>;
+      };
+      get_visible_contest_love_vote_allocations: {
+        Args: {
+          p_contest_ids: string[];
+          p_include_admin_override?: boolean;
+        };
+        Returns: Array<{
+          contest_id: string;
+          vote_id: string;
+          candidate_id: string;
+        }>;
+      };
       get_contest_vote_payloads: {
         Args: {
           p_contest_id: string;
@@ -748,6 +794,36 @@ export type Database = {
           p_contest_id: string;
         };
         Returns: boolean;
+      };
+      can_read_candidate: {
+        Args: {
+          p_candidate_id: string;
+        };
+        Returns: boolean;
+      };
+      get_visible_contest_nominations: {
+        Args: {
+          p_contest_id: string;
+        };
+        Returns: Array<{
+          id: string;
+          name: string;
+          description: string | null;
+          status: NominationStatus;
+          nominator_display_name: string | null;
+          created_at: string;
+        }>;
+      };
+      complete_contest_calling_session: {
+        Args: {
+          p_session_id: string;
+        };
+        Returns: Array<{
+          contest_id: string;
+          session_status: string;
+          contest_status: string;
+          completed_at: string;
+        }>;
       };
       apply_due_scheduled_transitions: {
         Args: {

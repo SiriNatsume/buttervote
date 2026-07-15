@@ -54,35 +54,6 @@ export const closedResultVisibilityLabel: Record<ClosedResultVisibility, string>
   public: "公开结果",
 };
 
-export function canViewResults(
-  contest: Pick<
-    Contest,
-    "status" | "closed_result_visibility" | "live_results_enabled"
-  >,
-  profile?: Pick<Profile, "role"> | null,
-) {
-  if (profile?.role === "admin") {
-    return true;
-  }
-
-  if (contest.status === "published") {
-    return true;
-  }
-
-  if (
-    contest.status === "closed" &&
-    contest.closed_result_visibility === "public"
-  ) {
-    return true;
-  }
-
-  if (contest.status === "voting" && contest.live_results_enabled) {
-    return true;
-  }
-
-  return false;
-}
-
 export function canNominateByStatus(
   contest: Pick<Contest, "status">,
   profile?: Pick<Profile, "role"> | null,

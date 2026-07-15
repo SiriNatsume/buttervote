@@ -13,6 +13,7 @@ import {
 
 type ShareBracket = {
   groupId: string | null;
+  visibilityVersion: string;
   tournament: {
     id: string;
     name: string;
@@ -26,8 +27,9 @@ function bracketImageUrl(bracket: ShareBracket) {
 
   const groupId = encodeURIComponent(bracket.groupId);
   const tournamentId = encodeURIComponent(bracket.tournament.id);
+  const visibilityVersion = encodeURIComponent(bracket.visibilityVersion);
 
-  return `/api/contest-groups/${groupId}/bracket-image?tournamentId=${tournamentId}`;
+  return `/api/contest-groups/${groupId}/bracket-image?tournamentId=${tournamentId}&v=${visibilityVersion}`;
 }
 
 async function fetchBracketPng(url: string) {
