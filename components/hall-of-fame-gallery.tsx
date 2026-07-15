@@ -9,7 +9,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { CircleAlert, ImageIcon } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  ImageIcon,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +46,8 @@ export function HallOfFameGallery({
   const wheelLockedRef = useRef(false);
 
   const activeItem = items[activeIndex];
+  const previousItem = items[activeIndex - 1];
+  const nextItem = items[activeIndex + 1];
   useEffect(() => {
     if (!activeItem || loadedOriginalIds.has(activeItem.id)) return;
 
@@ -152,52 +159,97 @@ export function HallOfFameGallery({
   return (
     <>
       <div className="relative">
-        <div
-          ref={trackRef}
-          onWheel={handleWheel}
-          onScroll={handleScroll}
-          className="flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth pb-7 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4"
-          style={{
-            "--hall-card-width": "min(78vw, 310px)",
-            paddingInline: "calc((100% - var(--hall-card-width)) / 2)",
-            maskImage:
-              "linear-gradient(to right, transparent 0, black 4%, black 96%, transparent 100%)",
-            WebkitMaskImage:
-              "linear-gradient(to right, transparent 0, black 4%, black 96%, transparent 100%)",
-          } as CSSProperties}
-        >
-          {items.map((item, index) => (
+        <div className="relative lg:px-16">
+          {items.length > 1 ? (
             <button
-              key={item.id}
-              data-gallery-index={index}
               type="button"
-              onClick={(event) => handleCardClick(event, item, index)}
-              className={`group w-[var(--hall-card-width)] shrink-0 snap-center overflow-hidden rounded-[1.35rem] border border-[#EED8AA]/70 bg-[#FFFCF4] p-3 text-left shadow-sm transition-[transform,opacity,box-shadow,border-color] duration-300 hover:border-orange-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
-                index === activeIndex
-                  ? "scale-100 opacity-100 shadow-md"
-                  : "scale-90 opacity-60 hover:opacity-80"
-              }`}
+              aria-controls="hall-of-fame-track"
+              aria-label={
+                previousItem
+                  ? `查看上一位冠军：${previousItem.winnerName}`
+                  : "已经是第一位冠军"
+              }
+              title={
+                previousItem
+                  ? `上一位：${previousItem.winnerName}`
+                  : "已经是第一位冠军"
+              }
+              disabled={!previousItem}
+              onClick={() => centerCard(activeIndex - 1)}
+              className="absolute left-2 top-1/2 z-10 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-[#E3C98F] bg-[#FFFCF4]/95 text-[#7A4A28] shadow-sm backdrop-blur-sm transition hover:scale-105 hover:border-[#C99A54] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 lg:flex"
             >
-              <div className="aspect-[3/4] overflow-hidden rounded-xl bg-[#F6E9CE]">
-                <img
-                  src={
-                    loadedOriginalIds.has(item.id)
-                      ? item.posterUrl
-                      : item.thumbnailUrl
-                  }
-                  alt={`${item.eventTitle}胜者海报`}
-                  loading={index === activeIndex ? "eager" : "lazy"}
-                  decoding="async"
-                  className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-                />
-              </div>
-              <div className="px-1 pb-1 pt-3 text-center">
-                <div className="truncate text-xs text-muted-foreground">{item.eventTitle}</div>
-                <div className="mt-1 truncate text-xl font-semibold text-[#5C321E]">{item.winnerName}</div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">{item.description || "\u00a0"}</div>
-              </div>
+              <ChevronLeft className="size-6" aria-hidden="true" />
             </button>
-          ))}
+          ) : null}
+          <div
+            id="hall-of-fame-track"
+            ref={trackRef}
+            onWheel={handleWheel}
+            onScroll={handleScroll}
+            className="flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth pb-7 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4"
+            style={{
+              "--hall-card-width": "min(78vw, 310px)",
+              paddingInline: "calc((100% - var(--hall-card-width)) / 2)",
+              maskImage:
+                "linear-gradient(to right, transparent 0, black 4%, black 96%, transparent 100%)",
+              WebkitMaskImage:
+                "linear-gradient(to right, transparent 0, black 4%, black 96%, transparent 100%)",
+            } as CSSProperties}
+          >
+            {items.map((item, index) => (
+              <button
+                key={item.id}
+                data-gallery-index={index}
+                type="button"
+                onClick={(event) => handleCardClick(event, item, index)}
+                className={`group w-[var(--hall-card-width)] shrink-0 snap-center overflow-hidden rounded-[1.35rem] border border-[#EED8AA]/70 bg-[#FFFCF4] p-3 text-left shadow-sm transition-[transform,opacity,box-shadow,border-color] duration-300 hover:border-orange-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                  index === activeIndex
+                    ? "scale-100 opacity-100 shadow-md"
+                    : "scale-90 opacity-60 hover:opacity-80"
+                }`}
+              >
+                <div className="aspect-[3/4] overflow-hidden rounded-xl bg-[#F6E9CE]">
+                  <img
+                    src={
+                      loadedOriginalIds.has(item.id)
+                        ? item.posterUrl
+                        : item.thumbnailUrl
+                    }
+                    alt={`${item.eventTitle}胜者海报`}
+                    loading={index === activeIndex ? "eager" : "lazy"}
+                    decoding="async"
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                  />
+                </div>
+                <div className="px-1 pb-1 pt-3 text-center">
+                  <div className="truncate text-xs text-muted-foreground">{item.eventTitle}</div>
+                  <div className="mt-1 truncate text-xl font-semibold text-[#5C321E]">{item.winnerName}</div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">{item.description || "\u00a0"}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          {items.length > 1 ? (
+            <button
+              type="button"
+              aria-controls="hall-of-fame-track"
+              aria-label={
+                nextItem
+                  ? `查看下一位冠军：${nextItem.winnerName}`
+                  : "已经是最后一位冠军"
+              }
+              title={
+                nextItem
+                  ? `下一位：${nextItem.winnerName}`
+                  : "已经是最后一位冠军"
+              }
+              disabled={!nextItem}
+              onClick={() => centerCard(activeIndex + 1)}
+              className="absolute right-2 top-1/2 z-10 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-[#E3C98F] bg-[#FFFCF4]/95 text-[#7A4A28] shadow-sm backdrop-blur-sm transition hover:scale-105 hover:border-[#C99A54] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 lg:flex"
+            >
+              <ChevronRight className="size-6" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
         <div
           className="mx-auto flex max-w-full items-center justify-center overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
