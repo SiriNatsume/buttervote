@@ -352,6 +352,9 @@ export type HallOfFameEntry = {
   poster_path: string;
   poster_mime_type: "image/jpeg" | "image/png" | "image/webp";
   poster_size: number;
+  thumbnail_path: string;
+  thumbnail_mime_type: "image/jpeg" | "image/webp";
+  thumbnail_size: number;
   sort_order: number;
   created_by: string | null;
   created_at: string;
@@ -390,6 +393,9 @@ type Tables = {
       poster_path: string;
       poster_mime_type: "image/jpeg" | "image/png" | "image/webp";
       poster_size: number;
+      thumbnail_path: string;
+      thumbnail_mime_type: "image/jpeg" | "image/webp";
+      thumbnail_size: number;
       sort_order?: number;
       created_by?: string | null;
       created_at?: string;

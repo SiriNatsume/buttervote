@@ -5,10 +5,11 @@ import {
   type MouseEvent,
   type UIEvent,
   type WheelEvent,
+  useEffect,
   useRef,
   useState,
 } from "react";
-import { ImageIcon } from "lucide-react";
+import { CircleAlert, ImageIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,13 +22,46 @@ export type HallOfFameGalleryItem = {
   winnerName: string;
   description: string;
   posterUrl: string;
+  thumbnailUrl: string;
 };
 
-export function HallOfFameGallery({ items }: { items: HallOfFameGalleryItem[] }) {
+export function HallOfFameGallery({
+  items,
+  errorMessage,
+}: {
+  items: HallOfFameGalleryItem[];
+  errorMessage?: string | null;
+}) {
   const [selected, setSelected] = useState<HallOfFameGalleryItem | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [loadedOriginalIds, setLoadedOriginalIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const trackRef = useRef<HTMLDivElement>(null);
   const wheelLockedRef = useRef(false);
+
+  const activeItem = items[activeIndex];
+  useEffect(() => {
+    if (!activeItem || loadedOriginalIds.has(activeItem.id)) return;
+
+    let cancelled = false;
+    const image = new Image();
+    image.decoding = "async";
+    image.addEventListener("load", () => {
+      if (cancelled) return;
+      setLoadedOriginalIds((current) => {
+        if (current.has(activeItem.id)) return current;
+        const next = new Set(current);
+        next.add(activeItem.id);
+        return next;
+      });
+    });
+    image.src = activeItem.posterUrl;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeItem, loadedOriginalIds]);
 
   function centerCard(index: number) {
     const track = trackRef.current;
@@ -95,6 +129,16 @@ export function HallOfFameGallery({ items }: { items: HallOfFameGalleryItem[] })
     setSelected(item);
   }
 
+  if (errorMessage) {
+    return (
+      <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-destructive/30 bg-destructive/5 px-6 text-center">
+        <CircleAlert className="mb-4 size-10 text-destructive" aria-hidden="true" />
+        <h2 className="text-xl font-semibold text-[#5C321E]">冠军英灵殿加载失败</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{errorMessage}</p>
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-dashed border-[#E3C98F] bg-[#FFF8E8]/70 px-6 text-center">
@@ -136,8 +180,14 @@ export function HallOfFameGallery({ items }: { items: HallOfFameGalleryItem[] })
             >
               <div className="aspect-[3/4] overflow-hidden rounded-xl bg-[#F6E9CE]">
                 <img
-                  src={item.posterUrl}
+                  src={
+                    loadedOriginalIds.has(item.id)
+                      ? item.posterUrl
+                      : item.thumbnailUrl
+                  }
                   alt={`${item.eventTitle}胜者海报`}
+                  loading={index === activeIndex ? "eager" : "lazy"}
+                  decoding="async"
                   className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                 />
               </div>
@@ -184,6 +234,7 @@ export function HallOfFameGallery({ items }: { items: HallOfFameGalleryItem[] })
             <img
               src={selected.posterUrl}
               alt={`${selected.eventTitle}胜者海报`}
+              decoding="async"
               className="max-h-full max-w-full object-contain"
             />
           ) : null}

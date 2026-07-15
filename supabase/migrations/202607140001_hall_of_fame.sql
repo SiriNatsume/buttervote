@@ -9,6 +9,11 @@ create table if not exists public.hall_of_fame_entries (
     poster_mime_type in ('image/jpeg', 'image/png', 'image/webp')
   ),
   poster_size int not null check (poster_size > 0 and poster_size <= 20971520),
+  thumbnail_path text not null unique,
+  thumbnail_mime_type text not null check (
+    thumbnail_mime_type in ('image/jpeg', 'image/webp')
+  ),
+  thumbnail_size int not null check (thumbnail_size > 0 and thumbnail_size <= 327680),
   sort_order int not null default 0 check (sort_order >= 0),
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),

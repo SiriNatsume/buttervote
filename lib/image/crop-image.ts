@@ -15,6 +15,14 @@ export type GetCroppedImageBlobParams = {
   maxSizeBytes?: number;
 };
 
+export type GetImageThumbnailBlobParams = {
+  maxWidth?: number;
+  maxHeight?: number;
+  mimeType?: "image/webp" | "image/jpeg";
+  quality?: number;
+  maxSizeBytes?: number;
+};
+
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -82,6 +90,85 @@ function canvasToBlob(
       quality,
     );
   });
+}
+
+export async function getImageThumbnailBlob(
+  file: File,
+  {
+    maxWidth = 480,
+    maxHeight = 640,
+    mimeType = "image/webp",
+    quality = 0.8,
+    maxSizeBytes,
+  }: GetImageThumbnailBlobParams = {},
+): Promise<{
+  blob: Blob;
+  width: number;
+  height: number;
+  size: number;
+}> {
+  const imageUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await loadImage(imageUrl);
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    const scale = Math.min(
+      1,
+      maxWidth / sourceWidth,
+      maxHeight / sourceHeight,
+    );
+    const outputWidth = Math.max(1, Math.round(sourceWidth * scale));
+    const outputHeight = Math.max(1, Math.round(sourceHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("当前浏览器不支持生成缩略图，请换一个浏览器重试。");
+    }
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, 0, 0, outputWidth, outputHeight);
+
+    const qualityCandidates = [quality, 0.74, 0.68, 0.6].filter(
+      (item, index, values) => values.indexOf(item) === index,
+    );
+    let outputMimeType = mimeType;
+    let lastBlob: Blob | null = null;
+
+    for (const nextQuality of qualityCandidates) {
+      let blob = await canvasToBlob(canvas, outputMimeType, nextQuality);
+
+      if (outputMimeType === "image/webp" && blob.type !== "image/webp") {
+        outputMimeType = "image/jpeg";
+        blob = await canvasToBlob(canvas, outputMimeType, nextQuality);
+      }
+
+      lastBlob = blob;
+      if (!maxSizeBytes || blob.size <= maxSizeBytes) {
+        return {
+          blob,
+          width: outputWidth,
+          height: outputHeight,
+          size: blob.size,
+        };
+      }
+    }
+
+    const maxSizeKb = maxSizeBytes
+      ? Math.round(maxSizeBytes / 1024)
+      : undefined;
+    throw new Error(
+      maxSizeKb && lastBlob
+        ? `缩略图压缩后仍超过 ${maxSizeKb}KB，请换一张图片后重试。`
+        : "缩略图生成失败，请换一张图片后重试。",
+    );
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
 }
 
 export async function getCroppedImageBlob({

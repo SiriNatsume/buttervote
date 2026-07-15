@@ -28,6 +28,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingButton } from "@/components/loading-button";
+import {
+  HALL_OF_FAME_IMAGE_TYPES,
+  HALL_OF_FAME_MAX_FILE_SIZE,
+  HALL_OF_FAME_THUMBNAIL_MAX_FILE_SIZE,
+} from "@/lib/hall-of-fame";
+import { getImageThumbnailBlob } from "@/lib/image/crop-image";
 
 export type HallOfFameAdminEntry = {
   id: string;
@@ -37,6 +43,8 @@ export type HallOfFameAdminEntry = {
   description: string;
   posterUrl: string;
   posterSize: number;
+  thumbnailUrl: string;
+  thumbnailSize: number;
 };
 
 type ContestOption = { id: string; title: string };
@@ -142,7 +150,11 @@ export function HallOfFameAdmin({
         router.refresh();
         return;
       }
-      toast.success(result.message);
+      if (result.warning) {
+        toast.warning(result.warning);
+      } else {
+        toast.success(result.message);
+      }
       router.refresh();
     });
   }
@@ -154,6 +166,25 @@ export function HallOfFameAdmin({
     try {
       const formData = new FormData(event.currentTarget);
       if (editor.entryId) formData.set("entryId", editor.entryId);
+      const poster = formData.get("poster");
+      if (poster instanceof File && poster.size > 0) {
+        if (
+          !HALL_OF_FAME_IMAGE_TYPES.includes(
+            poster.type as (typeof HALL_OF_FAME_IMAGE_TYPES)[number],
+          ) ||
+          poster.size > HALL_OF_FAME_MAX_FILE_SIZE
+        ) {
+          throw new Error("仅支持 20MB 以内的 JPEG、PNG 或 WebP 图片。");
+        }
+
+        const thumbnail = await getImageThumbnailBlob(poster, {
+          maxWidth: 480,
+          maxHeight: 640,
+          maxSizeBytes: HALL_OF_FAME_THUMBNAIL_MAX_FILE_SIZE,
+        });
+        const extension = thumbnail.blob.type === "image/jpeg" ? "jpg" : "webp";
+        formData.set("thumbnail", thumbnail.blob, `thumbnail.${extension}`);
+      }
       const response = await fetch("/api/admin/hall-of-fame", {
         method: "POST",
         body: formData,
@@ -163,7 +194,7 @@ export function HallOfFameAdmin({
       if (result.warning) {
         toast.warning(result.warning);
       } else {
-      toast.success(editor.entryId ? "冠军英灵殿条目已更新。" : "冠军英灵殿条目已创建。");
+        toast.success(editor.entryId ? "冠军英灵殿条目已更新。" : "冠军英灵殿条目已创建。");
       }
       setEditor(null);
       router.refresh();
@@ -180,7 +211,7 @@ export function HallOfFameAdmin({
         <p className="text-sm text-muted-foreground">
           拖拽或使用箭头调整顺序，公开页面将从左到右展示。
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <LoadingButton
             type="button"
             variant="outline"
@@ -207,7 +238,7 @@ export function HallOfFameAdmin({
               onDragEnd={() => setDraggingId(null)}
               onDragOver={(event) => event.preventDefault()}
               onDrop={() => dropBefore(entry.id)}
-              className="flex items-center gap-3 rounded-2xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-3"
+              className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3 rounded-2xl border border-[#EED8AA]/70 bg-[#FFF8E8]/60 p-3 sm:grid-cols-[auto_4.5rem_minmax(0,1fr)_auto]"
             >
               <GripVertical className="hidden cursor-grab text-muted-foreground sm:block" aria-label="拖拽排序" />
               <button
@@ -216,17 +247,23 @@ export function HallOfFameAdmin({
                 className="h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-[#F6E9CE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label={`预览${entry.winnerName}的海报`}
               >
-                <img src={entry.posterUrl} alt="" className="h-full w-full object-cover" />
+                <img
+                  src={entry.thumbnailUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
               </button>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-xs text-muted-foreground">{entry.eventTitle}</div>
                 <div className="truncate font-semibold text-[#5C321E]">{entry.winnerName}</div>
-                <div className="truncate text-sm text-muted-foreground">{entry.description || "暂无 Description"}</div>
+                <div className="truncate text-sm text-muted-foreground">{entry.description || "暂无简介"}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {(entry.posterSize / 1024 / 1024).toFixed(2)} MB
+                  原图 {(entry.posterSize / 1024 / 1024).toFixed(2)} MB · 缩略图 {Math.round(entry.thumbnailSize / 1024)} KB
                 </div>
               </div>
-              <div className="flex flex-wrap justify-end gap-1">
+              <div className="col-span-2 flex flex-wrap justify-end gap-1 border-t border-[#EED8AA]/60 pt-2 sm:col-span-1 sm:border-0 sm:pt-0">
                 <Button type="button" variant="ghost" size="icon" onClick={() => moveEntry(index, -1)} disabled={index === 0} aria-label="上移">
                   <ArrowUp />
                 </Button>
@@ -282,7 +319,7 @@ export function HallOfFameAdmin({
                 <Input id="hall-winner-name" name="winnerName" maxLength={120} required value={editor.winnerName} onChange={(event) => setEditor({ ...editor, winnerName: event.target.value })} />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="hall-description">Description</Label>
+                <Label htmlFor="hall-description">简介</Label>
                 <Input id="hall-description" name="description" maxLength={200} value={editor.description} onChange={(event) => setEditor({ ...editor, description: event.target.value })} placeholder="卡片中单行显示" />
               </div>
               {editor.posterUrl ? (
@@ -293,7 +330,9 @@ export function HallOfFameAdmin({
               <div className="grid gap-2">
                 <Label htmlFor="hall-poster">{editor.entryId ? "替换海报（可选）" : "海报"}</Label>
                 <Input id="hall-poster" name="poster" type="file" accept="image/jpeg,image/png,image/webp" required={!editor.entryId} />
-                <p className="text-xs text-muted-foreground">JPEG、PNG 或 WebP，最大 20 MB；保留原图。</p>
+                <p className="text-xs text-muted-foreground">
+                  JPEG、PNG 或 WebP，最大 20 MB；保留原图，并自动生成轻量缩略图。
+                </p>
               </div>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setEditor(null)}>取消</Button>

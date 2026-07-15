@@ -4,9 +4,14 @@ import { revalidatePath } from "next/cache";
 import { getActionAdmin } from "@/lib/auth";
 import { HALL_OF_FAME_BUCKET } from "@/lib/hall-of-fame";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
+import {
+  getValidationMessage,
+  hallOfFameEntryIdSchema,
+  hallOfFameOrderSchema,
+} from "@/lib/validation/hall-of-fame";
 
 type HallOfFameActionResult =
-  | { ok: true; message: string }
+  | { ok: true; message: string; warning?: string }
   | { ok: false; error: string };
 
 function refreshHallOfFame() {
@@ -21,13 +26,14 @@ export async function reorderHallOfFameEntriesAction(
   const admin = await getActionAdmin();
   if (!admin.ok) return { ok: false, error: admin.error };
 
-  if (!Array.isArray(entryIds) || entryIds.some((id) => typeof id !== "string")) {
-    return { ok: false, error: "排序数据无效。" };
+  const parsed = hallOfFameOrderSchema.safeParse(entryIds);
+  if (!parsed.success) {
+    return { ok: false, error: getValidationMessage(parsed.error) };
   }
 
   const supabase = createRequiredServiceClient();
   const { error } = await supabase.rpc("reorder_hall_of_fame_entries", {
-    p_entry_ids: entryIds,
+    p_entry_ids: parsed.data,
   });
 
   if (error) return { ok: false, error: error.message };
@@ -42,11 +48,16 @@ export async function deleteHallOfFameEntryAction(
   const admin = await getActionAdmin();
   if (!admin.ok) return { ok: false, error: admin.error };
 
+  const parsed = hallOfFameEntryIdSchema.safeParse(entryId);
+  if (!parsed.success) {
+    return { ok: false, error: getValidationMessage(parsed.error) };
+  }
+
   const supabase = createRequiredServiceClient();
   const { data: entry, error: lookupError } = await supabase
     .from("hall_of_fame_entries")
-    .select("id,poster_path")
-    .eq("id", entryId)
+    .select("id,poster_path,thumbnail_path")
+    .eq("id", parsed.data)
     .maybeSingle();
 
   if (lookupError) return { ok: false, error: lookupError.message };
@@ -61,13 +72,17 @@ export async function deleteHallOfFameEntryAction(
 
   const { error: storageError } = await supabase.storage
     .from(HALL_OF_FAME_BUCKET)
-    .remove([entry.poster_path]);
+    .remove([entry.poster_path, entry.thumbnail_path]);
 
   refreshHallOfFame();
   if (storageError) {
+    console.error(
+      `[hall-of-fame] deleted entry asset cleanup failed: ${storageError.message}`,
+    );
     return {
-      ok: false,
-      error: `条目已删除，但海报文件清理失败：${storageError.message}`,
+      ok: true,
+      message: "冠军英灵殿条目已删除。",
+      warning: "条目已删除，但图片文件清理失败，请稍后检查 Storage。",
     };
   }
 
