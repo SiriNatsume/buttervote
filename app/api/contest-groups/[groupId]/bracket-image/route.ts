@@ -7,12 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const BRACKET_IMAGE_CACHE_SECONDS = 5 * 60;
-const BRACKET_IMAGE_CACHE_CONTROL =
-  "public, max-age=" +
-  BRACKET_IMAGE_CACHE_SECONDS +
-  ", stale-while-revalidate=" +
-  BRACKET_IMAGE_CACHE_SECONDS;
+const BRACKET_IMAGE_CACHE_CONTROL = "private, no-store, max-age=0";
 
 type RouteContext = {
   params: Promise<{
@@ -37,6 +32,7 @@ function safeFilenamePart(value: string) {
 export async function GET(request: NextRequest, context: RouteContext) {
   const { groupId } = await context.params;
   const tournamentId = request.nextUrl.searchParams.get("tournamentId");
+  const requestedVersion = request.nextUrl.searchParams.get("v");
   const supabase = await createClient();
 
   try {
@@ -48,6 +44,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     if (!bracketData || bracketData.matches.length === 0) {
       return jsonError("没有可导出的对阵图。", 404);
+    }
+
+    if (
+      !requestedVersion ||
+      requestedVersion !== bracketData.visibilityVersion
+    ) {
+      return NextResponse.json(
+        { error: "对阵图状态已更新，请重试。" },
+        {
+          status: 409,
+          headers: { "Cache-Control": BRACKET_IMAGE_CACHE_CONTROL },
+        },
+      );
     }
 
     const svg = await renderBracketImageSvg(bracketData);

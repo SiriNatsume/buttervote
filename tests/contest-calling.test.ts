@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  advanceContestCallingStep,
   buildContestCallingEvents,
+  getContestCallingLoveStartStep,
+  getContestCallingPhaseCounts,
   getContestCallingPhaseProgress,
   normalizeContestCallingEvent,
   shouldPauseAutoCallingAtPhaseBoundary,
@@ -12,6 +15,26 @@ assert.equal(shouldPauseAutoCallingAtPhaseBoundary("base", "love_bonus"), true);
 assert.equal(shouldPauseAutoCallingAtPhaseBoundary("base", "love_bonus", false), false);
 assert.equal(shouldPauseAutoCallingAtPhaseBoundary("base", "base"), false);
 assert.equal(shouldPauseAutoCallingAtPhaseBoundary("love_bonus", "love_bonus"), false);
+assert.equal(advanceContestCallingStep(2, 10, 5), 7);
+assert.equal(advanceContestCallingStep(8, 10, 5), 10);
+assert.deepEqual(
+  getContestCallingPhaseCounts({ baseEventCount: 8, loveBonusEventCount: 3 }),
+  { baseEventCount: 8, loveBonusEventCount: 3 },
+);
+assert.equal(
+  getContestCallingLoveStartStep({
+    baseEventCount: 8,
+    loveBonusEventCount: 3,
+  }),
+  8,
+);
+assert.equal(
+  getContestCallingLoveStartStep({
+    baseEventCount: 8,
+    loveBonusEventCount: 0,
+  }),
+  null,
+);
 assert.deepEqual(getContestCallingPhaseProgress({ baseEventCount: 2, loveBonusEventCount: 3 }, 2), {
   phase: "base",
   phaseStep: 2,

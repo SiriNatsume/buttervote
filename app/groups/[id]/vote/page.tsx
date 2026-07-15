@@ -9,18 +9,15 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
+import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
+import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
-import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
 import { getTournamentBracketsForGroup } from "@/lib/tournament-bracket";
+import { loadVisibleContestResultData } from "@/lib/visible-result-data";
 import type { LoveVoteAllocation, Vote } from "@/lib/types";
-
-type GroupLoveVoteRow = Pick<
-  LoveVoteAllocation,
-  "contest_id" | "vote_id" | "candidate_id"
->;
 
 export default async function GroupVotePage({
   params,
@@ -30,7 +27,10 @@ export default async function GroupVotePage({
   const user = await requireUser();
   const { id } = await params;
   await applyScheduledTransitions({ revalidate: false });
-  const supabase = await createServerDataClient();
+  const [supabase, dataClient] = await Promise.all([
+    createClient(),
+    createServerDataClient(),
+  ]);
   const [{ data: group }, { data: contests }] = await Promise.all([
     supabase
       .from("contest_groups")
@@ -40,7 +40,7 @@ export default async function GroupVotePage({
     supabase
       .from("contests")
       .select(
-        "id,title,status,vote_type,max_choices,require_exact_choices,show_candidate_image,show_candidate_description,show_nominator_info,love_vote_enabled,live_results_enabled,created_at",
+        "id,title,status,vote_type,max_choices,require_exact_choices,show_candidate_image,show_candidate_description,show_nominator_info,love_vote_enabled,created_at",
       )
       .eq("group_id", id)
       .is("archived_at", null)
@@ -75,24 +75,24 @@ export default async function GroupVotePage({
   ] =
     contestIds.length > 0
       ? await Promise.all([
-          supabase
+          (user.role === "admin" ? dataClient : supabase)
             .from("candidates")
             .select("id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at")
             .in("contest_id", contestIds)
             .eq("is_active", true)
             .order("created_at", { ascending: true }),
-          supabase
+          dataClient
             .from("votes")
             .select("id,contest_id,payload")
             .eq("voter_id", user.id)
             .in("contest_id", contestIds),
-          supabase
+          dataClient
             .from("love_vote_allocations")
             .select("contest_id,vote_id,candidate_id")
             .eq("group_id", id)
             .eq("voter_id", user.id)
             .in("contest_id", contestIds),
-          supabase
+          dataClient
             .from("love_vote_allocations")
             .select("id", { count: "exact", head: true })
             .eq("group_id", id)
@@ -131,37 +131,33 @@ export default async function GroupVotePage({
         : [],
     };
   });
+  const resultVisibilityByContest =
+    await loadContestResultVisibilityByContest(
+      user.role === "admin" ? dataClient : supabase,
+      contestsWithCandidates,
+      { includeAdminOverride: user.role === "admin" },
+    );
   const liveResultContestIds = contestsWithCandidates
-    .filter((contest) => contest.live_results_enabled)
+    .filter(
+      (contest) =>
+        resultVisibilityByContest.get(contest.id)?.fullResultsVisible === true,
+    )
     .map((contest) => contest.id);
   let realtimeScoresByContestId:
     | Record<string, Record<string, number>>
     | undefined;
 
   if (liveResultContestIds.length > 0) {
-    const [
-      { data: voteRows, error: voteRowsError },
-      { data: loveRows, error: loveRowsError },
-    ] = await Promise.all([
-      fetchAllRows<Vote>(() =>
-        supabase
-          .from("votes")
-          .select("id,contest_id,voter_id,payload,created_at")
-          .in("contest_id", liveResultContestIds)
-          .order("created_at", { ascending: true }),
-      ),
-      fetchAllRows<GroupLoveVoteRow>(() =>
-        supabase
-          .from("love_vote_allocations")
-          .select("contest_id,vote_id,candidate_id")
-          .in("contest_id", liveResultContestIds),
-      ),
-    ]);
+    const resultData = await loadVisibleContestResultData(
+      user.role === "admin" ? dataClient : supabase,
+      liveResultContestIds,
+      { includeAdminOverride: user.role === "admin" },
+    );
 
-    if (voteRowsError || loveRowsError) {
+    if (resultData.error) {
       console.error(
         "Failed to load live group vote scores.",
-        voteRowsError?.message ?? loveRowsError?.message,
+        resultData.error.message,
       );
     } else {
       const votesByContest = new Map<string, Vote[]>();
@@ -170,13 +166,13 @@ export default async function GroupVotePage({
         Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>
       >();
 
-      for (const vote of voteRows ?? []) {
+      for (const vote of resultData.votes) {
         const current = votesByContest.get(vote.contest_id) ?? [];
-        current.push(vote);
+        current.push({ ...vote, voter_id: null });
         votesByContest.set(vote.contest_id, current);
       }
 
-      for (const loveRow of loveRows ?? []) {
+      for (const loveRow of resultData.loveAllocations) {
         const current = loveAllocationsByContest.get(loveRow.contest_id) ?? [];
         current.push({
           vote_id: loveRow.vote_id,
@@ -187,7 +183,7 @@ export default async function GroupVotePage({
 
       realtimeScoresByContestId = Object.fromEntries(
         contestsWithCandidates
-          .filter((contest) => contest.live_results_enabled)
+          .filter((contest) => liveResultContestIds.includes(contest.id))
           .map((contest) => {
             const results = tallyVotes({
               voteType: contest.vote_type,

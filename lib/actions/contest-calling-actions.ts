@@ -5,8 +5,10 @@ import { z } from "zod";
 import { getActionAdmin } from "@/lib/auth";
 import { toUserFacingError } from "@/lib/action-error";
 import {
+  advanceContestCallingStep,
   buildContestCallingEvents,
   contestCallingEventToInsert,
+  getContestCallingLoveStartStep,
   shouldPauseAutoCallingAtPhaseBoundary,
 } from "@/lib/contest-calling";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
@@ -26,6 +28,8 @@ const controlCallingSchema = z.object({
     "pause",
     "resume",
     "next",
+    "next_five",
+    "love_start",
     "previous",
     "auto",
     "manual",
@@ -68,11 +72,13 @@ function buildSeed(contestId: string) {
 }
 
 function revalidateCallingPaths(contest: Pick<Contest, "id" | "group_id">) {
+  revalidatePath("/");
   revalidatePath(`/contests/${contest.id}`);
   revalidatePath(`/contests/${contest.id}/results`);
   if (contest.group_id) {
     revalidatePath(`/groups/${contest.group_id}`);
     revalidatePath(`/groups/${contest.group_id}/results`);
+    revalidatePath(`/groups/${contest.group_id}/vote`);
   }
 }
 
@@ -81,7 +87,7 @@ async function loadContestForCalling(contestId: string) {
   const { data: contest, error } = await supabase
     .from("contests")
     .select(
-      "id,title,status,vote_type,group_id,love_vote_enabled,archived_at,closed_result_visibility",
+      "id,title,status,vote_type,group_id,love_vote_enabled,archived_at",
     )
     .eq("id", contestId)
     .maybeSingle();
@@ -262,7 +268,7 @@ export async function controlContestCallingSessionAction(
   const { data: session, error: sessionError } = await supabase
     .from("contest_calling_sessions")
     .select(
-      "id,contest_id,status,current_step,total_steps,play_mode,auto_interval_seconds,archived_at,started_at,completed_at",
+      "id,contest_id,status,current_step,total_steps,play_mode,auto_interval_seconds,metadata,archived_at,started_at,completed_at",
     )
     .eq("id", parsed.data.sessionId)
     .maybeSingle();
@@ -280,6 +286,7 @@ export async function controlContestCallingSessionAction(
   const currentStep = Math.max(0, Number(session.current_step) || 0);
   const totalSteps = Math.max(0, Number(session.total_steps) || 0);
   const update: Record<string, unknown> = {};
+  let completeAndPublish = false;
   let message = "唱票状态已更新。";
 
   switch (parsed.data.intent) {
@@ -297,10 +304,18 @@ export async function controlContestCallingSessionAction(
       update.play_mode = "manual";
       message = "唱票已暂停。";
       break;
-    case "next": {
-      const nextStep = Math.min(totalSteps, currentStep + 1);
+    case "next":
+    case "next_five": {
+      const advanceCount = parsed.data.intent === "next_five" ? 5 : 1;
+      const nextStep = advanceContestCallingStep(
+        currentStep,
+        totalSteps,
+        advanceCount,
+      );
 
-      const isAutoAdvance = parsed.data.source === "auto" || session.play_mode === "auto";
+      const isAutoAdvance =
+        parsed.data.intent === "next" &&
+        (parsed.data.source === "auto" || session.play_mode === "auto");
 
       if (isAutoAdvance && currentStep > 0 && nextStep > currentStep) {
         const { data: boundaryEvents, error: boundaryError } = await supabase
@@ -336,7 +351,30 @@ export async function controlContestCallingSessionAction(
       update.play_mode = session.play_mode;
       update.started_at = session.started_at ?? now;
       update.completed_at = nextStep >= totalSteps ? now : null;
-      message = nextStep >= totalSteps ? "唱票已完成。" : "已进入下一张。";
+      completeAndPublish = nextStep >= totalSteps;
+      message =
+        nextStep >= totalSteps
+          ? "唱票已完成。"
+          : advanceCount === 5
+            ? `已向下开 ${nextStep - currentStep} 张。`
+            : "已进入下一张。";
+      break;
+    }
+    case "love_start": {
+      const loveStartStep = getContestCallingLoveStartStep(session.metadata);
+      if (loveStartStep === null || loveStartStep >= totalSteps) {
+        return actionFailure("当前唱票没有可跳转的真爱票阶段。");
+      }
+      if (currentStep >= loveStartStep) {
+        return actionFailure("唱票已进入真爱票开始位置。");
+      }
+
+      update.current_step = loveStartStep;
+      update.status = "paused";
+      update.play_mode = "manual";
+      update.started_at = session.started_at ?? now;
+      update.completed_at = null;
+      message = "已定位到第一张真爱票开始前。";
       break;
     }
     case "previous": {
@@ -367,6 +405,7 @@ export async function controlContestCallingSessionAction(
       update.current_step = totalSteps;
       update.started_at = session.started_at ?? now;
       update.completed_at = now;
+      completeAndPublish = true;
       message = "唱票已完成。";
       break;
     case "archive":
@@ -379,10 +418,14 @@ export async function controlContestCallingSessionAction(
       return actionFailure("未知唱票操作。");
   }
 
-  const { error } = await supabase
-    .from("contest_calling_sessions")
-    .update(update)
-    .eq("id", session.id);
+  const { error } = completeAndPublish
+    ? await supabase.rpc("complete_contest_calling_session", {
+        p_session_id: session.id,
+      })
+    : await supabase
+        .from("contest_calling_sessions")
+        .update(update)
+        .eq("id", session.id);
 
   if (error) {
     return actionFailure(error.message || "更新唱票状态失败。");

@@ -14,8 +14,11 @@ import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { canViewResults } from "@/lib/contest-rules";
 import { getCurrentProfile } from "@/lib/auth";
+import {
+  hiddenContestResultVisibility,
+  loadContestResultVisibilityByContest,
+} from "@/lib/result-visibility";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
@@ -29,6 +32,7 @@ import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
 import { buildPublicDrawSummaries } from "@/lib/tournament-draw-summary";
+import { loadVisibleContestResultData } from "@/lib/visible-result-data";
 import type { ContestCallingEvent, ContestCallingSession, LoveVoteAllocation, TournamentEntry, Vote } from "@/lib/types";
 
 type VoteProfile = {
@@ -43,8 +47,6 @@ type VoteProfile = {
 type AdminVoteRow = Vote & {
   profile?: VoteProfile | null;
 };
-
-type PublicVoteRow = Pick<Vote, "id" | "contest_id" | "payload" | "created_at">;
 
 type TournamentDrawLogInfo = {
   id: string;
@@ -82,7 +84,7 @@ export default async function ResultsPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,group_id,show_candidate_image,show_candidate_description,show_nominator_info,live_results_enabled,closed_result_visibility,archived_at",
+        "id,title,description,status,vote_type,group_id,show_candidate_image,show_candidate_description,show_nominator_info,archived_at",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -94,8 +96,14 @@ export default async function ResultsPage({
   }
 
   const isAdmin = profile?.role === "admin";
-  const canReadAllVotes = canViewResults(contest, profile);
   const dataClient = isAdmin ? await createServerDataClient() : supabase;
+  const resultVisibilityByContest =
+    await loadContestResultVisibilityByContest(dataClient, [contest], {
+      includeAdminOverride: isAdmin,
+    });
+  const resultVisibility =
+    resultVisibilityByContest.get(contest.id) ??
+    hiddenContestResultVisibility();
   let callingSessionQuery = dataClient
     .from("contest_calling_sessions")
     .select(
@@ -106,6 +114,7 @@ export default async function ResultsPage({
 
   if (!isAdmin) {
     callingSessionQuery = callingSessionQuery.in("status", [
+      "draft",
       "active",
       "paused",
       "completed",
@@ -138,17 +147,16 @@ export default async function ResultsPage({
       : null,
     callingSession?.metadata,
   );
-  const callingIsPublicProgress =
-    !isAdmin &&
-    callingSession !== null &&
-    (callingSession.status === "active" || callingSession.status === "paused");
-  const callingIsCompleted = callingSession?.status === "completed";
-  const canDisplayFullResults = canReadAllVotes || callingIsCompleted;
+  const canReadAllVotes = resultVisibility.fullResultsVisible;
+  const callingIsPublicProgress = resultVisibility.callingProgressVisible;
+  const canDisplayFullResults = resultVisibility.fullResultsVisible;
   const canGenerateCalling = contest.status === "closed" || contest.status === "published";
   const callingAutoRefreshWatches: ContestCallingRefreshWatch[] =
     !isAdmin &&
     callingSession &&
-    (callingSession.status === "active" || callingSession.status === "paused")
+    (callingSession.status === "draft" ||
+      callingSession.status === "active" ||
+      callingSession.status === "paused")
       ? [
           {
             contestId: contest.id,
@@ -272,43 +280,25 @@ export default async function ResultsPage({
       loveAllocations = loveRows ?? [];
     }
   } else if (canDisplayFullResults) {
-    const publicResultClient = await createServerDataClient();
-    const [
-      { data: voteRows, error: voteRowsError },
-      { data: loveRows, error: loveRowsError },
-    ] = await Promise.all([
-      fetchAllRows<PublicVoteRow>(() =>
-        publicResultClient
-          .from("votes")
-          .select("id,contest_id,payload,created_at")
-          .eq("contest_id", id)
-          .order("created_at", { ascending: true }),
-      ),
-      contest.group_id
-        ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
-            () =>
-              publicResultClient
-                .from("love_vote_allocations")
-                .select("vote_id,candidate_id")
-                .eq("contest_id", id),
-          )
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-    if (voteRowsError || loveRowsError) {
+    const publicResultData = await loadVisibleContestResultData(supabase, [id]);
+    if (publicResultData.error) {
       console.error(
         "Failed to load public contest result votes.",
-        voteRowsError?.message ?? loveRowsError?.message,
+        publicResultData.error.message,
       );
     } else {
-      votes = (voteRows ?? []).map((vote) => ({
+      votes = publicResultData.votes.map((vote) => ({
         ...vote,
         voter_id: null,
       }));
-      loveAllocations = loveRows ?? [];
+      loveAllocations = publicResultData.loveAllocations.map((allocation) => ({
+        vote_id: allocation.vote_id,
+        candidate_id: allocation.candidate_id,
+      }));
     }
   }
 
-  const shouldHideLoveWeight = !isAdmin && contest.status !== "published" && !callingIsCompleted;
+  const shouldHideLoveWeight = !resultVisibility.showWeightedLoveScore;
   const results = tallyVotes({
     voteType: contest.vote_type,
     candidates: visibleCandidates,
@@ -318,7 +308,9 @@ export default async function ResultsPage({
     loveAllocations,
   });
   const showLoveBreakdown =
-    canDisplayFullResults && !shouldHideLoveWeight && contest.status !== "voting";
+    canDisplayFullResults &&
+    resultVisibility.showWeightedLoveScore &&
+    contest.status !== "voting";
   const totalLoveVotes = loveAllocations.length;
   const entryByCandidateId = new Map<string, TournamentEntry>();
 

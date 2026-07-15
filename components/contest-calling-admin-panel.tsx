@@ -1,7 +1,17 @@
 ﻿"use client";
 
 import { useEffect, useTransition } from "react";
-import { RotateCcw, Archive, Pause, Play, SkipBack, SkipForward, Wand2 } from "lucide-react";
+import {
+  Archive,
+  ChevronsDown,
+  Heart,
+  Pause,
+  Play,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
+  Wand2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,6 +21,7 @@ import {
   generateContestCallingSessionAction,
 } from "@/lib/actions/contest-calling-actions";
 import { toUserFacingError } from "@/lib/action-error";
+import { getContestCallingLoveStartStep } from "@/lib/contest-calling";
 import type { ContestCallingSession } from "@/lib/types";
 
 type CallingSessionControl = Pick<
@@ -21,6 +32,7 @@ type CallingSessionControl = Pick<
   | "total_steps"
   | "play_mode"
   | "auto_interval_seconds"
+  | "metadata"
 > | null;
 
 type ActionResult =
@@ -65,6 +77,16 @@ export function ContestCallingAdminPanel({
   const totalSteps = session ? Math.max(0, Number(session.total_steps) || 0) : 0;
   const canGoPrevious = Boolean(session && currentStep > 0 && session.status !== "archived");
   const canGoNext = Boolean(session && currentStep < totalSteps && session.status !== "archived");
+  const loveStartStep = session
+    ? getContestCallingLoveStartStep(session.metadata)
+    : null;
+  const canStartFromLove = Boolean(
+    session &&
+      loveStartStep !== null &&
+      currentStep < loveStartStep &&
+      session.status !== "archived" &&
+      session.status !== "completed",
+  );
 
   function runAction(
     action: (formData: FormData) => Promise<ActionResult>,
@@ -188,6 +210,26 @@ export function ContestCallingAdminPanel({
               >
                 <SkipForward className="size-4" />
                 下一张
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => control("next_five")}
+                disabled={isPending || !canGoNext}
+              >
+                <ChevronsDown className="size-4" />
+                下5张
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => control("love_start")}
+                disabled={isPending || !canStartFromLove}
+              >
+                <Heart className="size-4" />
+                从真爱票开始
               </Button>
               <Button
                 type="button"

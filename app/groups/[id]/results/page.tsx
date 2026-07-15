@@ -10,15 +10,16 @@ import {
   GroupResultSummaryList,
   type GroupContestResultSummary,
 } from "@/components/group-result-summary-list";
-import { canViewResults } from "@/lib/contest-rules";
 import { getContestCallingPhaseProgress } from "@/lib/contest-calling";
 import { getCurrentProfile } from "@/lib/auth";
 import { getPublicImageUrl } from "@/lib/image/image-url";
+import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
+import { loadVisibleContestResultData } from "@/lib/visible-result-data";
 import type { Candidate, Contest, ContestCallingSession, LoveVoteAllocation, Vote } from "@/lib/types";
 
 type ResultCandidate = Pick<
@@ -34,8 +35,6 @@ type ResultContest = Pick<
   | "status"
   | "vote_type"
   | "group_id"
-  | "closed_result_visibility"
-  | "live_results_enabled"
   | "created_at"
   | "updated_at"
 >;
@@ -66,7 +65,7 @@ export default async function GroupResultsPage({
     dataClient
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,group_id,closed_result_visibility,live_results_enabled,created_at,updated_at",
+        "id,title,description,status,vote_type,group_id,created_at,updated_at",
       )
       .eq("group_id", id)
       .is("archived_at", null)
@@ -81,7 +80,14 @@ export default async function GroupResultsPage({
 
   const isAdmin = profile?.role === "admin";
   const contestIds = (contests ?? []).map((contest) => contest.id);
-  let callingSessionQuery = dataClient
+  const resultVisibilityByContest =
+    await loadContestResultVisibilityByContest(
+      isAdmin ? dataClient : supabase,
+      contests ?? [],
+      { includeAdminOverride: isAdmin },
+    );
+  const sessionClient = isAdmin ? dataClient : supabase;
+  let callingSessionQuery = sessionClient
     .from("contest_calling_sessions")
     .select(
       "id,contest_id,status,current_step,total_steps,play_mode,auto_interval_seconds,seed,metadata,created_by,started_at,completed_at,archived_at,created_at,updated_at",
@@ -94,6 +100,7 @@ export default async function GroupResultsPage({
 
   if (!isAdmin) {
     callingSessionQuery = callingSessionQuery.in("status", [
+      "draft",
       "active",
       "paused",
       "completed",
@@ -121,22 +128,25 @@ export default async function GroupResultsPage({
     }),
   );
 
-  const visibleContests = (contests ?? []).filter((contest) => {
-    if (canViewResults(contest, profile)) {
-      return true;
-    }
-    const callingSession = callingSessionByContest.get(contest.id);
-    return (
-      callingSession?.status === "active" ||
-      callingSession?.status === "paused" ||
-      callingSession?.status === "completed"
-    );
-  });
-  const visibleContestIds = visibleContests.map((contest) => contest.id);
+  const visibleContests = (contests ?? []).filter(
+    (contest) =>
+      resultVisibilityByContest.get(contest.id)?.resultPageVisible === true,
+  );
+  const fullResultVisibleContestIds = visibleContests
+    .filter(
+      (contest) =>
+        resultVisibilityByContest.get(contest.id)?.fullResultsVisible === true,
+    )
+    .map((contest) => contest.id);
   const callingAutoRefreshWatches: ContestCallingRefreshWatch[] = !isAdmin
     ? visibleContests.flatMap((contest) => {
         const session = callingSessionByContest.get(contest.id);
-        if (!session || (session.status !== "active" && session.status !== "paused")) {
+        if (
+          !session ||
+          (session.status !== "draft" &&
+            session.status !== "active" &&
+            session.status !== "paused")
+        ) {
           return [];
         }
         return [
@@ -151,13 +161,13 @@ export default async function GroupResultsPage({
         ];
       })
     : [];
-  const candidateClient = dataClient;
+  const candidateClient = isAdmin ? dataClient : supabase;
   const { data: candidateRows } =
-    visibleContestIds.length > 0
+    fullResultVisibleContestIds.length > 0
       ? await candidateClient
           .from("candidates")
           .select("id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at")
-          .in("contest_id", visibleContestIds)
+          .in("contest_id", fullResultVisibleContestIds)
           .order("created_at", { ascending: true })
       : { data: [] };
   const candidates = isAdmin
@@ -177,45 +187,70 @@ export default async function GroupResultsPage({
     Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>
   >();
 
-  if (visibleContestIds.length > 0) {
-    const [
-      { data: voteRows, error: voteRowsError },
-      { data: loveRows, error: loveRowsError },
-    ] = await Promise.all([
-      fetchAllRows<Vote>(() =>
-        dataClient
-          .from("votes")
-          .select("id,contest_id,voter_id,payload,created_at")
-          .in("contest_id", visibleContestIds)
-          .order("created_at", { ascending: true }),
-      ),
-      fetchAllRows<GroupLoveVoteRow>(() =>
-        dataClient
-          .from("love_vote_allocations")
-          .select("contest_id,vote_id,candidate_id")
-          .in("contest_id", visibleContestIds),
-      ),
-    ]);
+  if (fullResultVisibleContestIds.length > 0) {
+    if (isAdmin) {
+      const [voteResult, loveResult] = await Promise.all([
+        fetchAllRows<Vote>(() =>
+          dataClient
+            .from("votes")
+            .select("id,contest_id,voter_id,payload,created_at")
+            .in("contest_id", fullResultVisibleContestIds)
+            .order("created_at", { ascending: true }),
+        ),
+        fetchAllRows<GroupLoveVoteRow>(() =>
+          dataClient
+            .from("love_vote_allocations")
+            .select("contest_id,vote_id,candidate_id")
+            .in("contest_id", fullResultVisibleContestIds),
+        ),
+      ]);
+      const error = voteResult.error ?? loveResult.error;
 
-    if (voteRowsError || loveRowsError) {
-      console.error(
-        "Failed to load group result votes.",
-        voteRowsError?.message ?? loveRowsError?.message,
-      );
-    } else {
-      for (const vote of voteRows ?? []) {
-        const current = votesByContest.get(vote.contest_id) ?? [];
-        current.push(isAdmin ? vote : { ...vote, voter_id: null });
-        votesByContest.set(vote.contest_id, current);
+      if (error) {
+        console.error("Failed to load group result votes.", error.message);
+      } else {
+        for (const vote of voteResult.data ?? []) {
+          const current = votesByContest.get(vote.contest_id) ?? [];
+          current.push(vote);
+          votesByContest.set(vote.contest_id, current);
+        }
+
+        for (const loveRow of loveResult.data ?? []) {
+          const current = loveAllocationsByContest.get(loveRow.contest_id) ?? [];
+          current.push({
+            vote_id: loveRow.vote_id,
+            candidate_id: loveRow.candidate_id,
+          });
+          loveAllocationsByContest.set(loveRow.contest_id, current);
+        }
       }
+    } else {
+      const resultData = await loadVisibleContestResultData(
+        supabase,
+        fullResultVisibleContestIds,
+      );
 
-      for (const loveRow of loveRows ?? []) {
-        const current = loveAllocationsByContest.get(loveRow.contest_id) ?? [];
-        current.push({
-          vote_id: loveRow.vote_id,
-          candidate_id: loveRow.candidate_id,
-        });
-        loveAllocationsByContest.set(loveRow.contest_id, current);
+      if (resultData.error) {
+        console.error(
+          "Failed to load public group result votes.",
+          resultData.error.message,
+        );
+      } else {
+        for (const vote of resultData.votes) {
+          const publicVote: Vote = { ...vote, voter_id: null };
+          const current = votesByContest.get(vote.contest_id) ?? [];
+          current.push(publicVote);
+          votesByContest.set(vote.contest_id, current);
+        }
+
+        for (const loveRow of resultData.loveAllocations) {
+          const current = loveAllocationsByContest.get(loveRow.contest_id) ?? [];
+          current.push({
+            vote_id: loveRow.vote_id,
+            candidate_id: loveRow.candidate_id,
+          });
+          loveAllocationsByContest.set(loveRow.contest_id, current);
+        }
       }
     }
   }
@@ -223,22 +258,28 @@ export default async function GroupResultsPage({
   const summaries: GroupContestResultSummary[] = visibleContests
     .map((contest) => {
       const callingSession = callingSessionByContest.get(contest.id) ?? null;
+      const resultVisibility = resultVisibilityByContest.get(contest.id);
       const callingInProgress =
-        !isAdmin &&
-        (callingSession?.status === "active" || callingSession?.status === "paused");
-      const callingCompleted = callingSession?.status === "completed";
+        resultVisibility?.callingProgressVisible === true;
       const callingPhaseProgress = callingSession
         ? (callingPhaseProgressByContest.get(contest.id) ?? null)
         : null;
-      const shouldHideLoveWeight = !isAdmin && contest.status !== "published" && !callingCompleted;
-      const results = tallyVotes({
-        voteType: contest.vote_type,
-        candidates: candidatesByContest.get(contest.id) ?? [],
-        votes: votesByContest.get(contest.id) ?? [],
-        loveVoteWeight: contest.group_id ? Number(group.love_vote_weight) : null,
-        loveVoteScoreMode: shouldHideLoveWeight ? "base" : "weighted",
-        loveAllocations: loveAllocationsByContest.get(contest.id) ?? [],
-      });
+      const fullResultsVisible =
+        resultVisibility?.fullResultsVisible === true;
+      const results = fullResultsVisible
+        ? tallyVotes({
+            voteType: contest.vote_type,
+            candidates: candidatesByContest.get(contest.id) ?? [],
+            votes: votesByContest.get(contest.id) ?? [],
+            loveVoteWeight: contest.group_id
+              ? Number(group.love_vote_weight)
+              : null,
+            loveVoteScoreMode: resultVisibility?.showWeightedLoveScore
+              ? "weighted"
+              : "base",
+            loveAllocations: loveAllocationsByContest.get(contest.id) ?? [],
+          })
+        : [];
       const resultPublishedAt = contest.updated_at ?? contest.created_at ?? null;
 
       return {

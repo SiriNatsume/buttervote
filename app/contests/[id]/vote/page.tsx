@@ -8,13 +8,14 @@ import { VoteForm } from "@/components/vote-form";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
+import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
+import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
-import { fetchAllRows } from "@/lib/supabase-pagination";
 import { tallyVotes } from "@/lib/tally";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
 import { formatDateTime } from "@/lib/time";
-import type { LoveVoteAllocation, Vote } from "@/lib/types";
+import { loadVisibleContestResultData } from "@/lib/visible-result-data";
 
 export default async function VotePage({
   params,
@@ -26,23 +27,26 @@ export default async function VotePage({
   const user = await requireUser();
   const [{ id }, query] = await Promise.all([params, searchParams]);
   await applyDueScheduledTransitionsForContest(id, { revalidate: false });
-  const supabase = await createServerDataClient();
+  const [supabase, dataClient] = await Promise.all([
+    createClient(),
+    createServerDataClient(),
+  ]);
   const [{ data: contest }, { data: existingVote }, { data: candidates }] =
     await Promise.all([
       supabase
         .from("contests")
         .select(
-          "id,title,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,live_results_enabled,show_candidate_image,show_candidate_description,show_nominator_info,voting_ends_at,archived_at",
+          "id,title,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,show_candidate_image,show_candidate_description,show_nominator_info,voting_ends_at,archived_at",
         )
         .eq("id", id)
         .maybeSingle(),
-      supabase
+      dataClient
         .from("votes")
         .select("id,payload")
         .eq("contest_id", id)
         .eq("voter_id", user.id)
         .maybeSingle(),
-      supabase
+      (user.role === "admin" ? dataClient : supabase)
         .from("candidates")
         .select("id,name,description,image_path,nominator_display_name,is_active,created_at")
         .eq("contest_id", id)
@@ -79,7 +83,7 @@ export default async function VotePage({
 
   const { count: usedLoveVotes } =
     contest.group_id && contest.love_vote_enabled !== false
-      ? await supabase
+      ? await dataClient
           .from("love_vote_allocations")
           .select("id", { count: "exact", head: true })
           .eq("group_id", contest.group_id)
@@ -107,7 +111,7 @@ export default async function VotePage({
     const selectedCandidateIdSet = new Set(selectedCandidateIds);
     const { data: existingLoveRows } =
       loveVoteInfo && selectedCandidateIds.length > 0
-        ? await supabase
+        ? await dataClient
             .from("love_vote_allocations")
             .select("candidate_id")
             .eq("vote_id", existingVote.id)
@@ -162,43 +166,33 @@ export default async function VotePage({
   }
 
   let realtimeScores: Record<string, number> | undefined;
+  const resultVisibilityByContest =
+    await loadContestResultVisibilityByContest(
+      user.role === "admin" ? dataClient : supabase,
+      [contest],
+      { includeAdminOverride: user.role === "admin" },
+    );
 
-  if (contest.live_results_enabled) {
-    const [
-      { data: voteRows, error: voteRowsError },
-      { data: loveRows, error: loveRowsError },
-    ] = await Promise.all([
-      fetchAllRows<Vote>(() =>
-        supabase
-          .from("votes")
-          .select("id,contest_id,voter_id,payload,created_at")
-          .eq("contest_id", id)
-          .order("created_at", { ascending: true }),
-      ),
-      contest.group_id
-        ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
-            () =>
-              supabase
-                .from("love_vote_allocations")
-                .select("vote_id,candidate_id")
-                .eq("contest_id", id),
-          )
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+  if (resultVisibilityByContest.get(contest.id)?.fullResultsVisible) {
+    const resultData = await loadVisibleContestResultData(
+      user.role === "admin" ? dataClient : supabase,
+      [id],
+      { includeAdminOverride: user.role === "admin" },
+    );
 
-    if (voteRowsError || loveRowsError) {
+    if (resultData.error) {
       console.error(
         "Failed to load live vote page scores.",
-        voteRowsError?.message ?? loveRowsError?.message,
+        resultData.error.message,
       );
     } else {
       const results = tallyVotes({
         voteType: contest.vote_type,
         candidates: candidates ?? [],
-        votes: voteRows ?? [],
+        votes: resultData.votes.map((vote) => ({ ...vote, voter_id: null })),
         loveVoteWeight: group ? Number(group.love_vote_weight) : null,
         loveVoteScoreMode: "base",
-        loveAllocations: loveRows ?? [],
+        loveAllocations: resultData.loveAllocations,
       });
 
       realtimeScores = Object.fromEntries(
