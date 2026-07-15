@@ -114,6 +114,7 @@ export default async function ResultsPage({
 
   if (!isAdmin) {
     callingSessionQuery = callingSessionQuery.in("status", [
+      "draft",
       "active",
       "paused",
       "completed",
@@ -153,7 +154,9 @@ export default async function ResultsPage({
   const callingAutoRefreshWatches: ContestCallingRefreshWatch[] =
     !isAdmin &&
     callingSession &&
-    (callingSession.status === "active" || callingSession.status === "paused")
+    (callingSession.status === "draft" ||
+      callingSession.status === "active" ||
+      callingSession.status === "paused")
       ? [
           {
             contestId: contest.id,

@@ -23,7 +23,11 @@ type CallingSessionState = {
   updated_at: string | null;
 };
 
-const REFRESHABLE_STATUSES = new Set<ContestCallingStatus>(["active", "paused"]);
+const REFRESHABLE_STATUSES = new Set<ContestCallingStatus>([
+  "draft",
+  "active",
+  "paused",
+]);
 
 function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : Number(value) || 0;
@@ -83,7 +87,7 @@ export function ContestCallingAutoRefresh({
         .select("id,contest_id,status,current_step,total_steps,updated_at")
         .in("contest_id", contestIds)
         .is("archived_at", null)
-        .in("status", ["active", "paused", "completed"])
+        .in("status", ["draft", "active", "paused", "completed"])
         .order("created_at", { ascending: false });
 
       inFlightRef.current = false;

@@ -100,6 +100,7 @@ export default async function GroupResultsPage({
 
   if (!isAdmin) {
     callingSessionQuery = callingSessionQuery.in("status", [
+      "draft",
       "active",
       "paused",
       "completed",
@@ -140,7 +141,12 @@ export default async function GroupResultsPage({
   const callingAutoRefreshWatches: ContestCallingRefreshWatch[] = !isAdmin
     ? visibleContests.flatMap((contest) => {
         const session = callingSessionByContest.get(contest.id);
-        if (!session || (session.status !== "active" && session.status !== "paused")) {
+        if (
+          !session ||
+          (session.status !== "draft" &&
+            session.status !== "active" &&
+            session.status !== "paused")
+        ) {
           return [];
         }
         return [

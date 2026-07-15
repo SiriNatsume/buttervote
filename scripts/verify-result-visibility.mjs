@@ -178,12 +178,24 @@ try {
   );
 
   await requireData(
+    "关闭活动完整结果",
+    service
+      .from("contests")
+      .update({ closed_result_visibility: "admin_only" })
+      .eq("id", sourceContestId),
+  );
+  const closedHiddenVisibility = await publicVisibility();
+  assert.equal(closedHiddenVisibility.visibility_state, "hidden");
+  assert.equal(closedHiddenVisibility.result_page_visible, false);
+  assert.equal(await visibleVoteCount(), 0);
+
+  await requireData(
     "创建唱票会话",
     service.from("contest_calling_sessions").insert({
       id: sessionId,
       contest_id: sourceContestId,
-      status: "active",
-      current_step: 1,
+      status: "draft",
+      current_step: 0,
       total_steps: 2,
       seed: "result-visibility-contract",
     }),
@@ -212,8 +224,52 @@ try {
     ]),
   );
 
+  const callingReadyVisibility = await publicVisibility();
+  assert.equal(callingReadyVisibility.visibility_state, "calling_progress");
+  assert.equal(callingReadyVisibility.reason, "calling_ready");
+  assert.equal(callingReadyVisibility.result_page_visible, true);
+  assert.equal(callingReadyVisibility.calling_progress_visible, true);
+  assert.equal(callingReadyVisibility.full_results_visible, false);
+  assert.equal(await visibleVoteCount(), 0);
+  const readyDownstreamVisibility = await publicVisibility(downstreamContestId);
+  assert.equal(readyDownstreamVisibility.visibility_state, "hidden");
+  assert.equal(readyDownstreamVisibility.reason, "dependency_hidden");
+  assert.equal(await publicCandidateCount(inheritedCandidateId), 0);
+  assert.equal(await publicCandidateCount(deepInheritedCandidateId), 0);
+  const readySessions = await requireData(
+    "读取等待开始的唱票会话",
+    anonymous
+      .from("contest_calling_sessions")
+      .select("id,status,current_step")
+      .eq("id", sessionId),
+  );
+  assert.deepEqual(readySessions, [
+    { id: sessionId, status: "draft", current_step: 0 },
+  ]);
+  const readyEvents = await requireData(
+    "确认未开始时不公开唱票事件",
+    anonymous
+      .from("contest_calling_events")
+      .select("sequence")
+      .eq("session_id", sessionId),
+  );
+  assert.equal(readyEvents.length, 0);
+
+  await requireData(
+    "开始唱票",
+    service
+      .from("contest_calling_sessions")
+      .update({
+        status: "active",
+        current_step: 1,
+        started_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId),
+  );
+
   const callingVisibility = await publicVisibility();
   assert.equal(callingVisibility.visibility_state, "calling_progress");
+  assert.equal(callingVisibility.reason, "calling_in_progress");
   assert.equal(callingVisibility.full_results_visible, false);
   const downstreamVisibility = await publicVisibility(downstreamContestId);
   assert.equal(downstreamVisibility.visibility_state, "hidden");

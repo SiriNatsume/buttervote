@@ -4,6 +4,26 @@ import {
   hiddenContestResultVisibility,
 } from "../lib/result-visibility-model.ts";
 
+const callingReady = contestResultVisibilityFromRow({
+  contest_id: "contest-1",
+  visibility_state: "calling_progress",
+  result_page_visible: true,
+  full_results_visible: false,
+  calling_progress_visible: true,
+  full_results_blocked_by_calling: true,
+  show_weighted_love_score: false,
+  reason: "calling_ready",
+  calling_session_id: "session-1",
+  calling_session_status: "draft",
+  visibility_version: "2026-07-15T00:00:00.000Z",
+});
+
+assert.equal(callingReady.state, "calling_progress");
+assert.equal(callingReady.resultPageVisible, true);
+assert.equal(callingReady.fullResultsVisible, false);
+assert.equal(callingReady.callingProgressVisible, true);
+assert.equal(callingReady.reason, "calling_ready");
+
 const callingProgress = contestResultVisibilityFromRow({
   contest_id: "contest-1",
   visibility_state: "calling_progress",

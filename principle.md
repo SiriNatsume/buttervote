@@ -82,7 +82,7 @@
 ## 结果可见性原则
 
 - 所有公开结果入口必须调用数据库 `get_contest_result_visibility`，不得在页面、组件或导出接口中自行组合活动字段推断可见性。
-- 统一状态只有 `hidden`、`calling_progress`、`full`；唱票处于 `active` / `paused` 时必须覆盖活动原有公开设置，进入 `calling_progress`。
+- 统一状态只有 `hidden`、`calling_progress`、`full`；存在未归档的 `draft` / `active` / `paused` 唱票时必须覆盖活动原有公开设置，进入 `calling_progress`。其中 `draft` 允许用户进入结果页等待开始，但不得读取任何完整结果或未揭晓唱票事件。
 - 普通用户只有在以下情况进入 `full`：
   - 活动 `published`。
   - 活动 `closed` 且 `closed_result_visibility = "public"`。
