@@ -81,6 +81,10 @@ export type TournamentBracketParticipant = {
   imagePath: string | null;
   seedLabel: string | null;
   score: number | null;
+  normalScore: number | null;
+  loveScore: number | null;
+  loveVoteCount: number | null;
+  lastVoteAt: string | null;
   isWinner: boolean;
 };
 
@@ -93,6 +97,11 @@ export type TournamentBracketMatch = {
   left: TournamentBracketParticipant | null;
   right: TournamentBracketParticipant | null;
   resultVisible: boolean;
+  breakdownVisible: boolean;
+  scheduledStartsAt: string | null;
+  scheduledEndsAt: string | null;
+  loveVoteWeight: number | null;
+  tiebreakExplanation: string | null;
   winnerEntryId: string | null;
   loserEntryId: string | null;
 };
@@ -259,14 +268,30 @@ async function tallyVisibleContestScores(
   fullResultVisibleContestIds: ReadonlySet<string>,
   weightedLoveScoreContestIds: ReadonlySet<string>,
 ) {
-  const scores = new Map<string, Map<string, number>>();
+  const details = new Map<
+    string,
+    {
+      byCandidate: Map<
+        string,
+        {
+          score: number;
+          normalScore: number;
+          loveScore: number;
+          loveVoteCount: number;
+          lastVoteAt: string | null;
+        }
+      >;
+      loveVoteWeight: number | null;
+      firstVoteAt: string | null;
+    }
+  >();
   const visibleContests = contests.filter((contest) =>
     fullResultVisibleContestIds.has(contest.id),
   );
   const visibleContestIds = visibleContests.map((contest) => contest.id);
 
   if (visibleContestIds.length === 0) {
-    return scores;
+    return details;
   }
 
   const groupIds = [
@@ -306,7 +331,7 @@ async function tallyVisibleContestScores(
       "Failed to load tournament bracket scores.",
       candidatesError?.message ?? resultData.error?.message,
     );
-    return scores;
+    return details;
   }
 
   const candidatesByContest = new Map<string, BracketCandidate[]>();
@@ -331,29 +356,50 @@ async function tallyVisibleContestScores(
   }
 
   for (const contest of visibleContests) {
-    scores.set(
+    const weightedLoveScoreVisible = weightedLoveScoreContestIds.has(contest.id);
+    const results = tallyVotes({
+      voteType: contest.vote_type,
+      candidates: candidatesByContest.get(contest.id) ?? [],
+      votes: (votesByContest.get(contest.id) ?? []).map((vote) => ({
+        ...vote,
+        voter_id: null,
+      })),
+      loveVoteWeight: contest.group_id
+        ? loveVoteWeightByGroup.get(contest.group_id) ?? null
+        : null,
+      loveVoteScoreMode: weightedLoveScoreVisible ? "weighted" : "base",
+      loveAllocations: loveRowsByContest.get(contest.id) ?? [],
+    });
+    details.set(
       contest.id,
-      new Map(
-        tallyVotes({
-          voteType: contest.vote_type,
-          candidates: candidatesByContest.get(contest.id) ?? [],
-          votes: (votesByContest.get(contest.id) ?? []).map((vote) => ({
-            ...vote,
-            voter_id: null,
-          })),
-          loveVoteWeight: contest.group_id
+      {
+        byCandidate: new Map(
+          results.map((result) => [
+            result.candidateId,
+            {
+              score: result.score,
+              normalScore: result.normalScore,
+              loveScore: result.loveScore,
+              loveVoteCount: result.loveVoteCount,
+              lastVoteAt: result.lastVoteAt,
+            },
+          ]),
+        ),
+        loveVoteWeight:
+          weightedLoveScoreVisible && contest.group_id
             ? loveVoteWeightByGroup.get(contest.group_id) ?? null
             : null,
-          loveVoteScoreMode: weightedLoveScoreContestIds.has(contest.id)
-            ? "weighted"
-            : "base",
-          loveAllocations: loveRowsByContest.get(contest.id) ?? [],
-        }).map((result) => [result.candidateId, result.score]),
-      ),
+        firstVoteAt:
+          (votesByContest.get(contest.id) ?? []).reduce<string | null>(
+            (earliest, vote) =>
+              !earliest || vote.created_at < earliest ? vote.created_at : earliest,
+            null,
+          ),
+      },
     );
   }
 
-  return scores;
+  return details;
 }
 
 async function loadTournamentBracket(
@@ -498,7 +544,7 @@ async function loadTournamentBracket(
       .filter(([, visibility]) => visibility.showWeightedLoveScore)
       .map(([contestId]) => contestId),
   );
-  const scoreByContest = await tallyVisibleContestScores(
+  const resultDetailsByContest = await tallyVisibleContestScores(
     supabase,
     structureClient,
     [...contestById.values()],
@@ -583,6 +629,7 @@ async function loadTournamentBracket(
     entryId: string | null,
     match: TournamentMatch,
     resultVisible: boolean,
+    breakdownVisible: boolean,
   ): TournamentBracketParticipant | null {
     const source = participantSource(entryId, match, hiddenRoundByEntry);
     if (!source) {
@@ -590,9 +637,10 @@ async function loadTournamentBracket(
     }
     const { candidate, entry, matchCandidateId } = source;
     const contestId = match.contest_id;
-    const score =
+    const scoreDetails =
       resultVisible && contestId && matchCandidateId
-        ? scoreByContest.get(contestId)?.get(matchCandidateId) ?? null
+        ? resultDetailsByContest.get(contestId)?.byCandidate.get(matchCandidateId) ??
+          null
         : null;
 
     return {
@@ -600,9 +648,63 @@ async function loadTournamentBracket(
       name: candidate.name,
       imagePath: candidate.image_path,
       seedLabel: seedLabel(entry),
-      score,
+      score: scoreDetails?.score ?? null,
+      normalScore: breakdownVisible ? scoreDetails?.normalScore ?? null : null,
+      loveScore: breakdownVisible ? scoreDetails?.loveScore ?? null : null,
+      loveVoteCount: breakdownVisible ? scoreDetails?.loveVoteCount ?? null : null,
+      lastVoteAt: breakdownVisible ? scoreDetails?.lastVoteAt ?? null : null,
       isWinner: resultVisible && match.winner_entry_id === entry.id,
     };
+  }
+
+  function tiebreakExplanation(
+    match: TournamentMatch,
+    left: TournamentBracketParticipant | null,
+    right: TournamentBracketParticipant | null,
+    breakdownVisible: boolean,
+  ) {
+    if (
+      !breakdownVisible ||
+      !left ||
+      !right ||
+      left.score === null ||
+      right.score === null ||
+      left.score !== right.score ||
+      !match.winner_entry_id
+    ) {
+      return null;
+    }
+
+    const winner =
+      [left, right].find((participant) => participant.entryId === match.winner_entry_id) ??
+      null;
+    const leftEntry = entryById.get(left.entryId);
+    const rightEntry = entryById.get(right.entryId);
+    if (!winner || !leftEntry || !rightEntry) return null;
+
+    if (
+      leftEntry.preliminary_group &&
+      leftEntry.preliminary_group === rightEntry.preliminary_group &&
+      typeof leftEntry.preliminary_rank === "number" &&
+      typeof rightEntry.preliminary_rank === "number" &&
+      leftEntry.preliminary_rank !== rightEntry.preliminary_rank
+    ) {
+      return `两名选手预赛同组，${winner.name} 预赛组内排名更高而晋级。`;
+    }
+
+    if (
+      typeof leftEntry.screening_rank === "number" &&
+      typeof rightEntry.screening_rank === "number" &&
+      leftEntry.screening_rank !== rightEntry.screening_rank
+    ) {
+      return `${winner.name} 海选排名更高而晋级。`;
+    }
+
+    if (left.lastVoteAt && right.lastVoteAt && left.lastVoteAt !== right.lastVoteAt) {
+      return `两名选手海选排名相同。\n${winner.name} 更早达到最终比分而晋级。`;
+    }
+
+    return "根据赛事随机种子决定晋级者。";
   }
 
   const rounds = ROUND_ORDER.map((round) => {
@@ -614,6 +716,23 @@ async function loadTournamentBracket(
           ? contestById.get(match.contest_id) ?? null
           : null;
         const resultVisible = resultVisibleByMatch.get(match.id) === true;
+        const breakdownVisible =
+          resultVisible &&
+          Boolean(
+            match.contest_id && weightedLoveScoreContestIds.has(match.contest_id),
+          );
+        const left = participant(
+          match.left_entry_id,
+          match,
+          resultVisible,
+          breakdownVisible,
+        );
+        const right = participant(
+          match.right_entry_id,
+          match,
+          resultVisible,
+          breakdownVisible,
+        );
 
         return {
           id: match.id,
@@ -621,9 +740,22 @@ async function loadTournamentBracket(
           roundLabel: roundLabel(match.round),
           slot: match.slot,
           contest,
-          left: participant(match.left_entry_id, match, resultVisible),
-          right: participant(match.right_entry_id, match, resultVisible),
+          left,
+          right,
           resultVisible,
+          breakdownVisible,
+          scheduledStartsAt: contest?.voting_starts_at ?? null,
+          scheduledEndsAt: contest?.voting_ends_at ?? null,
+          loveVoteWeight:
+            breakdownVisible && match.contest_id
+              ? resultDetailsByContest.get(match.contest_id)?.loveVoteWeight ?? null
+              : null,
+          tiebreakExplanation: tiebreakExplanation(
+            match,
+            left,
+            right,
+            breakdownVisible,
+          ),
           winnerEntryId: resultVisible ? match.winner_entry_id : null,
           loserEntryId: resultVisible ? match.loser_entry_id : null,
         } satisfies TournamentBracketMatch;
