@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Sans_SC } from "next/font/google";
+import "highlight.js/styles/github.css";
 import "./globals.css";
 import { AppProviders } from "@/components/app-providers";
 import { SiteHeader } from "@/components/site-header";

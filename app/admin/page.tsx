@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FolderKanban, Home, Images, Trophy, UsersRound } from "lucide-react";
+import { FileText, FolderKanban, Home, Images, Paperclip, Trophy, UsersRound } from "lucide-react";
 import {
   AdminContestsGroupedList,
   type AdminContestItem,
@@ -132,6 +132,18 @@ export default async function AdminPage({
             <Link href="/admin/hall-of-fame">
               <Images className="size-4" />
               冠军英灵殿
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/admin/pages">
+              <FileText className="size-4" />
+              页面
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/admin/assets">
+              <Paperclip className="size-4" />
+              附件
             </Link>
           </Button>
           <ContestForm groups={groups ?? []} triggerClassName="col-span-2 w-full sm:col-span-1 sm:w-auto" />

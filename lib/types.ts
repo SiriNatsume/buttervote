@@ -45,6 +45,18 @@ export type ContestResultVisibilityState =
   | "hidden"
   | "calling_progress"
   | "full";
+export type PageVisibility = "admin_only" | "public";
+export type PageAssetType = "image" | "attachment";
+export type PageAssetExtension =
+  | "jpg"
+  | "png"
+  | "webp"
+  | "pdf"
+  | "7z"
+  | "rar"
+  | "xlsx"
+  | "docx"
+  | "pptx";
 export type TournamentEntryStatus =
   | "screening"
   | "preliminary"
@@ -365,6 +377,34 @@ export type HallOfFameEntry = {
   updated_at: string;
 } & Record<string, unknown>;
 
+export type SitePage = {
+  id: string;
+  title: string;
+  description: string | null;
+  slug: string;
+  content_markdown: string;
+  visibility: PageVisibility;
+  published_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type PageAsset = {
+  id: string;
+  original_filename: string;
+  storage_path: string;
+  extension: PageAssetExtension;
+  mime_type: string;
+  byte_size: number;
+  asset_type: PageAssetType;
+  visibility: PageVisibility;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
 type Table<
   Row extends Record<string, unknown>,
   Insert extends Record<string, unknown>,
@@ -386,6 +426,40 @@ type Relationship = {
 };
 
 type Tables = {
+  site_pages: Table<
+    SitePage,
+    {
+      id?: string;
+      title: string;
+      description?: string | null;
+      slug: string;
+      content_markdown?: string;
+      visibility?: PageVisibility;
+      published_at?: string | null;
+      created_by?: string | null;
+      updated_by?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<SitePage, "id" | "created_at">>
+  >;
+  page_assets: Table<
+    PageAsset,
+    {
+      id?: string;
+      original_filename: string;
+      storage_path: string;
+      extension: PageAssetExtension;
+      mime_type: string;
+      byte_size: number;
+      asset_type: PageAssetType;
+      visibility?: PageVisibility;
+      uploaded_by?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<PageAsset, "id" | "created_at">>
+  >;
   hall_of_fame_entries: Table<
     HallOfFameEntry,
     {
