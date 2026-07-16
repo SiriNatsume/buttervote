@@ -2,6 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
+@property --match-progress-fill {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: #eef8ea;
+}
+
+@property --match-status-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --bracket-live-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes match-in-progress-breathe {
+  0%,
+  100% {
+    --match-progress-fill: #eef8ea;
+  }
+
+  50% {
+    --match-progress-fill: #dcefd7;
+  }
+}
+
+@keyframes match-status-border-orbit {
+  to {
+    --match-status-angle: 360deg;
+  }
+}
+
+@keyframes bracket-live-border-orbit {
+  to {
+    --bracket-live-angle: 360deg;
+  }
+}
+
+.match-in-progress-breathe {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(
+        var(--match-progress-fill),
+        var(--match-progress-fill)
+      )
+      padding-box,
+    conic-gradient(
+        from var(--match-status-angle),
+        rgb(83 145 91 / 0.16),
+        rgb(83 145 91 / 0.5),
+        rgb(137 190 137 / 0.2),
+        rgb(83 145 91 / 0.08),
+        rgb(83 145 91 / 0.16)
+      )
+      border-box;
+  animation:
+    match-in-progress-breathe 2.2s ease-in-out infinite,
+    match-status-border-orbit 4.8s linear infinite;
+}
+
+.bracket-live-match-cell {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.9)) padding-box,
+    conic-gradient(
+        from var(--bracket-live-angle),
+        rgb(47 117 64 / 0.42),
+        rgb(28 101 48 / 0.95),
+        rgb(82 157 91 / 0.62),
+        rgb(47 117 64 / 0.28),
+        rgb(47 117 64 / 0.42)
+      )
+      border-box;
+  animation: bracket-live-border-orbit 4.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .match-in-progress-breathe,
+  .bracket-live-match-cell {
+    animation: none;
+  }
+}
+
 .reactEasyCrop_Container {
   position: absolute;
   inset: 0;
