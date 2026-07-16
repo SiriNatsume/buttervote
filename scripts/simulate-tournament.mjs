@@ -22,6 +22,14 @@ const ROUND_ORDER = [
   "final",
   "third_place",
 ];
+const KNOCKOUT_ROUND_MATCH_COUNTS = Object.freeze({
+  round_of_16: 8,
+  quarterfinal: 4,
+  semifinal: 2,
+  final: 1,
+  third_place: 1,
+});
+const TIE_ELIGIBLE_ROUNDS = ["round_of_16", "quarterfinal", "semifinal"];
 
 function parseEnvFile(filePath) {
   return Object.fromEntries(
@@ -36,7 +44,7 @@ function parseEnvFile(filePath) {
   );
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const options = {
     tournamentId: null,
     voters: DEFAULT_VOTER_COUNT,
@@ -82,11 +90,23 @@ function parseArgs(argv) {
   if ((options.tieRound === null) !== (options.tieSlot === null)) {
     throw new Error("--tie-round and --tie-slot must be provided together.");
   }
-  if (options.tieRound && !["round_of_16", "quarterfinal", "semifinal"].includes(options.tieRound)) {
+  if (options.tieRound && !TIE_ELIGIBLE_ROUNDS.includes(options.tieRound)) {
     throw new Error("--tie-round must be round_of_16, quarterfinal, or semifinal.");
   }
-  if (options.tieSlot !== null && (!Number.isInteger(options.tieSlot) || options.tieSlot < 1)) {
-    throw new Error("--tie-slot must be a positive integer.");
+  if (options.tieRound) {
+    const maxTieSlot = KNOCKOUT_ROUND_MATCH_COUNTS[options.tieRound];
+    if (
+      !Number.isInteger(options.tieSlot) ||
+      options.tieSlot < 1 ||
+      options.tieSlot > maxTieSlot
+    ) {
+      throw new Error(
+        `--tie-slot must be an integer between 1 and ${maxTieSlot} for ${options.tieRound}.`,
+      );
+    }
+    if (options.voters % 2 !== 0) {
+      throw new Error("--voters must be even when requesting a tied knockout match.");
+    }
   }
   if (options.stopAtSemifinalVoting && !options.tieRound) {
     throw new Error("The semifinal-voting test case requires --tie-round and --tie-slot.");
@@ -622,8 +642,11 @@ async function simulateKnockoutRound(
   { tieSlot = null, withLoveVotes = false, close = true } = {},
 ) {
   const matches = await getRoundMatches(supabase, tournamentId, round);
-  const expected = { round_of_16: 8, quarterfinal: 4, semifinal: 2, final: 1, third_place: 1 }[round];
+  const expected = KNOCKOUT_ROUND_MATCH_COUNTS[round];
   if (matches.length !== expected) throw new Error(`${round} expected ${expected} matches.`);
+  if (tieSlot !== null && !matches.some((match) => match.slot === tieSlot)) {
+    throw new Error(`${round} has no match in slot ${tieSlot}.`);
+  }
 
   for (const match of matches) {
     if (!match.contest_id) throw new Error(`${round} slot ${match.slot} has no contest.`);

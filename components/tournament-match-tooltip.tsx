@@ -34,6 +34,7 @@ export type TournamentMatchTooltipData = {
   scheduledStartsAt: string | null;
   scheduledEndsAt: string | null;
   resultVisible: boolean;
+  breakdownVisible: boolean;
   loveVoteWeight: number | null;
   tiebreakExplanation: string | null;
   left: TooltipParticipant | null;
@@ -108,13 +109,38 @@ function totalVoteCount(participant: TooltipParticipant | null) {
   return participant.normalScore + participant.loveVoteCount;
 }
 
-type MatchDisplayState = "upcoming" | "voting" | "closed" | "published";
+type MatchDisplayState = "upcoming" | "voting" | "closed" | "results";
 
-function matchDisplayState(data: TournamentMatchTooltipData): MatchDisplayState {
-  if (data.status === "voting") return "voting";
-  if (data.resultVisible) return "published";
-  if (data.status === "closed" || data.status === "published") return "closed";
-  return "upcoming";
+export function resolveTournamentMatchPresentation(
+  data: TournamentMatchTooltipData,
+) {
+  let displayState: MatchDisplayState = "upcoming";
+  if (data.status === "voting") {
+    displayState = "voting";
+  } else if (data.resultVisible) {
+    displayState = "results";
+  } else if (data.status === "closed" || data.status === "published") {
+    displayState = "closed";
+  }
+
+  const showResults =
+    displayState === "results" ||
+    (displayState === "voting" && data.resultVisible);
+  const showBreakdown =
+    data.resultVisible &&
+    data.breakdownVisible &&
+    data.left !== null &&
+    data.right !== null;
+
+  return {
+    displayState,
+    showResults,
+    showBreakdown,
+    timeIsEnd: displayState === "closed" || displayState === "results",
+    scoreQualifier:
+      showResults && !data.breakdownVisible ? "（不含真爱票权重）" : null,
+    tiebreakExplanation: showBreakdown ? data.tiebreakExplanation : null,
+  };
 }
 
 function TooltipPanel({
@@ -126,13 +152,8 @@ function TooltipPanel({
   tooltipId: string;
   pinned: boolean;
 }) {
-  const displayState = matchDisplayState(data);
-  const showResults =
-    displayState === "published" ||
-    (displayState === "voting" && data.resultVisible);
-  const hasBreakdown =
-    displayState === "published" && data.left !== null && data.right !== null;
-  const timeIsEnd = displayState === "closed" || displayState === "published";
+  const presentation = resolveTournamentMatchPresentation(data);
+  const { displayState, showResults, showBreakdown, timeIsEnd } = presentation;
   return (
     <div
       id={tooltipId}
@@ -166,9 +187,9 @@ function TooltipPanel({
                 <span className="mx-1.5 text-[#A58A68]">|</span>
                 {data.right?.score ?? "—"}
               </div>
-              {displayState === "voting" ? (
+              {presentation.scoreQualifier ? (
                 <div className="mt-1 whitespace-nowrap text-[10px] font-normal leading-3 text-[#A58A68]">
-                  （不含真爱票）
+                  {presentation.scoreQualifier}
                 </div>
               ) : null}
             </div>
@@ -192,7 +213,7 @@ function TooltipPanel({
         </div>
       ) : null}
 
-      {hasBreakdown ? (
+      {showBreakdown ? (
         <>
           <div className="mx-4 mb-3 grid grid-cols-[minmax(0,1fr)_92px_minmax(0,1fr)] items-center gap-y-1.5 rounded-md bg-[#FFF8E8] py-2 text-xs">
             <BreakdownValue value={totalVoteCount(data.left)} />
@@ -216,9 +237,11 @@ function TooltipPanel({
             </span>
             <BreakdownValue value={data.right?.loveVoteCount} />
           </div>
-          {data.tiebreakExplanation ? (
+          {presentation.tiebreakExplanation ? (
             <div className="mx-4 mb-3 rounded-md bg-[#F1F1F1] px-3 py-2 text-center text-xs italic leading-5 text-[#666]">
-              <div className="whitespace-pre-line">{data.tiebreakExplanation}</div>
+              <div className="whitespace-pre-line">
+                {presentation.tiebreakExplanation}
+              </div>
             </div>
           ) : null}
         </>

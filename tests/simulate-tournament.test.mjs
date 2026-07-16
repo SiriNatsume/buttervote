@@ -6,7 +6,10 @@ import {
   buildBoundedApprovalMatrix,
   buildStrictDescendingScores,
   nextRoundPlan,
+  parseArgs,
 } from "../scripts/simulate-tournament.mjs";
+
+const TOURNAMENT_ID = "00000000-0000-4000-8000-000000000001";
 
 test("tournament simulator is restricted to loopback Supabase", () => {
   assert.equal(assertLoopbackSupabaseUrl("http://127.0.0.1:54321").hostname, "127.0.0.1");
@@ -46,5 +49,66 @@ test("round progression creates quarters, semifinals, final, and third place", (
   assert.deepEqual(
     nextRoundPlan("semifinal").targets.map((target) => [target.round, target.participant]),
     [["final", "winner"], ["third_place", "loser"]],
+  );
+});
+
+test("tie slots accept the last real match in each eligible round", () => {
+  for (const [round, slot] of [
+    ["round_of_16", 8],
+    ["quarterfinal", 4],
+    ["semifinal", 2],
+  ]) {
+    const options = parseArgs([
+      "--tournament-id",
+      TOURNAMENT_ID,
+      "--tie-round",
+      round,
+      "--tie-slot",
+      String(slot),
+    ]);
+    assert.equal(options.tieRound, round);
+    assert.equal(options.tieSlot, slot);
+  }
+});
+
+test("tie slots reject matches outside the selected round", () => {
+  for (const [round, slot, maxSlot] of [
+    ["round_of_16", 9, 8],
+    ["quarterfinal", 5, 4],
+    ["semifinal", 3, 2],
+  ]) {
+    assert.throws(
+      () =>
+        parseArgs([
+          "--tournament-id",
+          TOURNAMENT_ID,
+          "--tie-round",
+          round,
+          "--tie-slot",
+          String(slot),
+        ]),
+      new RegExp(`between 1 and ${maxSlot}`),
+    );
+  }
+});
+
+test("tie requests require an even voter count during argument parsing", () => {
+  assert.throws(
+    () =>
+      parseArgs([
+        "--tournament-id",
+        TOURNAMENT_ID,
+        "--voters",
+        "17",
+        "--tie-round",
+        "semifinal",
+        "--tie-slot",
+        "1",
+      ]),
+    /must be even/,
+  );
+  assert.equal(
+    parseArgs(["--tournament-id", TOURNAMENT_ID, "--voters", "17"]).voters,
+    17,
   );
 });

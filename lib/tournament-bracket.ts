@@ -97,6 +97,7 @@ export type TournamentBracketMatch = {
   left: TournamentBracketParticipant | null;
   right: TournamentBracketParticipant | null;
   resultVisible: boolean;
+  breakdownVisible: boolean;
   scheduledStartsAt: string | null;
   scheduledEndsAt: string | null;
   loveVoteWeight: number | null;
@@ -628,6 +629,7 @@ async function loadTournamentBracket(
     entryId: string | null,
     match: TournamentMatch,
     resultVisible: boolean,
+    breakdownVisible: boolean,
   ): TournamentBracketParticipant | null {
     const source = participantSource(entryId, match, hiddenRoundByEntry);
     if (!source) {
@@ -647,10 +649,10 @@ async function loadTournamentBracket(
       imagePath: candidate.image_path,
       seedLabel: seedLabel(entry),
       score: scoreDetails?.score ?? null,
-      normalScore: scoreDetails?.normalScore ?? null,
-      loveScore: scoreDetails?.loveScore ?? null,
-      loveVoteCount: scoreDetails?.loveVoteCount ?? null,
-      lastVoteAt: scoreDetails?.lastVoteAt ?? null,
+      normalScore: breakdownVisible ? scoreDetails?.normalScore ?? null : null,
+      loveScore: breakdownVisible ? scoreDetails?.loveScore ?? null : null,
+      loveVoteCount: breakdownVisible ? scoreDetails?.loveVoteCount ?? null : null,
+      lastVoteAt: breakdownVisible ? scoreDetails?.lastVoteAt ?? null : null,
       isWinner: resultVisible && match.winner_entry_id === entry.id,
     };
   }
@@ -659,10 +661,10 @@ async function loadTournamentBracket(
     match: TournamentMatch,
     left: TournamentBracketParticipant | null,
     right: TournamentBracketParticipant | null,
-    resultVisible: boolean,
+    breakdownVisible: boolean,
   ) {
     if (
-      !resultVisible ||
+      !breakdownVisible ||
       !left ||
       !right ||
       left.score === null ||
@@ -714,8 +716,23 @@ async function loadTournamentBracket(
           ? contestById.get(match.contest_id) ?? null
           : null;
         const resultVisible = resultVisibleByMatch.get(match.id) === true;
-        const left = participant(match.left_entry_id, match, resultVisible);
-        const right = participant(match.right_entry_id, match, resultVisible);
+        const breakdownVisible =
+          resultVisible &&
+          Boolean(
+            match.contest_id && weightedLoveScoreContestIds.has(match.contest_id),
+          );
+        const left = participant(
+          match.left_entry_id,
+          match,
+          resultVisible,
+          breakdownVisible,
+        );
+        const right = participant(
+          match.right_entry_id,
+          match,
+          resultVisible,
+          breakdownVisible,
+        );
 
         return {
           id: match.id,
@@ -726,17 +743,18 @@ async function loadTournamentBracket(
           left,
           right,
           resultVisible,
+          breakdownVisible,
           scheduledStartsAt: contest?.voting_starts_at ?? null,
           scheduledEndsAt: contest?.voting_ends_at ?? null,
           loveVoteWeight:
-            resultVisible && match.contest_id
+            breakdownVisible && match.contest_id
               ? resultDetailsByContest.get(match.contest_id)?.loveVoteWeight ?? null
               : null,
           tiebreakExplanation: tiebreakExplanation(
             match,
             left,
             right,
-            resultVisible,
+            breakdownVisible,
           ),
           winnerEntryId: resultVisible ? match.winner_entry_id : null,
           loserEntryId: resultVisible ? match.loser_entry_id : null,

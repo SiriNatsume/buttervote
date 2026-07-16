@@ -143,6 +143,7 @@ function MatchNode({ match }: { match: TournamentBracketMatch | null }) {
     scheduledStartsAt: match.scheduledStartsAt,
     scheduledEndsAt: match.scheduledEndsAt,
     resultVisible: match.resultVisible,
+    breakdownVisible: match.breakdownVisible,
     loveVoteWeight: match.loveVoteWeight,
     tiebreakExplanation: match.tiebreakExplanation,
     left: match.left
