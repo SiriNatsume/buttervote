@@ -43,6 +43,23 @@
   }
 }
 
+@keyframes match-countdown-urgent-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.025);
+  }
+}
+
+.match-countdown-urgent {
+  display: inline-block;
+  transform-origin: center;
+  animation: match-countdown-urgent-breathe 1.5s ease-in-out infinite;
+}
+
 .match-in-progress-breathe {
   border: 2px solid transparent;
   background:
@@ -83,7 +100,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .match-in-progress-breathe,
-  .bracket-live-match-cell {
+  .bracket-live-match-cell,
+  .match-countdown-urgent {
     animation: none;
   }
 }

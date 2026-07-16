@@ -109,6 +109,58 @@ function totalVoteCount(participant: TooltipParticipant | null) {
   return participant.normalScore + participant.loveVoteCount;
 }
 
+function formatRemainingTime(remainingMilliseconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(remainingMilliseconds / 1000));
+  const totalHours = Math.floor(totalSeconds / 3_600);
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return totalHours >= 1
+    ? `${totalHours} 小时 ${minutes} 分`
+    : `${totalMinutes} 分 ${seconds} 秒`;
+}
+
+function MatchCountdown({ endsAt }: { endsAt: string | null }) {
+  const [remainingMilliseconds, setRemainingMilliseconds] = useState<
+    number | null
+  >(null);
+
+  useEffect(() => {
+    if (!endsAt) {
+      setRemainingMilliseconds(null);
+      return;
+    }
+
+    const deadline = Date.parse(endsAt);
+    if (Number.isNaN(deadline)) {
+      setRemainingMilliseconds(null);
+      return;
+    }
+
+    const updateRemainingTime = () => {
+      setRemainingMilliseconds(Math.max(0, deadline - Date.now()));
+    };
+
+    updateRemainingTime();
+    const timer = window.setInterval(updateRemainingTime, 1_000);
+    return () => window.clearInterval(timer);
+  }, [endsAt]);
+
+  if (!endsAt) return <>未设置</>;
+  if (remainingMilliseconds === null) return <>--</>;
+  return (
+    <span
+      className={cn(
+        remainingMilliseconds < 3_600_000 &&
+          "match-countdown-urgent font-bold text-[#C43D3D]",
+      )}
+    >
+      {formatRemainingTime(remainingMilliseconds)}
+    </span>
+  );
+}
+
 type MatchDisplayState = "upcoming" | "voting" | "closed" | "results";
 
 export function resolveTournamentMatchPresentation(
@@ -154,6 +206,7 @@ function TooltipPanel({
 }) {
   const presentation = resolveTournamentMatchPresentation(data);
   const { displayState, showResults, showBreakdown, timeIsEnd } = presentation;
+  const timeIsCountdown = displayState === "voting";
   return (
     <div
       id={tooltipId}
@@ -163,10 +216,14 @@ function TooltipPanel({
     >
       <div className="border-b border-[#E8DCC3] px-4 py-3 text-center">
         <div className="text-[11px] font-medium text-[#8A6A45]">
-          {timeIsEnd ? "结束时间" : "开始时间"}
+          {timeIsCountdown ? "剩余时间" : timeIsEnd ? "结束时间" : "开始时间"}
         </div>
         <div className="mt-0.5 text-sm font-semibold text-[#4A2B1B]">
-          {formatDateTime(timeIsEnd ? data.scheduledEndsAt : data.scheduledStartsAt)}
+          {timeIsCountdown ? (
+            <MatchCountdown endsAt={data.scheduledEndsAt} />
+          ) : (
+            formatDateTime(timeIsEnd ? data.scheduledEndsAt : data.scheduledStartsAt)
+          )}
         </div>
       </div>
 
