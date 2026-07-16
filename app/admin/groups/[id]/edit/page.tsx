@@ -8,6 +8,7 @@ import { FormStatusFieldset } from "@/components/form-status-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { GroupCoverUploader } from "@/components/group-cover-uploader";
 import { GroupAccessForm } from "@/components/group-access-form";
+import { GroupHomepageAdminSettings } from "@/components/group-homepage-admin-settings";
 import { TransitionActionForm } from "@/components/transition-action-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,8 +31,16 @@ export default async function EditGroupPage({
   await requireAdmin();
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const supabase = await createServerDataClient();
-  const [{ data: group }, { data: userGroups }, { data: allowedUserGroups }] =
-    await Promise.all([
+  const [
+    { data: group },
+    { data: userGroups },
+    { data: allowedUserGroups },
+    { data: homepageSettings },
+    { data: tournamentStages },
+    { data: groupContests },
+    { data: relatedPageRows },
+    { data: publicPages },
+  ] = await Promise.all([
       supabase
         .from("contest_groups")
         .select(
@@ -47,11 +56,58 @@ export default async function EditGroupPage({
         .from("contest_group_allowed_user_groups")
         .select("user_group_id")
         .eq("contest_group_id", id),
+      supabase
+        .from("contest_group_homepage_settings")
+        .select("show_bracket,featured_tournament_id")
+        .eq("contest_group_id", id)
+        .maybeSingle(),
+      supabase
+        .from("tournament_stages")
+        .select("tournament_id")
+        .eq("group_id", id),
+      supabase
+        .from("contests")
+        .select("id")
+        .eq("group_id", id),
+      supabase
+        .from("contest_group_pages")
+        .select("page_id,sort_order")
+        .eq("contest_group_id", id)
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("site_pages")
+        .select("id,title,slug")
+        .eq("visibility", "public")
+        .order("title", { ascending: true }),
     ]);
 
   if (!group) {
     notFound();
   }
+
+  const groupContestIds = (groupContests ?? []).map((contest) => contest.id);
+  const { data: tournamentMatches } =
+    groupContestIds.length > 0
+      ? await supabase
+          .from("tournament_matches")
+          .select("tournament_id")
+          .in("contest_id", groupContestIds)
+      : { data: [] };
+  const tournamentIds = [
+    ...new Set([
+      ...(tournamentStages ?? []).map((stage) => stage.tournament_id),
+      ...(tournamentMatches ?? []).map((match) => match.tournament_id),
+    ]),
+  ];
+  const { data: tournaments } =
+    tournamentIds.length > 0
+      ? await supabase
+          .from("tournaments")
+          .select("id,name")
+          .in("id", tournamentIds)
+          .neq("status", "archived")
+          .order("updated_at", { ascending: false })
+      : { data: [] };
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
@@ -173,6 +229,30 @@ export default async function EditGroupPage({
             allowedUserGroupIds={(allowedUserGroups ?? []).map(
               (row) => row.user_group_id,
             )}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle>活动组首页</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          <GroupHomepageAdminSettings
+            groupId={group.id}
+            showBracket={homepageSettings?.show_bracket ?? false}
+            featuredTournamentId={
+              homepageSettings?.featured_tournament_id ?? null
+            }
+            tournaments={(tournaments ?? []).map((tournament) => ({
+              id: tournament.id,
+              label: tournament.name,
+            }))}
+            pages={(publicPages ?? []).map((page) => ({
+              id: page.id,
+              label: `${page.title}（/${page.slug}）`,
+            }))}
+            initialPageIds={(relatedPageRows ?? []).map((row) => row.page_id)}
           />
         </CardContent>
       </Card>

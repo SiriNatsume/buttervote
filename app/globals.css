@@ -2,6 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes group-homepage-marquee {
+  to {
+    transform: translateX(calc(-1 * var(--group-marquee-distance)));
+  }
+}
+
+.group-homepage-marquee-track {
+  animation: group-homepage-marquee var(--group-marquee-duration) linear infinite;
+  will-change: transform;
+}
+
+.group:hover .group-homepage-marquee-track,
+.group:focus .group-homepage-marquee-track,
+.group-homepage-marquee-paused {
+  animation-play-state: paused;
+}
+
+@media (min-width: 1024px) {
+  .group-homepage-bracket-fit [data-bracket-share-grid] {
+    zoom: 0.57;
+  }
+
+  .group-homepage-bracket-fit [data-bracket-share-scroll] {
+    overflow-x: hidden;
+  }
+}
+
+@media (min-width: 1200px) {
+  .group-homepage-bracket-fit [data-bracket-share-grid] {
+    zoom: 0.68;
+  }
+}
+
+@media (min-width: 1440px) {
+  .group-homepage-bracket-fit [data-bracket-share-grid] {
+    zoom: 0.81;
+  }
+}
+
+@media (min-width: 1680px) {
+  .group-homepage-bracket-fit [data-bracket-share-grid] {
+    zoom: 0.96;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group-homepage-marquee-track {
+    animation: none;
+    transform: none;
+  }
+
+  .group-homepage-marquee-copy-duplicate {
+    display: none;
+  }
+}
+
 .markdown-content {
   color: #3f2418;
   font-size: 1rem;

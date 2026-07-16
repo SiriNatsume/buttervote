@@ -243,6 +243,8 @@ function revalidateGroup(groupId: string) {
   revalidatePath(`/admin/groups/${groupId}/edit`);
   revalidatePath(`/groups/${groupId}`);
   revalidatePath(`/groups/${groupId}/vote`);
+  revalidatePath(`/groups/${groupId}/nominate`);
+  revalidatePath(`/groups/${groupId}/results`);
 }
 
 type ServerDataClient = Awaited<ReturnType<typeof createServerDataClient>>;

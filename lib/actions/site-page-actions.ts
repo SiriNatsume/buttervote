@@ -47,6 +47,9 @@ async function hiddenAssetWarning(markdown: string, visibility: string) {
 
 function databaseErrorMessage(error: { code?: string; message: string }) {
   if (error.code === "23505") return "该 Slug 已被其他页面使用。";
+  if (error.message.includes("已被活动组关联")) {
+    return "该页面已被活动组关联，请先解除关联后再修改为管理可见。";
+  }
   return "保存页面失败，请稍后重试。";
 }
 
@@ -179,6 +182,14 @@ export async function updateSitePageAction(
 
   revalidatePath("/admin/pages");
   revalidatePath(sitePageHref(existing.slug));
+  const { data: linkedGroups } = await supabase
+    .from("contest_group_pages")
+    .select("contest_group_id")
+    .eq("page_id", data.id);
+  for (const relation of linkedGroups ?? []) {
+    revalidatePath(`/groups/${relation.contest_group_id}`);
+    revalidatePath(`/admin/groups/${relation.contest_group_id}/edit`);
+  }
   revalidatePath(sitePageHref(data.slug));
   revalidatePath(`/admin/pages/${data.id}/edit`);
 

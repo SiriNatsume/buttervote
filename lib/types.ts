@@ -377,6 +377,22 @@ export type HallOfFameEntry = {
   updated_at: string;
 } & Record<string, unknown>;
 
+export type ContestGroupHomepageSettings = {
+  contest_group_id: string;
+  show_bracket: boolean;
+  featured_tournament_id: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type ContestGroupPage = {
+  id: string;
+  contest_group_id: string;
+  page_id: string;
+  sort_order: number;
+  created_at: string;
+} & Record<string, unknown>;
+
 export type SitePage = {
   id: string;
   title: string;
@@ -585,6 +601,28 @@ type Tables = {
       updated_at?: string;
     },
     Partial<Omit<ContestGroup, "id" | "created_at">>
+  >;
+  contest_group_homepage_settings: Table<
+    ContestGroupHomepageSettings,
+    {
+      contest_group_id: string;
+      show_bracket?: boolean;
+      featured_tournament_id?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<ContestGroupHomepageSettings, "contest_group_id" | "created_at">>
+  >;
+  contest_group_pages: Table<
+    ContestGroupPage,
+    {
+      id?: string;
+      contest_group_id: string;
+      page_id: string;
+      sort_order?: number;
+      created_at?: string;
+    },
+    Partial<Omit<ContestGroupPage, "id" | "created_at">>
   >;
   user_groups: Table<
     UserGroup,
@@ -849,6 +887,13 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      set_contest_group_pages: {
+        Args: {
+          p_contest_group_id: string;
+          p_page_ids?: string[];
+        };
+        Returns: undefined;
+      };
       reorder_hall_of_fame_entries: {
         Args: {
           p_entry_ids: string[];

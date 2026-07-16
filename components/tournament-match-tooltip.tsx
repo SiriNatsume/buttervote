@@ -14,10 +14,15 @@ import {
 import { createPortal } from "react-dom";
 import { ExternalLink, Heart, UserRound } from "lucide-react";
 import { formatDateTime } from "@/lib/time";
+import {
+  contestRankStyles,
+  defaultContestRankBadgeStyle,
+  formatContestOrdinal,
+} from "@/lib/contest-rank-styles";
 import type { ContestStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type TooltipParticipant = {
+export type TournamentMatchTooltipParticipant = {
   name: string;
   imageUrl: string | null;
   score: number | null;
@@ -29,6 +34,7 @@ type TooltipParticipant = {
 
 export type TournamentMatchTooltipData = {
   contestId: string;
+  detailsHref?: string;
   contestTitle: string;
   status: ContestStatus;
   scheduledStartsAt: string | null;
@@ -37,8 +43,9 @@ export type TournamentMatchTooltipData = {
   breakdownVisible: boolean;
   loveVoteWeight: number | null;
   tiebreakExplanation: string | null;
-  left: TooltipParticipant | null;
-  right: TooltipParticipant | null;
+  left: TournamentMatchTooltipParticipant | null;
+  right: TournamentMatchTooltipParticipant | null;
+  participants?: TournamentMatchTooltipParticipant[];
 };
 
 type Position = {
@@ -57,9 +64,20 @@ function supportsHoverInteraction() {
   return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 }
 
-function ParticipantAvatar({ participant }: { participant: TooltipParticipant | null }) {
+function ParticipantAvatar({
+  participant,
+  compact = false,
+}: {
+  participant: TournamentMatchTooltipParticipant | null;
+  compact?: boolean;
+}) {
   return (
-    <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded bg-[#F7EAD0]">
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center overflow-hidden rounded bg-[#F7EAD0]",
+        compact ? "size-7" : "size-9",
+      )}
+    >
       {participant?.imageUrl ? (
         <img
           src={participant.imageUrl}
@@ -76,7 +94,7 @@ function ParticipantAvatar({ participant }: { participant: TooltipParticipant | 
 function ParticipantSummary({
   participant,
 }: {
-  participant: TooltipParticipant | null;
+  participant: TournamentMatchTooltipParticipant | null;
 }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center">
@@ -101,7 +119,7 @@ function BreakdownValue({ value }: { value: number | null | undefined }) {
   );
 }
 
-function totalVoteCount(participant: TooltipParticipant | null) {
+function totalVoteCount(participant: TournamentMatchTooltipParticipant | null) {
   if (!participant) return null;
   if (participant.normalScore === null || participant.loveVoteCount === null) {
     return null;
@@ -179,6 +197,8 @@ export function resolveTournamentMatchPresentation(
     displayState === "results" ||
     (displayState === "voting" && data.resultVisible);
   const showBreakdown =
+    displayState !== "voting" &&
+    !(data.participants && data.participants.length !== 2) &&
     data.resultVisible &&
     data.breakdownVisible &&
     data.left !== null &&
@@ -195,6 +215,72 @@ export function resolveTournamentMatchPresentation(
   };
 }
 
+function MultiParticipantSummary({
+  participants,
+  showResults,
+}: {
+  participants: TournamentMatchTooltipParticipant[];
+  showResults: boolean;
+}) {
+  if (participants.length === 0) {
+    return (
+      <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+        参赛者尚未公布
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="grid max-h-[min(50vh,26rem)] grid-flow-col grid-cols-2 gap-1.5 overflow-y-auto px-4 py-3"
+      style={{
+        gridTemplateRows: `repeat(${Math.ceil(participants.length / 2)}, minmax(0, auto))`,
+      }}
+    >
+      {participants.map((participant, index) => (
+        <div
+          key={`${participant.name}-${index}`}
+          className={cn(
+            "flex min-w-0 items-center gap-2 rounded-md border border-[#E8DCC3] bg-[#FFF8E8] p-1.5",
+            showResults && contestRankStyles[index]?.row,
+          )}
+        >
+          <ParticipantAvatar participant={participant} compact />
+          {showResults ? (
+            <span
+              className={cn(
+                "inline-flex min-w-5 shrink-0 items-center justify-center rounded px-1 py-0.5 text-[9px] font-bold leading-none tabular-nums",
+                contestRankStyles[index]?.badge ?? defaultContestRankBadgeStyle,
+              )}
+              aria-label={`第 ${index + 1} 名`}
+            >
+              {formatContestOrdinal(index + 1)}
+            </span>
+          ) : null}
+          <span
+            className={cn(
+              "min-w-0 flex-1 break-words text-[11px] leading-4 text-[#3F2418]",
+              showResults && index < 4 ? "font-bold" : "font-medium",
+            )}
+          >
+            {participant.name}
+          </span>
+          {showResults ? (
+            <span
+              className={cn(
+                "inline-flex min-w-7 shrink-0 items-center justify-center rounded px-1.5 py-0.5 text-xs font-bold tabular-nums",
+                contestRankStyles[index]?.badge ?? defaultContestRankBadgeStyle,
+              )}
+            >
+              {participant.score ?? "—"}
+            </span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TooltipPanel({
   data,
   tooltipId,
@@ -207,6 +293,8 @@ function TooltipPanel({
   const presentation = resolveTournamentMatchPresentation(data);
   const { displayState, showResults, showBreakdown, timeIsEnd } = presentation;
   const timeIsCountdown = displayState === "voting";
+  const multiParticipantMode =
+    data.participants !== undefined && data.participants.length !== 2;
   return (
     <div
       id={tooltipId}
@@ -227,6 +315,12 @@ function TooltipPanel({
         </div>
       </div>
 
+      {multiParticipantMode ? (
+        <MultiParticipantSummary
+          participants={data.participants ?? []}
+          showResults={showResults}
+        />
+      ) : (
       <div className="px-4 py-3">
         <div
           className={cn(
@@ -254,13 +348,14 @@ function TooltipPanel({
           <ParticipantSummary participant={data.right} />
         </div>
       </div>
+      )}
 
       {displayState === "voting" ? (
         <Link
           href={`/contests/${data.contestId}/vote`}
           className="match-in-progress-breathe mx-4 mb-3 block rounded-md px-3 py-2 text-center text-xs font-medium text-[#3F7A48] transition-colors hover:text-[#2F693A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#75A97D] focus-visible:ring-offset-2"
         >
-          比赛进行中
+          进入投票
         </Link>
       ) : null}
 
@@ -309,7 +404,7 @@ function TooltipPanel({
           {pinned ? "点击外部可关闭" : "点击比赛可固定显示"}
         </span>
         <Link
-          href={`/contests/${data.contestId}`}
+          href={data.detailsHref ?? `/contests/${data.contestId}`}
           className="inline-flex items-center gap-1 text-xs font-semibold text-[#9A5D2E] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9854C]"
         >
           进入比赛页面
@@ -356,10 +451,18 @@ export function TournamentMatchTooltip({
     const longestNameCharacters = Math.max(
       Array.from(data.left?.name ?? "").length,
       Array.from(data.right?.name ?? "").length,
+      ...(data.participants ?? []).map(
+        (participant) => Array.from(participant.name).length,
+      ),
     );
+    const multiParticipantMode =
+      data.participants !== undefined && data.participants.length !== 2;
     const preferredWidth = Math.min(
-      TOOLTIP_MAX_WIDTH,
-      Math.max(TOOLTIP_DEFAULT_WIDTH, 160 + longestNameCharacters * 16),
+      multiParticipantMode ? 560 : TOOLTIP_MAX_WIDTH,
+      Math.max(
+        multiParticipantMode ? 400 : TOOLTIP_DEFAULT_WIDTH,
+        (multiParticipantMode ? 260 : 160) + longestNameCharacters * 16,
+      ),
     );
     const width = Math.min(
       preferredWidth,
@@ -384,7 +487,7 @@ export function TournamentMatchTooltip({
       Math.max(VIEWPORT_GAP, centeredLeft),
     );
     setPosition({ left, top, width, placement });
-  }, [data.left?.name, data.right?.name]);
+  }, [data.left?.name, data.participants, data.right?.name]);
 
   useEffect(() => {
     if (!open) {
@@ -461,7 +564,7 @@ export function TournamentMatchTooltip({
       <button
         ref={triggerRef}
         type="button"
-        className="block w-full rounded-[3px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9854C] focus-visible:ring-offset-2"
+        className="block w-full min-w-0 max-w-full overflow-hidden rounded-[3px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B9854C] focus-visible:ring-offset-2"
         aria-expanded={open}
         aria-controls={open ? tooltipId : undefined}
         onMouseEnter={handleMouseEnter}
