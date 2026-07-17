@@ -11,7 +11,10 @@ import { Button } from "@/components/ui/button";
 import { getCurrentProfile } from "@/lib/auth";
 import { canNominateByStatus } from "@/lib/contest-rules";
 import { loadGroupHomepageContests } from "@/lib/group-homepage-data";
-import { partitionGroupHomepageContests } from "@/lib/group-homepage";
+import {
+  GROUP_HOMEPAGE_RECENT_RESULT_LIMIT,
+  partitionGroupHomepageContests,
+} from "@/lib/group-homepage";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
@@ -46,8 +49,12 @@ export default async function GroupDetailPage({
   const { id } = await params;
   await applyScheduledTransitions({ revalidate: false });
   const supabase = await createClient();
-  const [{ data: group }, { data: contests }, { data: settings }, profile] =
-    await Promise.all([
+  const [
+    { data: group },
+    { data: contests, error: contestsError },
+    { data: settings },
+    profile,
+  ] = await Promise.all([
       supabase
         .from("contest_groups")
         .select(
@@ -55,14 +62,10 @@ export default async function GroupDetailPage({
         )
         .eq("id", id)
         .maybeSingle(),
-      supabase
-        .from("contests")
-        .select(
-          "id,title,description,image_path,status,vote_type,live_results_enabled,voting_starts_at,voting_ends_at,max_nominations_per_user,updated_at",
-        )
-        .eq("group_id", id)
-        .is("archived_at", null)
-        .neq("status", "draft"),
+      supabase.rpc("get_group_homepage_contests", {
+        p_group_id: id,
+        p_recent_limit: GROUP_HOMEPAGE_RECENT_RESULT_LIMIT,
+      }),
       supabase
         .from("contest_group_homepage_settings")
         .select("show_bracket,featured_tournament_id")
@@ -72,10 +75,19 @@ export default async function GroupDetailPage({
     ]);
 
   if (!group) notFound();
+  if (contestsError) {
+    console.error(
+      `[group-homepage] contest query failed: ${contestsError.message}`,
+    );
+    throw new Error("Group homepage contests are temporarily unavailable.");
+  }
   const isAdmin = profile?.role === "admin";
+  const publicHomepageContests = (contests ?? []).filter(
+    (contest) => contest.status !== "admin_nominating",
+  );
   const homepageContests = await loadGroupHomepageContests({
     publicClient: supabase,
-    contests: contests ?? [],
+    contests: publicHomepageContests,
     loveVoteWeight: Number(group.love_vote_weight),
   });
   const { ongoing, upcoming, recent } =

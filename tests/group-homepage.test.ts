@@ -3,8 +3,10 @@ import test from "node:test";
 import { formatRelativeContestTime } from "../components/relative-contest-time";
 import { formatContestOrdinal } from "../lib/contest-rank-styles";
 import {
+  GROUP_HOMEPAGE_RECENT_RESULT_LIMIT,
   groupContestMatchesQuery,
   partitionGroupHomepageContests,
+  resolveGroupHomepageResultAvailability,
   type GroupHomepageContest,
 } from "../lib/group-homepage";
 
@@ -61,6 +63,43 @@ test("recent contests prefer scheduled end time and fall back to updated time", 
     "Fallback",
     "Older",
   ]);
+});
+
+test("group homepage result failures and incomplete tallies fail closed", () => {
+  assert.deepEqual(
+    resolveGroupHomepageResultAvailability({
+      status: "published",
+      fullResultsVisible: true,
+      showWeightedLoveScore: true,
+      resultDataAvailable: false,
+      tallyComplete: true,
+    }),
+    { scoresVisible: false, breakdownVisible: false },
+  );
+  assert.deepEqual(
+    resolveGroupHomepageResultAvailability({
+      status: "published",
+      fullResultsVisible: true,
+      showWeightedLoveScore: true,
+      resultDataAvailable: true,
+      tallyComplete: false,
+    }),
+    { scoresVisible: false, breakdownVisible: false },
+  );
+});
+
+test("group homepage publishes complete tallies and caps recent results", () => {
+  assert.equal(GROUP_HOMEPAGE_RECENT_RESULT_LIMIT, 20);
+  assert.deepEqual(
+    resolveGroupHomepageResultAvailability({
+      status: "published",
+      fullResultsVisible: true,
+      showWeightedLoveScore: true,
+      resultDataAvailable: true,
+      tallyComplete: true,
+    }),
+    { scoresVisible: true, breakdownVisible: true },
+  );
 });
 
 test("recent result search matches normalized hidden carousel candidate names", () => {

@@ -94,7 +94,7 @@ create table if not exists public.page_assets (
   mime_type text not null,
   byte_size bigint not null,
   asset_type text not null,
-  visibility text not null default 'public',
+  visibility text not null default 'admin_only',
   uploaded_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

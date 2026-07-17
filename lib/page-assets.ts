@@ -7,6 +7,13 @@ import type {
 export const PAGE_ASSET_BUCKET = "page-assets";
 export const PAGE_ASSET_IMAGE_MAX_SIZE = 10 * 1024 * 1024;
 export const PAGE_ASSET_FILE_MAX_SIZE = 50 * 1024 * 1024;
+export const PAGE_ASSET_DEFAULT_VISIBILITY: PageVisibility = "admin_only";
+
+export function defaultPageAssetVisibilityForPage(
+  pageVisibility: PageVisibility,
+) {
+  return pageVisibility;
+}
 
 export type PageAssetRule = {
   extension: PageAssetExtension;

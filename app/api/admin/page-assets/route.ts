@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getActionAdmin } from "@/lib/auth";
 import {
   PAGE_ASSET_BUCKET,
+  PAGE_ASSET_DEFAULT_VISIBILITY,
   PAGE_ASSET_FILE_MAX_SIZE,
   pageAssetMarkdown,
   pageAssetUrl,
@@ -43,7 +44,9 @@ export async function POST(request: Request) {
   }
 
   const file = formData.get("file");
-  const requestedVisibility = String(formData.get("visibility") ?? "public");
+  const requestedVisibility = String(
+    formData.get("visibility") ?? PAGE_ASSET_DEFAULT_VISIBILITY,
+  );
   if (!["admin_only", "public"].includes(requestedVisibility)) {
     return jsonError("附件可见性无效。", 400);
   }

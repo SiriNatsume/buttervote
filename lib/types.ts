@@ -887,6 +887,28 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      get_group_homepage_contests: {
+        Args: {
+          p_group_id: string;
+          p_recent_limit?: number;
+        };
+        Returns: Contest[];
+      };
+      get_visible_contest_tallies: {
+        Args: {
+          p_contest_ids: string[];
+          p_include_admin_override?: boolean;
+        };
+        Returns: Array<{
+          contest_id: string;
+          candidate_id: string;
+          score: number;
+          normal_score: number;
+          love_score: number;
+          love_vote_count: number;
+          last_vote_at: string | null;
+        }>;
+      };
       set_contest_group_pages: {
         Args: {
           p_contest_group_id: string;

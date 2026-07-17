@@ -2,17 +2,16 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPublicImageUrl } from "@/lib/image/image-url";
-import type { GroupHomepageContest } from "@/lib/group-homepage";
+import {
+  resolveGroupHomepageResultAvailability,
+  type GroupHomepageContest,
+} from "@/lib/group-homepage";
 import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
-import { tallyVotes } from "@/lib/tally";
-import type {
-  Candidate,
-  Contest,
-  Database,
-  LoveVoteAllocation,
-  Vote,
-} from "@/lib/types";
-import { loadVisibleContestResultData } from "@/lib/visible-result-data";
+import type { Candidate, Contest, Database } from "@/lib/types";
+import {
+  loadVisibleContestTallies,
+  type VisibleContestTallyRow,
+} from "@/lib/visible-result-tallies";
 
 type DataClient = SupabaseClient<Database>;
 type HomepageContestRow = Pick<
@@ -39,6 +38,26 @@ type HomepageCandidate = Pick<
   | "is_active"
   | "created_at"
 >;
+
+function compareCandidatesByTally(
+  left: HomepageCandidate,
+  right: HomepageCandidate,
+  tallyByCandidate: Map<string, VisibleContestTallyRow>,
+) {
+  const leftResult = tallyByCandidate.get(left.id);
+  const rightResult = tallyByCandidate.get(right.id);
+  const scoreDifference = (rightResult?.score ?? 0) - (leftResult?.score ?? 0);
+  if (scoreDifference !== 0) return scoreDifference;
+
+  const leftLastVoteAt = leftResult?.last_vote_at ?? null;
+  const rightLastVoteAt = rightResult?.last_vote_at ?? null;
+  if (leftLastVoteAt && rightLastVoteAt) {
+    return leftLastVoteAt.localeCompare(rightLastVoteAt);
+  }
+  if (leftLastVoteAt) return -1;
+  if (rightLastVoteAt) return 1;
+  return left.name.localeCompare(right.name, "zh-Hans");
+}
 
 export async function loadGroupHomepageContests(params: {
   publicClient: DataClient;
@@ -84,7 +103,7 @@ export async function loadGroupHomepageContests(params: {
         visibilityByContest.get(contest.id)?.fullResultsVisible === true,
     )
     .map((contest) => contest.id);
-  const resultData = await loadVisibleContestResultData(
+  const resultData = await loadVisibleContestTallies(
     publicClient,
     scoreVisibleContestIds,
     { includeAdminOverride: false },
@@ -95,56 +114,41 @@ export async function loadGroupHomepageContests(params: {
     );
   }
 
-  const votesByContest = new Map<string, Vote[]>();
-  for (const vote of resultData.votes) {
-    const current = votesByContest.get(vote.contest_id) ?? [];
-    current.push({ ...vote, voter_id: null });
-    votesByContest.set(vote.contest_id, current);
-  }
-  const loveByContest = new Map<
+  const talliesByContest = new Map<
     string,
-    Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>
+    Map<string, VisibleContestTallyRow>
   >();
-  for (const allocation of resultData.loveAllocations) {
-    const current = loveByContest.get(allocation.contest_id) ?? [];
-    current.push({
-      vote_id: allocation.vote_id,
-      candidate_id: allocation.candidate_id,
-    });
-    loveByContest.set(allocation.contest_id, current);
+  for (const tally of resultData.tallies) {
+    const current = talliesByContest.get(tally.contest_id) ?? new Map();
+    current.set(tally.candidate_id, tally);
+    talliesByContest.set(tally.contest_id, current);
   }
 
   return contests.map((contest) => {
     const contestCandidates = candidatesByContest.get(contest.id) ?? [];
     const visibility = visibilityByContest.get(contest.id);
-    const scoresVisible = visibility?.fullResultsVisible === true;
-    const breakdownVisible =
-      scoresVisible &&
-      (contest.status === "closed" || contest.status === "published") &&
-      visibility?.showWeightedLoveScore === true;
-    const tally = scoresVisible
-      ? tallyVotes({
-          voteType: contest.vote_type,
-          candidates: contestCandidates,
-          votes: votesByContest.get(contest.id) ?? [],
-          loveVoteWeight,
-          // SECURITY CRITICAL: live results are base scores. The visibility
-          // RPC also withholds live love allocations from non-admin callers.
-          loveVoteScoreMode:
-            contest.status === "voting" || !visibility?.showWeightedLoveScore
-              ? "base"
-              : "weighted",
-          loveAllocations: loveByContest.get(contest.id) ?? [],
-        })
-      : [];
-    const tallyByCandidate = new Map(tally.map((result) => [result.candidateId, result]));
+    const tallyByCandidate = talliesByContest.get(contest.id) ?? new Map();
+    const tallyComplete = contestCandidates.every((candidate) =>
+      tallyByCandidate.has(candidate.id),
+    );
+    const { scoresVisible, breakdownVisible } =
+      resolveGroupHomepageResultAvailability({
+        status: contest.status,
+        fullResultsVisible: visibility?.fullResultsVisible === true,
+        showWeightedLoveScore: visibility?.showWeightedLoveScore === true,
+        resultDataAvailable: resultData.error === null,
+        tallyComplete,
+      });
+    const orderedByResult = scoresVisible
+      ? [...contestCandidates].sort((left, right) =>
+          compareCandidatesByTally(left, right, tallyByCandidate),
+        )
+      : contestCandidates;
     const finalOrder =
-      scoresVisible &&
-      contestCandidates.length > 2
-        ? tally.map((result) =>
-            contestCandidates.find((candidate) => candidate.id === result.candidateId),
-          ).filter((candidate): candidate is HomepageCandidate => Boolean(candidate))
+      scoresVisible && contestCandidates.length > 2
+        ? orderedByResult
         : contestCandidates;
+    const winnerCandidateId = scoresVisible ? orderedByResult[0]?.id : null;
     const participants = finalOrder.map((candidate) => {
       const result = tallyByCandidate.get(candidate.id);
       return {
@@ -152,13 +156,15 @@ export async function loadGroupHomepageContests(params: {
         name: candidate.name,
         imageUrl: getPublicImageUrl(candidate.image_path),
         score: scoresVisible ? (result?.score ?? 0) : null,
-        normalScore: scoresVisible ? (result?.normalScore ?? 0) : null,
-        loveScore: breakdownVisible ? (result?.loveScore ?? 0) : null,
-        loveVoteCount: breakdownVisible ? (result?.loveVoteCount ?? 0) : null,
+        normalScore: breakdownVisible ? (result?.normal_score ?? 0) : null,
+        loveScore: breakdownVisible ? (result?.love_score ?? 0) : null,
+        loveVoteCount: breakdownVisible
+          ? (result?.love_vote_count ?? 0)
+          : null,
         isWinner:
           scoresVisible &&
           (contest.status === "closed" || contest.status === "published") &&
-          result?.position === 1,
+          candidate.id === winnerCandidateId,
       };
     });
     const searchText = [

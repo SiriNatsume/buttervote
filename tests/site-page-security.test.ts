@@ -7,6 +7,10 @@ import {
   sanitizeMarkdownUrl,
 } from "../components/markdown-renderer";
 import { extractMarkdownHeadings } from "../lib/markdown-headings";
+import {
+  PAGE_ASSET_DEFAULT_VISIBILITY,
+  defaultPageAssetVisibilityForPage,
+} from "../lib/page-assets";
 import { validatePageAssetFile } from "../lib/security/page-asset-file-core";
 import { sitePageInputSchema } from "../lib/validation/site-page";
 
@@ -84,6 +88,12 @@ test("site page concurrency timestamp accepts Supabase timezone offsets", () => 
   });
 
   assert.equal(parsed.success, true);
+});
+
+test("page editor attachments inherit the page visibility and fail closed", () => {
+  assert.equal(PAGE_ASSET_DEFAULT_VISIBILITY, "admin_only");
+  assert.equal(defaultPageAssetVisibilityForPage("admin_only"), "admin_only");
+  assert.equal(defaultPageAssetVisibilityForPage("public"), "public");
 });
 
 test("page asset validation checks actual file signatures", async () => {

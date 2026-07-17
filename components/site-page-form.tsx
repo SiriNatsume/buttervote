@@ -17,6 +17,7 @@ import {
   createSitePageAction,
   updateSitePageAction,
 } from "@/lib/actions/site-page-actions";
+import { defaultPageAssetVisibilityForPage } from "@/lib/page-assets";
 import { pageVisibilityLabel } from "@/lib/site-pages";
 import type { PageVisibility } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -67,7 +68,10 @@ export function SitePageForm({ initialValue }: { initialValue: SitePageFormValue
     try {
       const formData = new FormData();
       formData.set("file", file);
-      formData.set("visibility", "public");
+      formData.set(
+        "visibility",
+        defaultPageAssetVisibilityForPage(value.visibility),
+      );
       const response = await fetch("/api/admin/page-assets", {
         method: "POST",
         body: formData,
