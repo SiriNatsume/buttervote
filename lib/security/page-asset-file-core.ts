@@ -22,7 +22,6 @@ function extensionFromFilename(filename: string) {
 export type ValidatedPageAsset = {
   rule: PageAssetRule;
   originalFilename: string;
-  safeFilename: string;
 };
 
 function sanitizeFilename(filename: string, extension: PageAssetExtension) {
@@ -90,6 +89,5 @@ export async function validatePageAssetFile(
   return {
     rule,
     originalFilename: sanitizeFilename(file.name, extension),
-    safeFilename: sanitizeFilename(file.name, extension),
   };
 }

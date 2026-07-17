@@ -86,6 +86,25 @@ export const pageAssetExtensions = Object.keys(
   pageAssetRules,
 ) as PageAssetExtension[];
 
+const pageAssetIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function pageAssetStoragePath(
+  assetId: string,
+  extension: PageAssetExtension,
+) {
+  if (!pageAssetIdPattern.test(assetId)) {
+    throw new Error("Invalid page asset id");
+  }
+  if (!Object.prototype.hasOwnProperty.call(pageAssetRules, extension)) {
+    throw new Error("Invalid page asset extension");
+  }
+
+  // Keep Storage object keys independent of browser-provided filenames. The
+  // original display/download name remains in page_assets.original_filename.
+  return `assets/${assetId}/file.${extension}`;
+}
+
 export function pageAssetUrl(assetId: string, download = false) {
   return `/api/page-assets/${assetId}${download ? "?download=1" : ""}`;
 }

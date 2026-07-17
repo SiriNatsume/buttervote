@@ -6,6 +6,7 @@ import {
   PAGE_ASSET_DEFAULT_VISIBILITY,
   PAGE_ASSET_FILE_MAX_SIZE,
   pageAssetMarkdown,
+  pageAssetStoragePath,
   pageAssetUrl,
 } from "@/lib/page-assets";
 import { validatePageAssetFile } from "@/lib/security/page-asset-file";
@@ -57,7 +58,10 @@ export async function POST(request: Request) {
   if ("error" in validation) return jsonError(validation.error, 400);
 
   const assetId = crypto.randomUUID();
-  const storagePath = `assets/${assetId}/${validation.safeFilename}`;
+  const storagePath = pageAssetStoragePath(
+    assetId,
+    validation.rule.extension,
+  );
   const supabase = createRequiredServiceClient();
   const { error: uploadError } = await supabase.storage
     .from(PAGE_ASSET_BUCKET)

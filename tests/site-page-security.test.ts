@@ -10,6 +10,7 @@ import { extractMarkdownHeadings } from "../lib/markdown-headings";
 import {
   PAGE_ASSET_DEFAULT_VISIBILITY,
   defaultPageAssetVisibilityForPage,
+  pageAssetStoragePath,
 } from "../lib/page-assets";
 import { validatePageAssetFile } from "../lib/security/page-asset-file-core";
 import { sitePageInputSchema } from "../lib/validation/site-page";
@@ -110,4 +111,32 @@ test("page asset validation checks actual file signatures", async () => {
   );
   const invalidPdf = await validatePageAssetFile(disguisedHtml);
   assert.equal("error" in invalidPdf, true);
+});
+
+test("page asset storage paths never include browser-provided filenames", async () => {
+  const assetId = "6e547b49-157c-46f1-95ab-4e14f05e4131";
+  const originalFilename = "\u4eba\u5916\u676f\u7ae0\u7a0b\u5bf9\u9635\u56fe.pdf";
+  const file = new File(
+    [new TextEncoder().encode("%PDF-1.7\n")],
+    originalFilename,
+    { type: "application/pdf" },
+  );
+  const validation = await validatePageAssetFile(file);
+
+  assert.equal("error" in validation, false);
+  if ("error" in validation) return;
+
+  assert.equal(validation.originalFilename, originalFilename);
+  assert.equal(
+    pageAssetStoragePath(assetId, validation.rule.extension),
+    `assets/${assetId}/file.pdf`,
+  );
+  assert.match(
+    pageAssetStoragePath(assetId, validation.rule.extension),
+    /^[\x20-\x7e]+$/,
+  );
+  assert.throws(
+    () => pageAssetStoragePath("../escape", validation.rule.extension),
+    /Invalid page asset id/,
+  );
 });
