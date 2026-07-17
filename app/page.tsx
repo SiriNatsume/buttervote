@@ -1,4 +1,8 @@
 import { ContestCard } from "@/components/contest-card";
+import {
+  ContestGroupCard,
+  type ContestGroupCardGroup,
+} from "@/components/contest-group-card";
 import { HomepageHeroPanel } from "@/components/homepage-hero-panel";
 import { MascotEmptyState, MascotFigure } from "@/components/mascot";
 import { TournamentBracket } from "@/components/tournament-bracket";
@@ -24,7 +28,7 @@ export default async function HomePage() {
     await Promise.all([
       supabase
         .from("contests")
-        .select("id,title,description,status,vote_type,image_path")
+        .select("id,title,description,status,vote_type,image_path,group_id")
         .is("archived_at", null)
         .neq("status", "draft")
         .order("created_at", { ascending: false }),
@@ -39,6 +43,61 @@ export default async function HomePage() {
         .eq("key", "homepage_bracket")
         .maybeSingle(),
     ]);
+  const publicContests = contests ?? [];
+  const contestGroupIds = Array.from(
+    new Set(
+      publicContests
+        .map((contest) => contest.group_id)
+        .filter((groupId): groupId is string => Boolean(groupId)),
+    ),
+  );
+  const { data: contestGroups } = contestGroupIds.length
+    ? await supabase
+        .from("contest_groups")
+        .select("id,name,description,cover_image_path")
+        .in("id", contestGroupIds)
+    : { data: [] as ContestGroupCardGroup[] };
+  const contestGroupById = new Map(
+    (contestGroups ?? []).map((group) => [group.id, group]),
+  );
+  const contestCountByGroup = new Map<string, number>();
+
+  for (const contest of publicContests) {
+    if (contest.group_id) {
+      contestCountByGroup.set(
+        contest.group_id,
+        (contestCountByGroup.get(contest.group_id) ?? 0) + 1,
+      );
+    }
+  }
+
+  const listedContestGroupIds = new Set<string>();
+  const publicEntries: Array<
+    | { type: "contest"; contest: (typeof publicContests)[number] }
+    | { type: "group"; group: ContestGroupCardGroup; contestCount: number }
+  > = [];
+
+  for (const contest of publicContests) {
+    if (!contest.group_id) {
+      publicEntries.push({ type: "contest", contest });
+      continue;
+    }
+
+    const group = contestGroupById.get(contest.group_id);
+    if (!group) {
+      publicEntries.push({ type: "contest", contest });
+      continue;
+    }
+
+    if (!listedContestGroupIds.has(group.id)) {
+      listedContestGroupIds.add(group.id);
+      publicEntries.push({
+        type: "group",
+        group,
+        contestCount: contestCountByGroup.get(group.id) ?? 1,
+      });
+    }
+  }
   const heroValue = (heroSetting?.value ?? null) as HomepageHeroValue | null;
   const bracketValue = (bracketSetting?.value ?? null) as HomepageBracketValue | null;
   const bracketTournamentId =
@@ -120,9 +179,9 @@ export default async function HomePage() {
   }
 
   const heroImageUrl = getPublicImageUrl(hero?.imagePath);
-  const featuredContest = (contests ?? []).find(
+  const featuredContest = publicContests.find(
     (contest) => contest.status === "voting",
-  ) ?? (contests ?? [])[0];
+  ) ?? publicContests[0];
   const defaultHeroHref = featuredContest
     ? `/contests/${featuredContest.id}`
     : "#public-contests";
@@ -178,15 +237,26 @@ export default async function HomePage() {
       <div id="public-contests" className="mb-5 flex items-center justify-between">
         <h2 className="text-xl font-semibold">公开活动</h2>
         <span className="text-sm text-muted-foreground">
-          {(contests ?? []).length}
+          {publicEntries.length}
         </span>
       </div>
 
-      {contests && contests.length > 0 ? (
+      {publicEntries.length > 0 ? (
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {contests.map((contest) => (
-            <ContestCard key={contest.id} contest={contest} />
-          ))}
+          {publicEntries.map((entry) =>
+            entry.type === "group" ? (
+              <ContestGroupCard
+                key={`group-${entry.group.id}`}
+                group={entry.group}
+                contestCount={entry.contestCount}
+              />
+            ) : (
+              <ContestCard
+                key={`contest-${entry.contest.id}`}
+                contest={entry.contest}
+              />
+            ),
+          )}
         </div>
       ) : (
         <MascotEmptyState kind="emptyContests" title="暂无公开活动">
