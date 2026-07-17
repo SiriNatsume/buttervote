@@ -1,265 +1,214 @@
 "use client";
 
-import Link from "next/link";
+import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 type HomepageHeroPanelProps = {
   title: string;
   description: string;
-  href: string;
-  cta: string;
   showDescription: boolean;
   imageUrl: string | null;
 };
 
-type HeroTextTone = "dark" | "light";
+type RgbColor = { red: number; green: number; blue: number };
 
-function getAverageLuminance(imageData: ImageData) {
-  const data = imageData.data;
-  let total = 0;
-  let count = 0;
+const FALLBACK_COLOR: RgbColor = { red: 255, green: 232, blue: 172 };
+const DARK_TEXT: RgbColor = { red: 63, green: 36, blue: 24 };
+const LIGHT_TEXT: RgbColor = { red: 255, green: 252, blue: 244 };
 
-  for (let index = 0; index < data.length; index += 4) {
-    const alpha = data[index + 3] / 255;
-    if (alpha <= 0) {
-      continue;
-    }
+function mixWithWhite(color: RgbColor, whiteAmount: number): RgbColor {
+  const mix = (channel: number) => Math.round(channel + (255 - channel) * whiteAmount);
 
-    const red = data[index];
-    const green = data[index + 1];
-    const blue = data[index + 2];
-    total += (0.2126 * red + 0.7152 * green + 0.0722 * blue) * alpha;
-    count += alpha;
-  }
-
-  return count > 0 ? total / count : 255;
+  return {
+    red: mix(color.red),
+    green: mix(color.green),
+    blue: mix(color.blue),
+  };
 }
 
-async function waitForImage(image: HTMLImageElement) {
+function toCssColor(color: RgbColor) {
+  return `rgb(${color.red} ${color.green} ${color.blue})`;
+}
+
+function relativeLuminance(color: RgbColor) {
+  const linearize = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.04045
+      ? value / 12.92
+      : ((value + 0.055) / 1.055) ** 2.4;
+  };
+
+  return (
+    0.2126 * linearize(color.red) +
+    0.7152 * linearize(color.green) +
+    0.0722 * linearize(color.blue)
+  );
+}
+
+function contrastRatio(first: RgbColor, second: RgbColor) {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  const lighter = Math.max(firstLuminance, secondLuminance);
+  const darker = Math.min(firstLuminance, secondLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function waitForImage(image: HTMLImageElement) {
   if (image.complete) {
-    if (image.naturalWidth > 0) {
-      return;
-    }
-
-    throw new Error("Hero image failed to load.");
+    return image.naturalWidth > 0
+      ? Promise.resolve()
+      : Promise.reject(new Error("Hero image failed to load."));
   }
 
-  if (typeof image.decode === "function") {
-    await image.decode();
-    if (image.naturalWidth > 0) {
-      return;
-    }
-
-    throw new Error("Hero image failed to decode.");
-  }
-
-  await new Promise<void>((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     image.addEventListener("load", () => resolve(), { once: true });
     image.addEventListener("error", () => reject(new Error("Hero image failed to load.")), {
       once: true,
     });
   });
-
-  if (image.naturalWidth <= 0) {
-    throw new Error("Hero image failed to load.");
-  }
 }
 
-function getSampleRect(panel: DOMRect, image: DOMRect) {
-  const left = Math.max(panel.left, image.left);
-  const top = Math.max(panel.top, image.top);
-  const right = Math.min(panel.right, image.right);
-  const bottom = Math.min(panel.bottom, image.bottom);
+function sampleImageBottom(image: HTMLImageElement): RgbColor {
+  const canvas = document.createElement("canvas");
+  canvas.width = 48;
+  canvas.height = 8;
 
-  if (right > left && bottom > top) {
-    return { left, top, right, bottom };
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    throw new Error("Canvas is unavailable.");
   }
 
-  const centerX = panel.left + panel.width / 2;
-  const centerY = panel.top + panel.height / 2;
-  const size = 96;
+  const sourceHeight = Math.max(1, image.naturalHeight * 0.12);
+  context.drawImage(
+    image,
+    0,
+    image.naturalHeight - sourceHeight,
+    image.naturalWidth,
+    sourceHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  let weight = 0;
+
+  for (let index = 0; index < pixels.length; index += 4) {
+    const alpha = pixels[index + 3] / 255;
+    if (alpha === 0) continue;
+    red += pixels[index] * alpha;
+    green += pixels[index + 1] * alpha;
+    blue += pixels[index + 2] * alpha;
+    weight += alpha;
+  }
+
+  if (weight === 0) {
+    throw new Error("Hero image has no visible bottom pixels.");
+  }
 
   return {
-    left: Math.min(Math.max(centerX - size / 2, image.left), image.right),
-    top: Math.min(Math.max(centerY - size / 2, image.top), image.bottom),
-    right: Math.min(Math.max(centerX + size / 2, image.left), image.right),
-    bottom: Math.min(Math.max(centerY + size / 2, image.top), image.bottom),
+    red: Math.round(red / weight),
+    green: Math.round(green / weight),
+    blue: Math.round(blue / weight),
   };
 }
 
 export function HomepageHeroPanel({
   title,
   description,
-  href,
-  cta,
   showDescription,
   imageUrl,
 }: HomepageHeroPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [tone, setTone] = useState<HeroTextTone>("dark");
+  const [sampledColor, setSampledColor] = useState(FALLBACK_COLOR);
 
   useEffect(() => {
     if (!imageUrl) {
-      setTone("dark");
+      setSampledColor(FALLBACK_COLOR);
       return;
     }
 
     let cancelled = false;
 
-    async function updateTone() {
-      const panel = panelRef.current;
-      const heroImage = document.querySelector<HTMLImageElement>(
+    async function updateColor() {
+      const hero = panelRef.current?.closest<HTMLElement>("[data-homepage-hero]");
+      const image = hero?.querySelector<HTMLImageElement>(
         "[data-homepage-hero-image='true']",
       );
 
-      if (!panel || !heroImage || window.innerWidth < 640) {
-        setTone("dark");
-        return;
-      }
+      if (!image) return;
 
       try {
-        await waitForImage(heroImage);
-
-        if (cancelled || heroImage.naturalWidth <= 0 || heroImage.naturalHeight <= 0) {
-          return;
-        }
-
-        const panelRect = panel.getBoundingClientRect();
-        const imageRect = heroImage.getBoundingClientRect();
-        if (imageRect.width <= 0 || imageRect.height <= 0) {
-          setTone("dark");
-          return;
-        }
-
-        const sampleSource = heroImage.currentSrc || imageUrl;
-        if (!sampleSource) {
-          setTone("dark");
-          return;
-        }
-
+        await waitForImage(image);
+        const sourceUrl = image.currentSrc || imageUrl;
+        if (!sourceUrl) return;
         const sampleImage = new window.Image();
         sampleImage.crossOrigin = "anonymous";
-        sampleImage.src = sampleSource;
+        sampleImage.src = sourceUrl;
         await waitForImage(sampleImage);
-
-        if (
-          cancelled ||
-          sampleImage.naturalWidth <= 0 ||
-          sampleImage.naturalHeight <= 0
-        ) {
-          return;
-        }
-
-        const sampleRect = getSampleRect(panelRect, imageRect);
-        const sourceX =
-          ((sampleRect.left - imageRect.left) / imageRect.width) *
-          sampleImage.naturalWidth;
-        const sourceY =
-          ((sampleRect.top - imageRect.top) / imageRect.height) *
-          sampleImage.naturalHeight;
-        const sourceWidth =
-          ((sampleRect.right - sampleRect.left) / imageRect.width) *
-          sampleImage.naturalWidth;
-        const sourceHeight =
-          ((sampleRect.bottom - sampleRect.top) / imageRect.height) *
-          sampleImage.naturalHeight;
-
-        if (sourceWidth <= 0 || sourceHeight <= 0) {
-          setTone("dark");
-          return;
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = 24;
-        canvas.height = 24;
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        if (!context) {
-          setTone("dark");
-          return;
-        }
-
-        context.drawImage(
-          sampleImage,
-          sourceX,
-          sourceY,
-          sourceWidth,
-          sourceHeight,
-          0,
-          0,
-          canvas.width,
-          canvas.height,
-        );
-
-        const luminance = getAverageLuminance(
-          context.getImageData(0, 0, canvas.width, canvas.height),
-        );
-        setTone(luminance < 135 ? "light" : "dark");
+        if (!cancelled) setSampledColor(sampleImageBottom(sampleImage));
       } catch {
-        setTone("dark");
+        if (!cancelled) setSampledColor(FALLBACK_COLOR);
       }
     }
 
-    updateTone();
-    window.addEventListener("resize", updateTone);
-
+    updateColor();
     return () => {
       cancelled = true;
-      window.removeEventListener("resize", updateTone);
     };
   }, [imageUrl]);
 
-  const useLightText = tone === "light";
+  const edgeColor = mixWithWhite(sampledColor, 0.12);
+  const baseColor = mixWithWhite(sampledColor, 0.28);
+  const darkContrast = Math.min(
+    contrastRatio(DARK_TEXT, edgeColor),
+    contrastRatio(DARK_TEXT, baseColor),
+  );
+  const lightContrast = Math.min(
+    contrastRatio(LIGHT_TEXT, edgeColor),
+    contrastRatio(LIGHT_TEXT, baseColor),
+  );
+  const useLightText = lightContrast > darkContrast;
+  const edgeCssColor = toCssColor(edgeColor);
+  const baseCssColor = toCssColor(baseColor);
+  const textCssColor = toCssColor(useLightText ? LIGHT_TEXT : DARK_TEXT);
+  const gradientStyle = {
+    background: `linear-gradient(180deg, ${edgeCssColor} 0%, ${baseCssColor} 100%)`,
+    color: textCssColor,
+  } satisfies CSSProperties;
 
   return (
     <div
       ref={panelRef}
-      className={cn(
-        "relative z-10 border-t border-[#EED8AA]/70 bg-[#FFF8E8]/97 p-3 transition-colors duration-300",
-        showDescription
-          ? "sm:absolute sm:bottom-5 sm:left-5 sm:max-w-[420px] sm:rounded-2xl sm:border sm:p-4 sm:shadow-sm sm:backdrop-blur-md lg:bottom-8 lg:left-8 lg:max-w-[460px]"
-          : "sm:absolute sm:inset-x-5 sm:bottom-5 sm:rounded-2xl sm:border sm:px-4 sm:py-3 sm:shadow-sm sm:backdrop-blur-md lg:inset-x-8 lg:bottom-8",
-        useLightText
-          ? "sm:border-white/20 sm:bg-[#2B1A10]/72"
-          : "sm:border-[#EED8AA]/70 sm:bg-[#FFF8E8]/88",
-      )}
+      className="relative z-10 px-5 pb-5 pt-3 transition-colors duration-300 sm:px-7 sm:pb-6 sm:pt-4"
+      style={gradientStyle}
     >
       <div
-        className={
-          showDescription
-            ? "flex flex-col gap-2.5"
-            : "flex items-center justify-between gap-3"
-        }
-      >
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -top-20 h-20"
+        style={{
+          background: `linear-gradient(180deg, transparent 0%, ${edgeCssColor} 100%)`,
+        }}
+      />
+      <div className="relative z-[1] max-w-3xl">
         <h1
-          className={cn(
-            "tracking-normal transition-colors duration-300",
-            showDescription
-              ? "max-w-full break-words text-2xl font-bold sm:text-3xl"
-              : "min-w-0 flex-1 truncate text-xl font-bold sm:text-2xl",
-            useLightText ? "text-[#5C321E] sm:text-white" : "text-[#5C321E]",
-          )}
+          className="break-words text-xl font-bold leading-tight tracking-normal sm:text-2xl"
+          style={{ color: textCssColor }}
         >
           {title}
         </h1>
         {showDescription ? (
           <p
-            className={cn(
-              "line-clamp-2 max-w-2xl text-sm leading-6 transition-colors duration-300",
-              useLightText ? "text-[#6A4A2B] sm:text-white/88" : "text-[#6A4A2B]",
-            )}
+            className="mt-2 line-clamp-2 text-sm leading-6"
+            style={{ color: textCssColor }}
           >
             {description}
           </p>
         ) : null}
-        <Button asChild size="sm" className="w-fit">
-          <Link href={href}>
-            {cta}
-            <ArrowRight className="size-4" />
-          </Link>
-        </Button>
       </div>
     </div>
   );
