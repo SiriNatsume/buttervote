@@ -69,6 +69,17 @@ test("live results show base scores without the weighted breakdown", () => {
   assert.equal(presentation.tiebreakExplanation, null);
 });
 
+test("live results reject breakdown even when a caller marks it visible", () => {
+  const presentation = resolveTournamentMatchPresentation(
+    tooltipData({ status: "voting", breakdownVisible: true }),
+  );
+
+  assert.equal(presentation.displayState, "voting");
+  assert.equal(presentation.showResults, true);
+  assert.equal(presentation.showBreakdown, false);
+  assert.equal(presentation.tiebreakExplanation, null);
+});
+
 test("closed hidden results do not show scores or breakdown details", () => {
   const presentation = resolveTournamentMatchPresentation(
     tooltipData({ resultVisible: false, breakdownVisible: true }),

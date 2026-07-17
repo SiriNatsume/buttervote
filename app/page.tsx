@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ContestCard } from "@/components/contest-card";
 import {
   ContestGroupCard,
@@ -18,7 +19,6 @@ type Hero = {
   description: string;
   imagePath?: string | null;
   href: string;
-  cta: string;
 };
 
 export default async function HomePage() {
@@ -124,7 +124,6 @@ export default async function HomePage() {
           heroValue.description || group.description || "参与联合投票。",
         imagePath: heroValue.imagePath || group.cover_image_path,
         href: `/groups/${group.id}`,
-        cta: "活动详情",
       };
     }
   }
@@ -144,7 +143,6 @@ export default async function HomePage() {
           heroValue.description || contest.description || "为你支持的选项投票。",
         imagePath: heroValue.imagePath || contest.image_path,
         href: `/contests/${contest.id}`,
-        cta: "打开活动",
       };
     }
   }
@@ -162,10 +160,6 @@ export default async function HomePage() {
           bracketTournamentId === heroValue.featuredId && bracket.rounds.length > 0
             ? "#featured-tournament-bracket"
             : "#public-contests",
-        cta:
-          bracketTournamentId === heroValue.featuredId && bracket.rounds.length > 0
-            ? "查看对阵"
-            : "查看活动",
       };
     }
   }
@@ -189,22 +183,29 @@ export default async function HomePage() {
     title: "为喜欢的作品投出真爱票",
     description: "参与提名、投票和活动评选，发现大家共同喜欢的选择。",
     href: defaultHeroHref,
-    cta: "开始投票",
   };
   const showHeroDescription =
     heroValue?.showDescription !== false && Boolean(activeHero.description);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-      <section className="mb-10 overflow-hidden rounded-3xl border border-[#EED8AA]/80 bg-[#FFF8E8] shadow-sm">
+      <section
+        data-homepage-hero
+        className="mb-10 overflow-hidden rounded-3xl border border-[#EED8AA]/80 bg-[#FFF8E8] shadow-sm"
+      >
         <div className="relative bg-[#FFF3D0]">
-          <div className="flex min-h-[180px] items-center justify-center bg-[#FFF3D0] sm:min-h-[420px]">
+          <Link
+            href={activeHero.href}
+            aria-label={`打开${activeHero.title}`}
+            className="group block focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-400/70 focus-visible:ring-inset"
+          >
+            <div className="flex min-h-[180px] items-center justify-center bg-[#FFF3D0] sm:min-h-[420px]">
             {heroImageUrl ? (
               <img
                 src={heroImageUrl}
                 alt={`${activeHero.title} 首页图`}
                 data-homepage-hero-image="true"
-                className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain"
+                className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.005]"
               />
             ) : (
               <div className="butter-placeholder flex min-h-[260px] w-full items-end justify-center px-6 pt-8 sm:min-h-[420px] sm:px-10 sm:pt-10">
@@ -215,13 +216,12 @@ export default async function HomePage() {
                 />
               </div>
             )}
-          </div>
+            </div>
+          </Link>
 
           <HomepageHeroPanel
             title={activeHero.title}
             description={activeHero.description}
-            href={activeHero.href}
-            cta={activeHero.cta}
             showDescription={showHeroDescription}
             imageUrl={heroImageUrl}
           />

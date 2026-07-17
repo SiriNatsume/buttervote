@@ -45,6 +45,18 @@ export type ContestResultVisibilityState =
   | "hidden"
   | "calling_progress"
   | "full";
+export type PageVisibility = "admin_only" | "public";
+export type PageAssetType = "image" | "attachment";
+export type PageAssetExtension =
+  | "jpg"
+  | "png"
+  | "webp"
+  | "pdf"
+  | "7z"
+  | "rar"
+  | "xlsx"
+  | "docx"
+  | "pptx";
 export type TournamentEntryStatus =
   | "screening"
   | "preliminary"
@@ -365,6 +377,50 @@ export type HallOfFameEntry = {
   updated_at: string;
 } & Record<string, unknown>;
 
+export type ContestGroupHomepageSettings = {
+  contest_group_id: string;
+  show_bracket: boolean;
+  featured_tournament_id: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type ContestGroupPage = {
+  id: string;
+  contest_group_id: string;
+  page_id: string;
+  sort_order: number;
+  created_at: string;
+} & Record<string, unknown>;
+
+export type SitePage = {
+  id: string;
+  title: string;
+  description: string | null;
+  slug: string;
+  content_markdown: string;
+  visibility: PageVisibility;
+  published_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
+export type PageAsset = {
+  id: string;
+  original_filename: string;
+  storage_path: string;
+  extension: PageAssetExtension;
+  mime_type: string;
+  byte_size: number;
+  asset_type: PageAssetType;
+  visibility: PageVisibility;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+} & Record<string, unknown>;
+
 type Table<
   Row extends Record<string, unknown>,
   Insert extends Record<string, unknown>,
@@ -386,6 +442,40 @@ type Relationship = {
 };
 
 type Tables = {
+  site_pages: Table<
+    SitePage,
+    {
+      id?: string;
+      title: string;
+      description?: string | null;
+      slug: string;
+      content_markdown?: string;
+      visibility?: PageVisibility;
+      published_at?: string | null;
+      created_by?: string | null;
+      updated_by?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<SitePage, "id" | "created_at">>
+  >;
+  page_assets: Table<
+    PageAsset,
+    {
+      id?: string;
+      original_filename: string;
+      storage_path: string;
+      extension: PageAssetExtension;
+      mime_type: string;
+      byte_size: number;
+      asset_type: PageAssetType;
+      visibility?: PageVisibility;
+      uploaded_by?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<PageAsset, "id" | "created_at">>
+  >;
   hall_of_fame_entries: Table<
     HallOfFameEntry,
     {
@@ -511,6 +601,28 @@ type Tables = {
       updated_at?: string;
     },
     Partial<Omit<ContestGroup, "id" | "created_at">>
+  >;
+  contest_group_homepage_settings: Table<
+    ContestGroupHomepageSettings,
+    {
+      contest_group_id: string;
+      show_bracket?: boolean;
+      featured_tournament_id?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    },
+    Partial<Omit<ContestGroupHomepageSettings, "contest_group_id" | "created_at">>
+  >;
+  contest_group_pages: Table<
+    ContestGroupPage,
+    {
+      id?: string;
+      contest_group_id: string;
+      page_id: string;
+      sort_order?: number;
+      created_at?: string;
+    },
+    Partial<Omit<ContestGroupPage, "id" | "created_at">>
   >;
   user_groups: Table<
     UserGroup,
@@ -775,6 +887,35 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      get_group_homepage_contests: {
+        Args: {
+          p_group_id: string;
+          p_recent_limit?: number;
+        };
+        Returns: Contest[];
+      };
+      get_visible_contest_tallies: {
+        Args: {
+          p_contest_ids: string[];
+          p_include_admin_override?: boolean;
+        };
+        Returns: Array<{
+          contest_id: string;
+          candidate_id: string;
+          score: number;
+          normal_score: number;
+          love_score: number;
+          love_vote_count: number;
+          last_vote_at: string | null;
+        }>;
+      };
+      set_contest_group_pages: {
+        Args: {
+          p_contest_group_id: string;
+          p_page_ids?: string[];
+        };
+        Returns: undefined;
+      };
       reorder_hall_of_fame_entries: {
         Args: {
           p_entry_ids: string[];
