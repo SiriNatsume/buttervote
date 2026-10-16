@@ -53,7 +53,7 @@ export function ContestCard({ contest }: { contest: ContestCardContest }) {
         </p>
       </CardContent>
       <CardFooter>
-        <Button asChild className="w-full">
+        <Button asChild variant="view" className="w-full">
           <Link href={`/contests/${contest.id}`}>
             查看详情
             <ArrowRight className="size-4" />

@@ -1,18 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
-import { LogIn, LogOut, Trophy, Settings, UserRound, UsersRound } from "lucide-react";
-import { logoutAction } from "@/lib/actions/auth-actions";
 import { getCurrentProfile } from "@/lib/auth";
 import { createServerDataClient } from "@/lib/supabase/server-data";
-import { FormSubmitButton } from "@/components/form-submit-button";
-import {
-  MobileContentMenu,
-  MobileSiteMenu,
-} from "@/components/mobile-site-menu";
-import { Button } from "@/components/ui/button";
+import { SiteAccountMenu } from "@/components/mobile-site-menu";
+import { SiteNavigation } from "@/components/site-navigation";
+import type { SiteNavigationData } from "@/lib/page-navigation";
 import logo from "@/img/网站logo.png";
 
-export async function SiteHeader() {
+export async function SiteHeader({ navigation }: { navigation: SiteNavigationData }) {
   const profile = await getCurrentProfile();
   const displayName =
     profile?.qq_nickname ||
@@ -34,106 +29,24 @@ export async function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[#EED8AA]/70 bg-[#FFFCF4]/80 backdrop-blur">
-      <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-1">
-          <Link
-            href="/"
-            className="flex items-center rounded-full px-1 transition-colors hover:bg-[#FFF3D0]"
-            aria-label="Butter Vote 首页"
-          >
-            <Image
-              src={logo}
-              alt="Butter Vote logo"
-              className="h-12 w-auto rounded-2xl object-contain"
-              priority
-            />
-          </Link>
-          <MobileContentMenu />
-        </div>
-
-        <nav className="hidden min-w-0 flex-1 items-center gap-8 xl:flex">
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/hall-of-fame">
-                <Trophy className="size-4" />
-                冠军英灵殿
-              </Link>
-            </Button>
-          </div>
-          <div className="ml-auto flex min-w-0 items-center justify-end gap-2">
-          {profile ? (
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/me/nominations" className="relative">
-                <UserRound className="size-4" />
-                我的提名
-                {hasRejectedNominations ? (
-                  <span className="absolute right-1 top-1 size-2 rounded-full bg-red-500" />
-                ) : null}
-              </Link>
-            </Button>
-          ) : null}
-          {profile ? (
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/me/groups">
-                <UsersRound className="size-4" />
-                我的用户组
-              </Link>
-            </Button>
-          ) : null}
-          {profile?.role === "admin" ? (
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/admin">
-                <Settings className="size-4" />
-                管理
-              </Link>
-            </Button>
-          ) : null}
-          {profile ? (
-            <div className="flex items-center gap-2">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt="头像"
-                  className="size-8 rounded-full border border-[#EED8AA] object-cover"
-                />
-              ) : null}
-              <span className="hidden max-w-[220px] truncate text-sm text-muted-foreground sm:inline">
-                {displayName}
-              </span>
-              <form action={logoutAction}>
-                <FormSubmitButton
-                  variant="outline"
-                  size="sm"
-                  loadingText="退出中..."
-                >
-                  <LogOut className="size-4" />
-                  退出登录
-                </FormSubmitButton>
-              </form>
-            </div>
-          ) : (
-            <Button asChild size="sm">
-              <Link href="/login">
-                <LogIn className="size-4" />
-                登录
-              </Link>
-            </Button>
-          )}
-          </div>
-        </nav>
-
-        <MobileSiteMenu
-          profile={
-            profile
-              ? {
-                  role: profile.role,
-                  displayName,
-                  avatarUrl,
-                  hasRejectedNominations,
-                }
-              : null
-          }
+    <header className="sticky top-0 z-40 h-[var(--site-header-height)] shrink-0 border-b border-[#E9E1D2] bg-[#FFFEFA]/95 backdrop-blur lg:bg-[#FFFEFA]/80 lg:backdrop-blur-[10px]">
+      <div className="mx-auto flex h-full max-w-[1536px] items-center gap-4 px-4 sm:px-6 lg:gap-[58px]">
+        <Link href="/" className="shrink-0" aria-label="Butter Vote 首页">
+          <Image
+            src={logo}
+            alt="Butter Vote logo"
+            className="h-auto w-[149px] lg:w-[184px]"
+            priority
+          />
+        </Link>
+        <SiteNavigation navigation={navigation} />
+        <SiteAccountMenu
+          profile={profile ? {
+            role: profile.role,
+            displayName,
+            avatarUrl,
+            hasRejectedNominations,
+          } : null}
         />
       </div>
     </header>

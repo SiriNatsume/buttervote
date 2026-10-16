@@ -7,6 +7,7 @@ import {
   type GroupHomepageContest,
 } from "@/lib/group-homepage";
 import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
+import { contestVoteHref } from "@/lib/vote-entry";
 import type { Candidate, Contest, Database } from "@/lib/types";
 import {
   loadVisibleContestTallies,
@@ -17,6 +18,7 @@ type DataClient = SupabaseClient<Database>;
 type HomepageContestRow = Pick<
   Contest,
   | "id"
+  | "group_id"
   | "title"
   | "description"
   | "image_path"
@@ -62,7 +64,7 @@ function compareCandidatesByTally(
 export async function loadGroupHomepageContests(params: {
   publicClient: DataClient;
   contests: HomepageContestRow[];
-  loveVoteWeight: number;
+  loveVoteWeight: number | ReadonlyMap<string, number>;
 }): Promise<GroupHomepageContest[]> {
   const { publicClient, contests, loveVoteWeight } = params;
   const contestIds = contests.map((contest) => contest.id);
@@ -179,6 +181,7 @@ export async function loadGroupHomepageContests(params: {
 
     return {
       id: contest.id,
+      voteHref: contestVoteHref(contest.id, contest.group_id),
       title: contest.title,
       description: contest.description,
       imageUrl: getPublicImageUrl(contest.image_path),
@@ -189,7 +192,11 @@ export async function loadGroupHomepageContests(params: {
       updatedAt: contest.updated_at,
       resultVisible: scoresVisible,
       breakdownVisible,
-      loveVoteWeight: breakdownVisible ? loveVoteWeight : null,
+      loveVoteWeight: breakdownVisible
+        ? typeof loveVoteWeight === "number"
+          ? loveVoteWeight
+          : loveVoteWeight.get(contest.id) ?? 1
+        : null,
       participants,
       searchText,
     };

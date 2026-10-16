@@ -2,12 +2,17 @@ import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { actionStyles } from "@/lib/action-styles";
 
 const buttonVariants = cva(
   "inline-flex max-w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full text-center text-sm font-medium leading-snug shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[#FFF8E8] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
+        participation: actionStyles.participation,
+        nomination: actionStyles.nomination,
+        loveParticipation: actionStyles.loveParticipation,
+        view: actionStyles.view,
         default: "bg-primary text-primary-foreground hover:bg-orange-600",
         destructive:
           "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100",

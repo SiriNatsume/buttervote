@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { revokeCurrentAppSession } from "@/lib/auth/app-session";
 import { createClient } from "@/lib/supabase/server";
+import { safeReturnTo } from "@/lib/security/token";
 
 const credentialSchema = z.object({
   email: z.string().email("请输入有效邮箱。"),
@@ -57,7 +58,7 @@ export async function loginAction(formData: FormData) {
     loginError(authErrorMessage(error.message));
   }
 
-  redirect("/?loggedIn=1");
+  redirect(safeReturnTo(String(formData.get("returnTo") ?? "/")));
 }
 
 export async function signUpAction(formData: FormData) {

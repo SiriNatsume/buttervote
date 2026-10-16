@@ -21,6 +21,7 @@ function tooltipData(
 ): TournamentMatchTooltipData {
   return {
     contestId: "contest-1",
+    voteHref: "/groups/group-1/vote",
     contestTitle: "测试比赛",
     status: "closed",
     scheduledStartsAt: null,

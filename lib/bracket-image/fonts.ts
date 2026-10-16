@@ -5,7 +5,7 @@ export const BRACKET_EXPORT_FONT_FAMILY = "Noto Sans SC";
 const FONT_WEIGHTS = ["700", "800", "900"] as const;
 const GOOGLE_FONTS_CSS_URL = "https://fonts.googleapis.com/css2";
 const FALLBACK_TEXT =
-  "Butter Vote @SiriNatsume BV 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz -_.=/()[]:;,+ " +
+  "Butter Vote @SuperCUT Butter Group BV 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz -_.=/()[]:;,+ " +
   "\u5f85\u5b9a\u5f85\u751f\u6210\u672a\u5f00\u59cb\u7b49\u5f85\u5f00\u59cb\u6295\u7968\u4e2d\u7ed3\u679c\u53ef\u89c1\u7ed3\u679c\u5f85\u516c\u5f00\u5df2\u516c\u5f00 " +
   "\u7ec4\u9884\u8d5b\u7b2c\u6d77\u9009\u8d5b\u7a0b\u5e2d\u4f4d\u5f3a\u534a\u51b3\u8d5b\u51a0\u519b\u8d5b\u5b63\u519b\u8d5b\u51a0\u519b\u573a\u7eff\u8272\u83b7\u80dc\u6570\u5b57\u5f97\u7968";
 

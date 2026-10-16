@@ -10,17 +10,21 @@ import { createRequiredServiceClient } from "@/lib/supabase/service";
 export default async function HallOfFameAdminPage() {
   await requireAdmin();
   const supabase = createRequiredServiceClient();
-  const [entriesResult, contestsResult] = await Promise.all([
+  const [entriesResult, contestsResult, groupsResult] = await Promise.all([
     supabase
       .from("hall_of_fame_entries")
       .select(
-        "id,contest_id,event_title,winner_name,description,poster_path,poster_size,thumbnail_path,thumbnail_size",
+        "id,contest_id,contest_group_id,event_title,winner_name,description,poster_path,poster_size,thumbnail_path,thumbnail_size",
       )
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase
       .from("contests")
       .select("id,title")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("contest_groups")
+      .select("id,name")
       .order("created_at", { ascending: false }),
   ]);
   if (entriesResult.error) {
@@ -34,6 +38,12 @@ export default async function HallOfFameAdminPage() {
       `[hall-of-fame] contest options query failed: ${contestsResult.error.message}`,
     );
     throw new Error("关联活动列表加载失败，请稍后重试。");
+  }
+  if (groupsResult.error) {
+    console.error(
+      `[hall-of-fame] contest group options query failed: ${groupsResult.error.message}`,
+    );
+    throw new Error("夺冠历程活动组列表加载失败，请稍后重试。");
   }
 
   const entries = entriesResult.data;
@@ -60,6 +70,7 @@ export default async function HallOfFameAdminPage() {
               return posterUrl && thumbnailUrl ? [{
                 id: entry.id,
                 contestId: entry.contest_id,
+                contestGroupId: entry.contest_group_id,
                 eventTitle: entry.event_title,
                 winnerName: entry.winner_name,
                 description: entry.description,
@@ -70,6 +81,7 @@ export default async function HallOfFameAdminPage() {
               }] : [];
             })}
             contests={(contests ?? []).map((contest) => ({ id: contest.id, title: contest.title }))}
+            contestGroups={groupsResult.data ?? []}
           />
         </CardContent>
       </Card>

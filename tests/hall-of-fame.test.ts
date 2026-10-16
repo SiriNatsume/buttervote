@@ -27,10 +27,37 @@ test("hall of fame input trims text and normalizes empty optional ids", () => {
   assert.deepEqual(parsed, {
     entryId: null,
     contestId,
+    contestGroupId: null,
     eventTitle: "夏季赛",
     winnerName: "角色 Alpha",
     description: "冠军海报",
   });
+});
+
+test("hall of fame journey links accept group ids and allow removing the link", () => {
+  const input = {
+    entryId,
+    contestId: "",
+    eventTitle: "赛事",
+    winnerName: "胜者",
+    description: "",
+  };
+  assert.equal(
+    hallOfFameEntryInputSchema.parse({ ...input, contestGroupId: ` ${contestId} ` }).contestGroupId,
+    contestId,
+  );
+  for (const contestGroupId of ["", "  ", null, undefined]) {
+    assert.equal(
+      hallOfFameEntryInputSchema.parse({ ...input, contestGroupId }).contestGroupId,
+      null,
+    );
+  }
+  for (const contestGroupId of ["not-a-uuid", "/groups/123", 42]) {
+    assert.equal(
+      hallOfFameEntryInputSchema.safeParse({ ...input, contestGroupId }).success,
+      false,
+    );
+  }
 });
 
 test("hall of fame ids reject malformed values", () => {

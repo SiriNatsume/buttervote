@@ -27,7 +27,7 @@ export function renderBrandSignatureSvg({
   y,
   width,
   logoDataUrl,
-  handle = "@SiriNatsume",
+  handle = "@SuperCUT Butter Group",
 }: BrandSignatureOptions) {
   const centerX = x + width / 2;
   const logoWidth = 220;

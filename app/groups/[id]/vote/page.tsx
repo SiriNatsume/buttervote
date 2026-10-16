@@ -1,10 +1,10 @@
 import Link from "next/link";
+import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import { ImageIcon } from "lucide-react";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
 import { MascotEmptyState } from "@/components/mascot";
 import { GroupVoteForm } from "@/components/group-vote-form";
-import { TournamentBracket } from "@/components/tournament-bracket";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { getPublicImageUrl } from "@/lib/image/image-url";
@@ -15,7 +15,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { tallyVotes } from "@/lib/tally";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
-import { getTournamentBracketsForGroup } from "@/lib/tournament-bracket";
 import { loadVisibleContestResultData } from "@/lib/visible-result-data";
 import type { LoveVoteAllocation, Vote } from "@/lib/types";
 
@@ -24,8 +23,8 @@ export default async function GroupVotePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireUser();
   const { id } = await params;
+  const user = await requireUser(`/groups/${id}/vote`);
   await applyScheduledTransitions({ revalidate: false });
   const [supabase, dataClient] = await Promise.all([
     createClient(),
@@ -61,6 +60,7 @@ export default async function GroupVotePage({
   if (!canParticipate) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+        <ActivityBreadcrumb group={group} current="本轮投票" />
         <GroupAccessDeniedPanel backHref={`/groups/${group.id}`} />
       </div>
     );
@@ -205,11 +205,11 @@ export default async function GroupVotePage({
     }
   }
 
-  const tournamentBrackets = await getTournamentBracketsForGroup(supabase, id);
   const coverUrl = getPublicImageUrl(group.cover_image_path);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
+      <ActivityBreadcrumb group={group} current="本轮投票" />
       <div className="mb-8 space-y-5">
         <div className="aspect-video overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-muted shadow-sm">
           {coverUrl ? (
@@ -241,17 +241,6 @@ export default async function GroupVotePage({
           </Button>
         </div>
       </div>
-
-      {tournamentBrackets.length > 0 ? (
-        <div className="mb-8 min-w-0 space-y-5">
-          {tournamentBrackets.map((bracket) => (
-            <TournamentBracket
-              key={bracket.tournament.id}
-              bracket={bracket}
-            />
-          ))}
-        </div>
-      ) : null}
 
       {contestsWithCandidates.length > 0 ? (
         <GroupVoteForm

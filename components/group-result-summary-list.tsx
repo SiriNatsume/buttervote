@@ -217,7 +217,7 @@ export function GroupResultSummaryList({ summaries }: GroupResultSummaryListProp
                 )}
               </CardContent>
               <CardFooter className="min-w-0">
-                <Button asChild className="w-full" variant="outline">
+                <Button asChild className="w-full" variant="view">
                   <Link href={`/contests/${contest.id}/results`}>
                     {callingInProgress ? "观看唱票" : "查看完整结果"}
                   </Link>

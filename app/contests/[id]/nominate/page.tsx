@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { redirect } from "next/navigation";
+import { ArrowLeft, ClipboardList } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { createServerDataClient } from "@/lib/supabase/server-data";
@@ -6,6 +9,7 @@ import { ExistingNominationsList } from "@/components/existing-nominations-list"
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
 import { NominationCreateForm } from "@/components/nomination-create-form";
 import { NominationImageUploader } from "@/components/nomination-image-uploader";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -21,11 +25,11 @@ export default async function NominatePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string; nominationId?: string }>;
 }) {
-  const user = await requireUser();
   const [{ id }, query] = await Promise.all([
     params,
     searchParams,
   ]);
+  const user = await requireUser(`/contests/${id}/nominate${query.nominationId ? `?nominationId=${encodeURIComponent(query.nominationId)}` : ""}`);
   const supabase = await createServerDataClient();
   const { data: contest } = await supabase
     .from("contests")
@@ -53,6 +57,7 @@ export default async function NominatePage({
     if (!canParticipate) {
       return (
         <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+          <ActivityBreadcrumb contest={contest} current="参与提名" />
           <GroupAccessDeniedPanel
             actionLabel="提名"
             backHref={`/contests/${contest.id}`}
@@ -61,8 +66,6 @@ export default async function NominatePage({
       );
     }
   }
-
-  let nominationLimitError: string | null = null;
 
   const canViewExistingNominations =
     isAdmin || contest.show_existing_nominations === true;
@@ -75,18 +78,12 @@ export default async function NominatePage({
         .order("created_at", { ascending: true })
     : { data: [] };
 
-  if (!isAdmin && contest.max_nominations_per_user !== null) {
-    const { count } = await supabase
-      .from("nominations")
-      .select("id", { count: "exact", head: true })
-      .eq("contest_id", contest.id)
-      .eq("submitter_id", user.id)
-      .neq("status", "rejected");
-
-    if ((count ?? 0) >= contest.max_nominations_per_user && !query.nominationId) {
-      nominationLimitError = "你在该活动中的提名数量已达上限。";
-    }
-  }
+  const { data: ownNominations, count: ownNominationCount, error: ownNominationError } = await supabase
+    .from("nominations")
+    .select("id,status", { count: "exact" })
+    .eq("contest_id", contest.id)
+    .eq("submitter_id", user.id)
+    .neq("status", "rejected");
 
   let nomination:
     | {
@@ -104,12 +101,29 @@ export default async function NominatePage({
       .select("id,image_path,image_width,image_height,image_size")
       .eq("id", query.nominationId)
       .eq("contest_id", contest.id)
+      .eq("submitter_id", user.id)
       .maybeSingle();
     nomination = data;
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 px-4 py-12 sm:px-6">
+    <div className="mx-auto max-w-3xl space-y-8 px-4 py-12 sm:px-6">
+      <ActivityBreadcrumb contest={contest} current="参与提名" className="mb-0" />
+      <nav
+        aria-label="提名导航"
+        className="flex flex-wrap items-center justify-between gap-2"
+      >
+        <Button asChild variant="ghost">
+          <Link href={`/contests/${contest.id}`}>
+            <ArrowLeft className="size-4" />返回活动
+          </Link>
+        </Button>
+        <Button asChild variant="view">
+          <Link href={`/contests/${contest.id}/my-nominations`}>
+            <ClipboardList className="size-4" />我的提名
+          </Link>
+        </Button>
+      </nav>
       {nomination ? (
         <Card>
           <CardHeader>
@@ -124,6 +138,7 @@ export default async function NominatePage({
             <NominationImageUploader
               contestId={contest.id}
               nominationId={nomination.id}
+              showActions={false}
               value={{
                 imagePath: nomination.image_path,
                 imageWidth: nomination.image_width,
@@ -133,18 +148,7 @@ export default async function NominatePage({
             />
           </CardContent>
         </Card>
-      ) : nominationLimitError ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>无法继续提名</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-              {nominationLimitError}
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
+      ) : null}
         <Card>
           <CardHeader>
             <CardTitle>
@@ -161,7 +165,13 @@ export default async function NominatePage({
               </div>
             ) : null}
             <NominationCreateForm
+              key={`${user.id}:${contest.id}`}
               contestId={contest.id}
+              userId={user.id}
+              maxNominations={isAdmin ? null : contest.max_nominations_per_user}
+              initialNominationCount={ownNominationCount ?? 0}
+              submittedNominationIds={(ownNominations ?? []).filter((item) => item.status !== "draft").map((item) => item.id)}
+              nominationCountError={ownNominationError ? "暂时无法读取提名名额，请刷新后重试。" : null}
               descriptionMaxLength={contest.candidate_description_max_length}
               imageRequired={contest.nomination_image_required === true}
               existingNominations={existingNominations ?? []}
@@ -169,7 +179,6 @@ export default async function NominatePage({
             />
           </CardContent>
         </Card>
-      )}
       {canViewExistingNominations ? (
         <ExistingNominationsList
           nominations={existingNominations ?? []}

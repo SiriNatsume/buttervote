@@ -15,6 +15,7 @@ export type GroupHomepageParticipant = {
 
 export type GroupHomepageContest = {
   id: string;
+  voteHref: string;
   title: string;
   description: string | null;
   imageUrl: string | null;

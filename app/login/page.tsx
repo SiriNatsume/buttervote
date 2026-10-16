@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import Image from "next/image";
-import { LogIn, UserPlus } from "lucide-react";
-import { loginAction, signUpAction } from "@/lib/actions/auth-actions";
+import { LogIn } from "lucide-react";
+import { loginAction } from "@/lib/actions/auth-actions";
+import { QQEmailLoginForm } from "@/components/qq-email-login-form";
+import { safeReturnTo } from "@/lib/security/token";
 import { getCurrentProfile } from "@/lib/auth";
 import { FormStatusFieldset } from "@/components/form-status-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -24,14 +26,14 @@ const errorMessage: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; returnTo?: string }>;
 }) {
+  const params = await searchParams;
+  const returnTo = safeReturnTo(params.returnTo);
   const profile = await getCurrentProfile();
   if (profile) {
-    redirect("/");
+    redirect(returnTo);
   }
-
-  const params = await searchParams;
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center px-4 py-12">
@@ -56,35 +58,33 @@ export default async function LoginPage({
               <p>如果没有收到邮件，请检查垃圾邮件箱。</p>
             </div>
           ) : null}
-          <div className="mb-5 rounded-xl border bg-muted/40 px-4 py-3 text-sm leading-6 text-muted-foreground">
-            网站邮箱注册已经关闭，请通过私聊 Potato 发送指令“/login”获取登录链接。
-          </div>
-          <form>
-            <FormStatusFieldset className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">邮箱</Label>
-                <Input id="email" name="email" type="email" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">密码</Label>
-                <Input id="password" name="password" type="password" required />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FormSubmitButton formAction={loginAction} loadingText="登录中...">
-                  <LogIn className="size-4" />
-                  登录
-                </FormSubmitButton>
-                <FormSubmitButton
-                  formAction={signUpAction}
-                  variant="outline"
-                  loadingText="注册中..."
-                >
-                  <UserPlus className="size-4" />
-                  注册
-                </FormSubmitButton>
-              </div>
-            </FormStatusFieldset>
-          </form>
+          <QQEmailLoginForm returnTo={returnTo} />
+          <details className="mt-6 rounded-xl border bg-muted/30 p-4 text-sm">
+            <summary className="cursor-pointer font-medium">收不到邮件？使用 QQ Bot 登录</summary>
+            <p className="mt-3 leading-6 text-muted-foreground">私聊 Potato，发送 /login，打开回复的登录链接。同一 QQ 号会沿用原账号和投票记录。</p>
+          </details>
+          <details className="mt-3 rounded-xl border p-4 text-sm">
+            <summary className="cursor-pointer font-medium">已有邮箱密码账号</summary>
+            <form className="mt-4">
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <FormStatusFieldset className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">邮箱</Label>
+                  <Input id="email" name="email" type="email" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">密码</Label>
+                  <Input id="password" name="password" type="password" required />
+                </div>
+                <div>
+                  <FormSubmitButton formAction={loginAction} loadingText="登录中...">
+                    <LogIn className="size-4" />
+                    登录
+                  </FormSubmitButton>
+                </div>
+              </FormStatusFieldset>
+            </form>
+          </details>
         </CardContent>
       </Card>
     </div>

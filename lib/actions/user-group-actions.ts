@@ -275,7 +275,7 @@ export async function revokeUserGroupMember(
     .maybeSingle();
   const { error } = await supabase
     .from("user_group_members")
-    .update({ revoked_at: new Date().toISOString() })
+    .update({ source: "manual", revoked_at: new Date().toISOString() })
     .eq("id", parsed.data.memberId);
 
   if (error) {

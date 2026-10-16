@@ -7,7 +7,6 @@ import {
   ChevronDown,
   LogIn,
   LogOut,
-  Trophy,
   Settings,
   UserRound,
   UsersRound,
@@ -23,42 +22,7 @@ type MobileMenuProfile = {
   hasRejectedNominations: boolean;
 } | null;
 
-export function MobileContentMenu() {
-  const [open, setOpen] = useState(false);
-  const pathname = usePathname();
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
-  return (
-    <details
-      name="site-header-navigation"
-      open={open}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
-      className="relative xl:hidden"
-    >
-      <summary
-        className="flex size-9 cursor-pointer list-none items-center justify-center rounded-full text-[#6A3E21] transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden"
-        aria-label="打开内容导航"
-      >
-        <ChevronDown
-          className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </summary>
-      <div className="absolute left-0 top-full z-50 mt-3 w-48 rounded-2xl border border-[#EED8AA]/80 bg-[#FFFCF4] p-2 shadow-xl">
-        <Button asChild variant="ghost" className="w-full justify-start">
-          <Link href="/hall-of-fame" onClick={() => setOpen(false)}>
-            <Trophy className="size-4" />
-            冠军英灵殿
-          </Link>
-        </Button>
-      </div>
-    </details>
-  );
-}
-
-export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
+export function SiteAccountMenu({ profile }: { profile: MobileMenuProfile }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const hasRejectedNominations = Boolean(profile?.hasRejectedNominations);
@@ -71,16 +35,31 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
     setOpen(false);
   }
 
+  if (!profile) {
+    return (
+      <Button asChild size="sm" className="ml-auto min-h-10">
+        <Link href="/login"><LogIn className="size-4" />登录</Link>
+      </Button>
+    );
+  }
+
   return (
     <details
       name="site-header-navigation"
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
-      className="relative xl:hidden"
+      className="relative ml-auto shrink-0"
     >
-      <summary className="relative flex shrink-0 cursor-pointer list-none items-center gap-2 whitespace-nowrap rounded-full border border-[#EED8AA]/80 bg-[#FFF8E8] px-3 py-2 text-sm font-medium text-[#6A3E21] shadow-sm transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
-        <UserRound className="size-4" />
-        <span>账户</span>
+      <summary className="relative flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-full border border-[#E9E1D2] bg-[#FFFEFA] py-1 pl-1 pr-2.5 text-[#49372C] transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
+        {profile.avatarUrl ? (
+          <img src={profile.avatarUrl} alt="" className="size-7 shrink-0 rounded-full bg-[#FFF0C0] object-cover lg:size-[30px]" />
+        ) : (
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#FFF0C0] lg:size-[30px]">
+            <UserRound className="size-4" aria-hidden="true" />
+          </span>
+        )}
+        <span className="max-w-16 truncate text-[11px] sm:max-w-32 sm:text-[13px]">{profile.displayName}</span>
+        <ChevronDown className="size-3 shrink-0 lg:size-3.5" aria-hidden="true" />
         {hasRejectedNominations ? (
           <span className="absolute -right-1 -top-1 size-2.5 rounded-full bg-red-500 ring-2 ring-[#FFFCF4]">
             <span className="sr-only">有被拒绝的提名</span>
@@ -110,14 +89,14 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
 
         <div className="grid gap-2">
           {profile ? (
-            <Button asChild variant="ghost" className="justify-start">
+            <Button asChild variant="view" className="justify-start">
               <Link
                 href="/me/nominations"
                 onClick={close}
                 className="relative pr-7"
               >
                 <UserRound className="size-4" />
-                我的提名
+                全部提名
                 {profile.hasRejectedNominations ? (
                   <>
                     <span className="absolute right-3 top-1/2 size-2.5 -translate-y-1/2 rounded-full bg-red-500 ring-2 ring-[#FFFCF4]" />
@@ -128,7 +107,7 @@ export function MobileSiteMenu({ profile }: { profile: MobileMenuProfile }) {
             </Button>
           ) : null}
           {profile ? (
-            <Button asChild variant="ghost" className="justify-start">
+            <Button asChild variant="view" className="justify-start">
               <Link href="/me/groups" onClick={close}>
                 <UsersRound className="size-4" />
                 我的用户组

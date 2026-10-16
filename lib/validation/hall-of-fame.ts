@@ -14,6 +14,7 @@ const optionalUuid = (message: string) =>
 export const hallOfFameEntryInputSchema = z.object({
   entryId: optionalUuid("名人堂条目 ID 无效。"),
   contestId: optionalUuid("关联活动 ID 无效。"),
+  contestGroupId: optionalUuid("夺冠历程活动组 ID 无效。"),
   eventTitle: z
     .string()
     .trim()

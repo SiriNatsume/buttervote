@@ -1,14 +1,13 @@
-import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
   createAppSession,
   getAppSessionCookieName,
   getAppSessionMaxAgeSeconds,
 } from "@/lib/auth/app-session";
-import { getUserGroupMembershipExpiresAt } from "@/lib/permissions/user-groups";
+import { resolveQQProfile, syncQQProfileMemberships } from "@/lib/auth/qq-profile";
 import { safeReturnTo, sha256 } from "@/lib/security/token";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
-import type { Profile, QQLoginTicket } from "@/lib/types";
+import type { QQLoginTicket } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -153,141 +152,6 @@ async function getTicketByToken(token: string): Promise<TicketLookupResult> {
   return { ok: true, ticket };
 }
 
-async function findOrCreateQQProfile(ticket: QQLoginTicket): Promise<Profile> {
-  const supabase = createRequiredServiceClient();
-  const qqNickname = ticket.qq_nickname?.trim() || null;
-  const qqAvatarUrl = ticket.qq_avatar_url?.trim() || null;
-
-  const { data: existingProfile } = await supabase
-    .from("profiles")
-    .select(
-      "id,email,display_name,role,qq_user_id,qq_nickname,qq_avatar_url,login_provider,created_at",
-    )
-    .eq("qq_user_id", ticket.qq_user_id)
-    .maybeSingle();
-
-  if (existingProfile) {
-    const { data: updatedProfile, error } = await supabase
-      .from("profiles")
-      .update({
-        qq_nickname: qqNickname,
-        qq_avatar_url: qqAvatarUrl,
-      })
-      .eq("id", existingProfile.id)
-      .select(
-        "id,email,display_name,role,qq_user_id,qq_nickname,qq_avatar_url,login_provider,created_at",
-      )
-      .single();
-
-    if (error || !updatedProfile) {
-      throw new Error(error?.message ?? "更新 QQ 用户资料失败。");
-    }
-
-    return updatedProfile;
-  }
-
-  const displayName = qqNickname ?? `QQ 用户 ${ticket.qq_user_id.slice(-4)}`;
-  const { data: createdProfile, error } = await supabase
-    .from("profiles")
-    .insert({
-      id: randomUUID(),
-      email: null,
-      display_name: displayName,
-      role: "user",
-      qq_user_id: ticket.qq_user_id,
-      qq_nickname: qqNickname,
-      qq_avatar_url: qqAvatarUrl,
-      login_provider: "qq_bot",
-    })
-    .select(
-      "id,email,display_name,role,qq_user_id,qq_nickname,qq_avatar_url,login_provider,created_at",
-    )
-    .single();
-
-  if (!error && createdProfile) {
-    return createdProfile;
-  }
-
-  const { data: racedProfile, error: racedError } = await supabase
-    .from("profiles")
-    .select(
-      "id,email,display_name,role,qq_user_id,qq_nickname,qq_avatar_url,login_provider,created_at",
-    )
-    .eq("qq_user_id", ticket.qq_user_id)
-    .maybeSingle();
-
-  if (racedError || !racedProfile) {
-    throw new Error(error?.message ?? racedError?.message ?? "创建 QQ 用户资料失败。");
-  }
-
-  return racedProfile;
-}
-
-async function syncTicketUserGroups(profileId: string, ticket: QQLoginTicket) {
-  const joinCodes = [
-    ...new Set(
-      (Array.isArray(ticket.user_group_join_codes)
-        ? ticket.user_group_join_codes
-        : []
-      )
-        .filter((value): value is string => typeof value === "string")
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  ];
-
-  if (joinCodes.length === 0) {
-    return;
-  }
-
-  const supabase = createRequiredServiceClient();
-  const { data: userGroups, error } = await supabase
-    .from("user_groups")
-    .select("id,join_code")
-    .in("join_code", joinCodes);
-
-  if (error) {
-    console.warn("QQ ticket 用户组同步查询失败。", error.message);
-    return;
-  }
-
-  const foundJoinCodes = new Set(
-    (userGroups ?? [])
-      .map((userGroup) => userGroup.join_code)
-      .filter((value): value is string => Boolean(value)),
-  );
-  const missingJoinCodes = joinCodes.filter((joinCode) => !foundJoinCodes.has(joinCode));
-
-  if (missingJoinCodes.length > 0) {
-    console.warn("QQ ticket 携带了不存在的用户组 join_code。", missingJoinCodes);
-  }
-
-  if (!userGroups || userGroups.length === 0) {
-    return;
-  }
-
-  const now = new Date();
-  const nowIso = now.toISOString();
-  const expiresAt = getUserGroupMembershipExpiresAt(now).toISOString();
-  const { error: upsertError } = await supabase
-    .from("user_group_members")
-    .upsert(
-      userGroups.map((userGroup) => ({
-        user_group_id: userGroup.id,
-        profile_id: profileId,
-        source: "qq_ticket",
-        last_verified_at: nowIso,
-        expires_at: expiresAt,
-        revoked_at: null,
-      })),
-      { onConflict: "user_group_id,profile_id" },
-    );
-
-  if (upsertError) {
-    console.warn("QQ ticket 用户组同步失败。", upsertError.message);
-  }
-}
-
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token")?.trim();
 
@@ -335,9 +199,12 @@ export async function POST(request: NextRequest) {
     return redirectToLogin(request, "qq_ticket_used");
   }
 
-  const profile = await findOrCreateQQProfile(claimedTicket);
-  await syncTicketUserGroups(profile.id, claimedTicket);
-  const { sessionToken, expiresAt } = await createAppSession(profile.id);
+  const profileId = await resolveQQProfile(claimedTicket.qq_user_id, {
+    nickname: claimedTicket.qq_nickname,
+    avatarUrl: claimedTicket.qq_avatar_url,
+  });
+  await syncQQProfileMemberships(profileId, claimedTicket.user_group_join_codes ?? []);
+  const { sessionToken, expiresAt } = await createAppSession(profileId);
   const response = NextResponse.redirect(
     new URL(safeReturnTo(claimedTicket.return_to), request.url),
   );

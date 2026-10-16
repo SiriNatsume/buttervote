@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import { ImageIcon, LogIn, Send } from "lucide-react";
 import { StatusBadge } from "@/components/contest-badges";
@@ -63,6 +64,7 @@ export default async function GroupNominatePage({
   if (isRestricted && !canParticipate) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+        <ActivityBreadcrumb group={group} current="参与提名" />
         <GroupAccessDeniedPanel
           actionLabel="提名"
           backHref={`/groups/${group.id}`}
@@ -138,6 +140,7 @@ export default async function GroupNominatePage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+      <ActivityBreadcrumb group={group} current="参与提名" />
       <div className="mb-8 overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFFCF4]/90 shadow-sm">
         <div className="aspect-video bg-muted">
           {coverUrl ? (
@@ -219,7 +222,7 @@ export default async function GroupNominatePage({
                   </div>
                 </CardContent>
                 <CardFooter>
-                  <Button asChild className="w-full">
+                  <Button asChild variant="nomination" className="w-full">
                     <Link href={`/contests/${contest.id}/nominate`}>
                       <Send className="size-4" />
                       去提名

@@ -536,6 +536,7 @@ export function VoteForm({
 
         <LoadingButton
           type="submit"
+          variant={loveCandidateIds.length > 0 ? "loveParticipation" : "participation"}
           disabled={candidates.length === 0}
           loading={isSubmitting}
           loadingText="投票提交中..."

@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/table";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { formatDateTime } from "@/lib/time";
+import { QQGroupSyncPanel } from "@/components/qq-group-sync-panel";
+import { createRequiredServiceClient } from "@/lib/supabase/service";
 
 function statusMeta(status: ReturnType<typeof getUserGroupMembershipStatus>) {
   if (status === "active") {
@@ -43,8 +45,10 @@ function statusMeta(status: ReturnType<typeof getUserGroupMembershipStatus>) {
 
 export default async function AdminUserGroupDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ rosterPage?: string }>;
 }) {
   await requireAdmin();
   const { id } = await params;
@@ -67,6 +71,18 @@ export default async function AdminUserGroupDetailPage({
   if (!userGroup) {
     notFound();
   }
+
+  const service = createRequiredServiceClient();
+  const requestedPage = Number((await searchParams).rosterPage ?? 1);
+  const rosterPage = Number.isSafeInteger(requestedPage) ? Math.max(1, Math.min(200, requestedPage)) : 1;
+  const [syncConfig, syncJob, roster] = await Promise.all([
+    service.from("qq_group_sync_configs").select("user_group_id,qq_group_id,last_synced_at,member_count").eq("user_group_id", id).maybeSingle(),
+    service.from("qq_group_sync_jobs").select("id,user_group_id,qq_group_id,requested_by,status,requested_at,started_at,finished_at,lease_id,error,member_count")
+      .eq("user_group_id", id).order("requested_at", { ascending: false }).limit(1).maybeSingle(),
+    service.from("qq_group_roster").select("user_group_id,qq_user_id,nickname,card", { count: "exact" }).eq("user_group_id", id)
+      .order("qq_user_id").range((rosterPage - 1) * 50, rosterPage * 50 - 1),
+  ]);
+  if (syncConfig.error || syncJob.error || roster.error) throw new Error("无法读取 QQ 群同步状态。");
 
   const profileIds = [
     ...new Set((memberships ?? []).map((membership) => membership.profile_id)),
@@ -114,6 +130,9 @@ export default async function AdminUserGroupDetailPage({
           <Badge variant="secondary">{(memberships ?? []).length} 名成员</Badge>
         </CardContent>
       </Card>
+
+      <QQGroupSyncPanel userGroupId={id} config={syncConfig.data} job={syncJob.data}
+        members={roster.data ?? []} page={rosterPage} totalPages={Math.max(1, Math.ceil((roster.count ?? 0) / 50))} />
 
       <Card>
         <CardHeader>

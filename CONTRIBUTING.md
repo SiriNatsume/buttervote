@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-- Node.js 20 或更高版本
+- Node.js 22 或更高版本（当前锁定的 Supabase / Cloudflare 依赖需要；已验证 Node.js 24）
 - npm
 - Docker Desktop 或兼容 Docker API 的容器运行时
 

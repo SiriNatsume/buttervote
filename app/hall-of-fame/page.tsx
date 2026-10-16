@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { HallOfFameGallery } from "@/components/hall-of-fame-gallery";
 import { getHallOfFamePosterUrl } from "@/lib/hall-of-fame";
 import { createServerDataClient } from "@/lib/supabase/server-data";
@@ -13,7 +14,7 @@ export default async function HallOfFamePage() {
   const { data: entries, error } = await supabase
     .from("hall_of_fame_entries")
     .select(
-      "id,event_title,winner_name,description,poster_path,thumbnail_path",
+      "id,contest_group_id,event_title,winner_name,description,poster_path,thumbnail_path",
     )
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
@@ -28,6 +29,7 @@ export default async function HallOfFamePage() {
     return posterUrl && thumbnailUrl
       ? [{
           id: entry.id,
+          contestGroupId: entry.contest_group_id,
           eventTitle: entry.event_title,
           winnerName: entry.winner_name,
           description: entry.description,
@@ -39,6 +41,7 @@ export default async function HallOfFamePage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <PageBreadcrumb items={[{ label: "冠军殿堂" }, { label: "冠军英灵殿" }]} section="hall-of-fame" />
       <div className="mb-8 max-w-2xl">
         <p className="text-sm font-medium text-[#B7792C]">历届冠军</p>
         <h1 className="mt-2 text-4xl font-semibold tracking-normal text-[#5C321E] sm:text-5xl">冠军英灵殿</h1>

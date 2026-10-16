@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getActionUser } from "@/lib/auth";
 import { getDescriptionLimitError } from "@/lib/description-limit";
+import { nominationDraftImagePath } from "@/lib/nomination-drafts";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
-import type { Profile } from "@/lib/types";
+import type { Nomination, Profile } from "@/lib/types";
 
 const nominationSchema = z.object({
   contestId: z.string().uuid(),
@@ -50,8 +51,9 @@ async function removeStorageObjects(paths: string[]) {
   }
 }
 
-async function prepareRequiredNominationImage(
+async function prepareNominationImage(
   nominationId: string,
+  userId: string,
   imageMeta: ImageMeta,
 ): Promise<
   | {
@@ -62,10 +64,11 @@ async function prepareRequiredNominationImage(
     }
   | { ok: false; error: string }
 > {
-  const temporaryPath = `nomination-drafts/${nominationId}/image.jpg`;
+  const temporaryPath = imageMeta.imagePath;
   const finalPath = `nominations/${nominationId}/image.jpg`;
 
-  if (imageMeta.imagePath !== temporaryPath) {
+  if (temporaryPath !== nominationDraftImagePath(userId, nominationId) &&
+      temporaryPath !== `nomination-drafts/${nominationId}/image.jpg`) {
     return { ok: false, error: "请先上传提名图片后再提交。" };
   }
 
@@ -73,7 +76,16 @@ async function prepareRequiredNominationImage(
     const supabase = createRequiredServiceClient();
     const storage = supabase.storage.from("vote-images");
 
-    const { error } = await storage.copy(temporaryPath, finalPath);
+    const { data: file, error: downloadError } = await storage.download(temporaryPath);
+    if (downloadError || !file) {
+      return { ok: false, error: "提名图片未上传成功，请重新上传图片后再提交。" };
+    }
+    // Replacing this fixed destination also allows a retry after an interrupted copy.
+    const { error } = await storage.upload(finalPath, file, {
+      upsert: true,
+      contentType: "image/jpeg",
+      cacheControl: "3600",
+    });
 
     if (error) {
       return {
@@ -133,7 +145,18 @@ async function getContestNominationAccessError(
   return getGroupNominationAccessError(contest.group_id, profile);
 }
 
-export async function createNominationAction(formData: FormData) {
+export async function createNominationAction(formData: FormData): Promise<
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      nominationId: string;
+      nominationStatus: Nomination["status"];
+      name: string;
+      description: string | null;
+      imagePath: string | null;
+      message: string;
+    }
+> {
   const userResult = await getActionUser();
   if (!userResult.ok) {
     return { ok: false, error: userResult.error };
@@ -189,25 +212,85 @@ export async function createNominationAction(formData: FormData) {
     return { ok: false, error: accessError };
   }
 
+  async function completeCreation(nomination: Nomination) {
+    if (nomination.status === "draft") {
+      return { ok: false as const, error: "这条提名尚未完成，请在我的提名中继续编辑。" };
+    }
+    if (nomination.status === "approved") {
+      const { data: candidate, error: lookupError } = await supabase
+        .from("candidates").select("id").eq("nomination_id", nomination.id).maybeSingle();
+      if (lookupError) return { ok: false as const, error: lookupError.message };
+      if (!candidate) {
+        const { error: candidateError } = await supabase.from("candidates").insert({
+          contest_id: nomination.contest_id,
+          nomination_id: nomination.id,
+          name: nomination.name,
+          description: nomination.description,
+          nominator_display_name: nomination.nominator_display_name,
+          image_path: nomination.image_path,
+          image_width: nomination.image_width,
+          image_height: nomination.image_height,
+          image_size: nomination.image_size,
+        });
+        if (candidateError && candidateError.code !== "23505") {
+          return { ok: false as const, error: candidateError.message };
+        }
+      }
+    }
+    revalidatePath(`/contests/${nomination.contest_id}`);
+    revalidatePath(`/contests/${nomination.contest_id}/nominate`);
+    revalidatePath(`/contests/${nomination.contest_id}/vote`);
+    revalidatePath(`/contests/${nomination.contest_id}/results`);
+    revalidatePath(`/contests/${nomination.contest_id}/my-nominations`);
+    revalidatePath("/me/nominations");
+    revalidatePath("/admin");
+    return {
+      ok: true as const,
+      nominationId: nomination.id,
+      nominationStatus: nomination.status,
+      name: nomination.name,
+      description: nomination.description,
+      imagePath: nomination.image_path,
+      message: "提名已提交",
+    };
+  }
+
+  // A draft ID is also the idempotency key. Replays must not consume another slot.
+  if (parsed.data.nominationId) {
+    const { data: existing, error: lookupError } = await supabase
+      .from("nominations").select("*").eq("id", parsed.data.nominationId).maybeSingle();
+    if (lookupError) return { ok: false, error: "暂时无法确认提名状态，请稍后重试。" };
+    if (existing) {
+      if (existing.submitter_id !== user.id || existing.contest_id !== contest.id) {
+        return { ok: false, error: "提名标识无效，请重新添加这条提名。" };
+      }
+      return completeCreation(existing);
+    }
+  }
+
   if (!isAdmin && contest.max_nominations_per_user !== null) {
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from("nominations")
       .select("id", { count: "exact", head: true })
       .eq("contest_id", parsed.data.contestId)
       .eq("submitter_id", user.id)
       .neq("status", "rejected");
 
+    if (countError) {
+      return { ok: false, error: "暂时无法读取剩余提名名额，请稍后重试。" };
+    }
     if ((count ?? 0) >= contest.max_nominations_per_user) {
       return { ok: false, error: "你在该活动中的提名数量已达上限。" };
     }
   }
 
   const requiresImage = contest.nomination_image_required === true;
-  let requiredImage:
+  const hasImage = Boolean(formData.get("imagePath"));
+  let attachedImage:
     | { imageMeta: ImageMeta; temporaryPath: string; finalPath: string }
     | null = null;
 
-  if (requiresImage) {
+  if (requiresImage || hasImage) {
     if (!parsed.data.nominationId) {
       return { ok: false, error: "请先上传提名图片后再提交。" };
     }
@@ -223,21 +306,9 @@ export async function createNominationAction(formData: FormData) {
       return { ok: false, error: "请先上传提名图片后再提交。" };
     }
 
-    const { data: existingNomination } = await supabase
-      .from("nominations")
-      .select("id")
-      .eq("id", parsed.data.nominationId)
-      .maybeSingle();
-
-    if (existingNomination) {
-      return {
-        ok: false,
-        error: "提名图片状态已失效，请重新上传图片后再提交。",
-      };
-    }
-
-    const preparedImage = await prepareRequiredNominationImage(
+    const preparedImage = await prepareNominationImage(
       parsed.data.nominationId,
+      user.id,
       imageMetaParsed.data,
     );
 
@@ -245,14 +316,14 @@ export async function createNominationAction(formData: FormData) {
       return preparedImage;
     }
 
-    requiredImage = preparedImage;
+    attachedImage = preparedImage;
   }
 
   const nominationStatus = isAdminNomination ? "approved" : "pending";
   const { data: nomination, error } = await supabase
     .from("nominations")
     .insert({
-      ...(requiresImage && parsed.data.nominationId
+      ...(parsed.data.nominationId
         ? { id: parsed.data.nominationId }
         : {}),
       contest_id: parsed.data.contestId,
@@ -261,64 +332,40 @@ export async function createNominationAction(formData: FormData) {
       description: parsed.data.description ?? null,
       nominator_display_name: parsed.data.nominator_display_name ?? null,
       status: nominationStatus,
-      ...(requiredImage
+      ...(attachedImage
         ? {
-            image_path: requiredImage.imageMeta.imagePath,
-            image_width: requiredImage.imageMeta.imageWidth,
-            image_height: requiredImage.imageMeta.imageHeight,
-            image_size: requiredImage.imageMeta.imageSize,
+            image_path: attachedImage.imageMeta.imagePath,
+            image_width: attachedImage.imageMeta.imageWidth,
+            image_height: attachedImage.imageMeta.imageHeight,
+            image_size: attachedImage.imageMeta.imageSize,
           }
         : {}),
     })
-    .select("id")
+    .select("*")
     .single();
 
   if (error || !nomination) {
-    if (requiredImage) {
-      await removeStorageObjects([requiredImage.finalPath]);
+    // A concurrent retry or a lost response may have already created the row.
+    const { data: existing, error: lookupError } = parsed.data.nominationId
+      ? await supabase.from("nominations").select("*").eq("id", parsed.data.nominationId).maybeSingle()
+      : { data: null, error: null };
+    if (existing?.submitter_id === user.id && existing.contest_id === contest.id) {
+      return completeCreation(existing);
+    }
+    if (attachedImage && !existing && !lookupError) {
+      await removeStorageObjects([attachedImage.finalPath]);
     }
 
     return { ok: false, error: error?.message ?? "提交提名失败，请稍后再试。" };
   }
 
-  if (nominationStatus === "approved") {
-    const { error: candidateError } = await supabase.from("candidates").insert({
-      contest_id: parsed.data.contestId,
-      nomination_id: nomination.id,
-      name: parsed.data.name,
-      description: parsed.data.description ?? null,
-      nominator_display_name: parsed.data.nominator_display_name ?? null,
-      ...(requiredImage
-        ? {
-            image_path: requiredImage.imageMeta.imagePath,
-            image_width: requiredImage.imageMeta.imageWidth,
-            image_height: requiredImage.imageMeta.imageHeight,
-            image_size: requiredImage.imageMeta.imageSize,
-          }
-        : {}),
-    });
-
-    if (candidateError) {
-      return { ok: false, error: candidateError.message };
-    }
+  const result = await completeCreation(nomination);
+  if (!result.ok) return result;
+  if (attachedImage) {
+    await removeStorageObjects([attachedImage.temporaryPath]);
   }
 
-  if (requiredImage) {
-    await removeStorageObjects([requiredImage.temporaryPath]);
-  }
-
-  revalidatePath(`/contests/${parsed.data.contestId}`);
-  revalidatePath(`/contests/${parsed.data.contestId}/vote`);
-  revalidatePath(`/contests/${parsed.data.contestId}/results`);
-  revalidatePath("/me/nominations");
-  revalidatePath("/admin");
-  return {
-    ok: true,
-    message: requiresImage ? "提名已提交，已进入审核。" : "提名已提交",
-    redirectTo: requiresImage
-      ? `/contests/${parsed.data.contestId}`
-      : `/contests/${parsed.data.contestId}/nominate?nominationId=${nomination.id}`,
-  };
+  return result;
 }
 
 export async function updateNominationImageAction(
@@ -428,6 +475,7 @@ export async function updateNominationImageAction(
   revalidatePath("/me/nominations");
   revalidatePath(`/contests/${nomination.contest_id}`);
   revalidatePath(`/contests/${nomination.contest_id}/nominate`);
+  revalidatePath(`/contests/${nomination.contest_id}/my-nominations`);
   revalidatePath(`/contests/${nomination.contest_id}/vote`);
   revalidatePath(`/contests/${nomination.contest_id}/results`);
   return { ok: true };
@@ -529,6 +577,7 @@ export async function updateApprovedNominationImage(
 
   revalidatePath("/me/nominations");
   revalidatePath(`/contests/${nomination.contest_id}`);
+  revalidatePath(`/contests/${nomination.contest_id}/my-nominations`);
   revalidatePath(`/contests/${nomination.contest_id}/vote`);
   revalidatePath(`/contests/${nomination.contest_id}/results`);
   return { ok: true };
@@ -628,6 +677,7 @@ export async function updateMyNomination(formData: FormData) {
   revalidatePath("/me/nominations");
   revalidatePath(`/contests/${nomination.contest_id}`);
   revalidatePath(`/contests/${nomination.contest_id}/nominate`);
+  revalidatePath(`/contests/${nomination.contest_id}/my-nominations`);
   revalidatePath("/admin");
   return {
     ok: true,

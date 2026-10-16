@@ -15,6 +15,7 @@ type DescriptionTextareaProps = Omit<
 export function DescriptionTextarea({
   maxLength,
   defaultValue,
+  value,
   onChange,
   ...props
 }: DescriptionTextareaProps) {
@@ -30,6 +31,7 @@ export function DescriptionTextarea({
     <div className="space-y-2">
       <Textarea
         {...props}
+        value={value}
         defaultValue={defaultValue}
         maxLength={effectiveMaxLength}
         onChange={(event) => {
@@ -41,7 +43,7 @@ export function DescriptionTextarea({
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>最多 {effectiveMaxLength} 字</span>
           <span>
-            {length} / {effectiveMaxLength}
+            {value === undefined ? length : countCharacters(String(value ?? ""))} / {effectiveMaxLength}
           </span>
         </div>
       ) : null}

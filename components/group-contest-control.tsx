@@ -24,15 +24,18 @@ import { cn } from "@/lib/utils";
 function ParticipantImage({
   participant,
   compact = false,
+  className,
 }: {
   participant: GroupHomepageParticipant;
   compact?: boolean;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
         "shrink-0 overflow-hidden rounded border border-black/10 bg-muted",
         compact ? "size-6" : "size-7 sm:size-8",
+        className,
       )}
     >
       {participant.imageUrl ? (
@@ -98,26 +101,36 @@ function HeadToHead({ participants }: { participants: GroupHomepageParticipant[]
   if (!left || !right) return null;
   const scoresVisible = left.score !== null && right.score !== null;
   return (
-    <div className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 px-2.5 py-1.5">
-      <div className="flex min-w-0 items-center justify-end gap-1.5 text-right">
-        <span className="break-words text-[11px] font-semibold sm:text-xs">
+    <div className="grid min-h-16 grid-cols-1 gap-1 px-2.5 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5 sm:justify-end sm:text-right">
+        <span className="min-w-0 flex-1 break-words text-xs font-semibold sm:flex-initial">
           {left.name}
         </span>
-        <ParticipantImage participant={left} />
+        <ParticipantImage participant={left} className="order-first sm:order-none" />
+        {scoresVisible ? (
+          <span className="shrink-0 sm:hidden">
+            <Score participant={left} />
+          </span>
+        ) : null}
       </div>
       {scoresVisible ? (
-        <div className="flex items-center gap-1.5 font-bold">
+        <div className="hidden items-center gap-1.5 font-bold sm:flex">
           <Score participant={left} />
           <Score participant={right} />
         </div>
       ) : (
-        <span className="w-9" aria-hidden="true" />
+        <span className="hidden w-9 sm:block" aria-hidden="true" />
       )}
       <div className="flex min-w-0 items-center gap-1.5">
         <ParticipantImage participant={right} />
-        <span className="break-words text-[11px] font-semibold sm:text-xs">
+        <span className="min-w-0 flex-1 break-words text-xs font-semibold sm:flex-initial">
           {right.name}
         </span>
+        {scoresVisible ? (
+          <span className="shrink-0 sm:hidden">
+            <Score participant={right} />
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -164,7 +177,7 @@ function StaticMultiParticipantList({
   participants: GroupHomepageParticipant[];
 }) {
   return (
-    <div className="grid min-h-16 grid-flow-col grid-cols-2 grid-rows-2 gap-1 p-1.5">
+    <div className="grid min-h-16 grid-cols-1 gap-1 p-1.5 sm:grid-flow-col sm:grid-cols-2 sm:grid-rows-2">
       {participants.map((participant, index) => (
         <div
           key={participant.id}
@@ -296,6 +309,7 @@ export function GroupContestControl({
       : null;
   const tooltipData: TournamentMatchTooltipData = {
     contestId: contest.id,
+    voteHref: contest.voteHref,
     detailsHref: href,
     contestTitle: contest.title,
     status: contest.status,

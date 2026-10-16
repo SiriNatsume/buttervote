@@ -1,11 +1,15 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { HomepageBackToTop } from "@/components/homepage-back-to-top";
 import { ContestCard } from "@/components/contest-card";
 import {
   ContestGroupCard,
   type ContestGroupCardGroup,
 } from "@/components/contest-group-card";
 import { HomepageHeroPanel } from "@/components/homepage-hero-panel";
+import { HomepageSidebar, HomepageSidebarSkeleton } from "@/components/homepage-sidebar";
 import { MascotEmptyState, MascotFigure } from "@/components/mascot";
+import { SiteFooter } from "@/components/site-footer";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
@@ -13,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTournamentBracket } from "@/lib/tournament-bracket";
 import type { TournamentBracketData } from "@/lib/tournament-bracket";
 import type { HomepageBracketValue, HomepageHeroValue } from "@/lib/types";
+import type { HomepageVotingGroup } from "@/lib/homepage-sidebar";
 
 type Hero = {
   title: string;
@@ -28,7 +33,7 @@ export default async function HomePage() {
     await Promise.all([
       supabase
         .from("contests")
-        .select("id,title,description,status,vote_type,image_path,group_id")
+        .select("id,title,description,status,vote_type,image_path,group_id,show_candidate_image,love_vote_enabled,max_nominations_per_user,live_results_enabled,voting_starts_at,voting_ends_at,updated_at")
         .is("archived_at", null)
         .neq("status", "draft")
         .order("created_at", { ascending: false }),
@@ -54,9 +59,9 @@ export default async function HomePage() {
   const { data: contestGroups } = contestGroupIds.length
     ? await supabase
         .from("contest_groups")
-        .select("id,name,description,cover_image_path")
+        .select("id,name,description,cover_image_path,access_mode,love_vote_quota,love_vote_weight")
         .in("id", contestGroupIds)
-    : { data: [] as ContestGroupCardGroup[] };
+    : { data: [] as Array<ContestGroupCardGroup & HomepageVotingGroup> };
   const contestGroupById = new Map(
     (contestGroups ?? []).map((group) => [group.id, group]),
   );
@@ -188,81 +193,96 @@ export default async function HomePage() {
     heroValue?.showDescription !== false && Boolean(activeHero.description);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-      <section
-        data-homepage-hero
-        className="mb-10 overflow-hidden rounded-3xl border border-[#EED8AA]/80 bg-[#FFF8E8] shadow-sm"
-      >
-        <div className="relative bg-[#FFF3D0]">
-          <Link
-            href={activeHero.href}
-            aria-label={`打开${activeHero.title}`}
-            className="group block focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-400/70 focus-visible:ring-inset"
-          >
-            <div className="flex min-h-[180px] items-center justify-center bg-[#FFF3D0] sm:min-h-[420px]">
-            {heroImageUrl ? (
-              <img
-                src={heroImageUrl}
-                alt={`${activeHero.title} 首页图`}
-                data-homepage-hero-image="true"
-                className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.005]"
-              />
-            ) : (
-              <div className="butter-placeholder flex min-h-[260px] w-full items-end justify-center px-6 pt-8 sm:min-h-[420px] sm:px-10 sm:pt-10">
-                <MascotFigure
-                  kind="homepageWelcome"
-                  eager
-                  className="h-[240px] w-auto sm:h-[390px]"
+    <div className="homepage-layout mx-auto w-full max-w-[1536px] px-4 py-8 sm:px-6 sm:py-12 lg:pb-0 lg:pt-0">
+      <section className="homepage-main min-w-0" aria-label="首页内容" tabIndex={0}>
+        <section
+          data-homepage-hero
+          className="mb-8 overflow-hidden rounded-3xl border border-[#EED8AA]/80 bg-[#FFF8E8] shadow-sm lg:mb-10"
+        >
+          <div className="relative bg-[#FFF3D0]">
+            <Link
+              href={activeHero.href}
+              aria-label={`打开${activeHero.title}`}
+              className="group block focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-400/70 focus-visible:ring-inset"
+            >
+              <div className="flex min-h-[180px] items-center justify-center bg-[#FFF3D0] sm:min-h-[420px]">
+              {heroImageUrl ? (
+                <img
+                  src={heroImageUrl}
+                  alt={`${activeHero.title} 首页图`}
+                  data-homepage-hero-image="true"
+                  className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.005]"
                 />
+              ) : (
+                <div className="butter-placeholder flex min-h-[260px] w-full items-end justify-center px-6 pt-8 sm:min-h-[420px] sm:px-10 sm:pt-10">
+                  <MascotFigure
+                    kind="homepageWelcome"
+                    eager
+                    className="h-[240px] w-auto sm:h-[390px]"
+                  />
+                </div>
+              )}
               </div>
-            )}
-            </div>
-          </Link>
+            </Link>
 
-          <HomepageHeroPanel
-            title={activeHero.title}
-            description={activeHero.description}
-            showDescription={showHeroDescription}
-            imageUrl={heroImageUrl}
-          />
+            <HomepageHeroPanel
+              title={activeHero.title}
+              description={activeHero.description}
+              showDescription={showHeroDescription}
+              imageUrl={heroImageUrl}
+            />
+          </div>
+        </section>
+
+        <aside className="homepage-aside mb-8 min-w-0 lg:mb-0" aria-label="投票与提名概览" tabIndex={0}>
+          <Suspense fallback={<HomepageSidebarSkeleton />}>
+            <HomepageSidebar publicClient={supabase} contests={publicContests} groups={contestGroups ?? []} />
+          </Suspense>
+        </aside>
+
+        <div className="flex min-w-0 flex-col">
+          <section id="public-contests" aria-labelledby="public-contests-title" className="scroll-mt-24 lg:order-2">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 id="public-contests-title" className="text-xl font-semibold">公开活动</h2>
+              <span className="text-sm text-muted-foreground">
+                {publicEntries.length}
+              </span>
+            </div>
+
+            {publicEntries.length > 0 ? (
+              <div className="grid gap-5 md:grid-cols-2 min-[1440px]:grid-cols-3">
+                {publicEntries.map((entry) =>
+                  entry.type === "group" ? (
+                    <ContestGroupCard
+                      key={`group-${entry.group.id}`}
+                      group={entry.group}
+                      contestCount={entry.contestCount}
+                    />
+                  ) : (
+                    <ContestCard
+                      key={`contest-${entry.contest.id}`}
+                      contest={entry.contest}
+                    />
+                  ),
+                )}
+              </div>
+            ) : (
+              <MascotEmptyState kind="emptyContests" title="暂无公开活动">
+                活动发布后会显示在这里，请稍后再来查看。
+              </MascotEmptyState>
+            )}
+          </section>
+          {featuredBracket ? (
+            <div id="featured-tournament-bracket" className="mt-8 min-w-0 scroll-mt-24 lg:order-1 lg:mb-10 lg:mt-0">
+              <TournamentBracket bracket={featuredBracket} />
+            </div>
+          ) : null}
+          <div className="hidden lg:order-3 lg:block">
+            <SiteFooter />
+          </div>
         </div>
       </section>
-
-      {featuredBracket ? (
-        <div id="featured-tournament-bracket" className="mb-10 min-w-0 scroll-mt-24">
-          <TournamentBracket bracket={featuredBracket} />
-        </div>
-      ) : null}
-
-      <div id="public-contests" className="mb-5 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">公开活动</h2>
-        <span className="text-sm text-muted-foreground">
-          {publicEntries.length}
-        </span>
-      </div>
-
-      {publicEntries.length > 0 ? (
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {publicEntries.map((entry) =>
-            entry.type === "group" ? (
-              <ContestGroupCard
-                key={`group-${entry.group.id}`}
-                group={entry.group}
-                contestCount={entry.contestCount}
-              />
-            ) : (
-              <ContestCard
-                key={`contest-${entry.contest.id}`}
-                contest={entry.contest}
-              />
-            ),
-          )}
-        </div>
-      ) : (
-        <MascotEmptyState kind="emptyContests" title="暂无公开活动">
-          活动发布后会显示在这里，请稍后再来查看。
-        </MascotEmptyState>
-      )}
+      <HomepageBackToTop />
     </div>
   );
 }

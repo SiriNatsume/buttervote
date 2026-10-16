@@ -12,12 +12,16 @@ import {
 import { getDescriptionLimitError } from "@/lib/description-limit";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
+import { siteNavigationFormSchema } from "@/lib/validation/site-navigation";
+import { getSiteNavigationSettings } from "@/lib/site-navigation";
+import { updateNavigationTargets } from "@/lib/page-navigation";
 import type {
   ContestStatus,
   HomepageBracketValue,
   HomepageHeroValue,
   Json,
   ScheduledTransitionTarget,
+  SiteNavigationValue,
 } from "@/lib/types";
 
 const contestSchema = z.object({
@@ -231,6 +235,7 @@ function revalidateContest(contestId: string) {
   revalidatePath("/admin");
   revalidatePath(`/admin/contests/${contestId}/edit`);
   revalidatePath(`/contests/${contestId}`);
+  revalidatePath(`/contests/${contestId}/my-nominations`);
   revalidatePath(`/contests/${contestId}/vote`);
   revalidatePath(`/contests/${contestId}/results`);
 }
@@ -2006,6 +2011,88 @@ export async function updateHomepageBracketAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/admin/homepage");
   return actionSuccess("首页对阵图已保存");
+}
+
+export async function updateSiteNavigationAction(formData: FormData) {
+  const adminResult = await getActionAdmin();
+  if (!adminResult.ok) {
+    return actionFailure(adminResult.error);
+  }
+
+  const parsed = siteNavigationFormSchema.safeParse({
+    resultsGroupId: formData.get("resultsGroupId"),
+    resultsContestId: formData.get("resultsContestId") ?? "none",
+    nominationContestId: formData.get("nominationContestId") ?? "none",
+  });
+
+  if (!parsed.success) {
+    return actionFailure("请选择有效的赛程入口或提名活动。");
+  }
+
+  const supabase = await createServerDataClient();
+  const value: SiteNavigationValue = updateNavigationTargets(await getSiteNavigationSettings(), {
+    resultsGroupId:
+      parsed.data.resultsGroupId === "none" ? null : parsed.data.resultsGroupId,
+    resultsContestId:
+      parsed.data.resultsContestId === "none" ? null : parsed.data.resultsContestId,
+    nominationContestId:
+      parsed.data.nominationContestId === "none" ? null : parsed.data.nominationContestId,
+  });
+
+  if (value.resultsGroupId) {
+    const { data: group, error } = await supabase
+      .from("contest_groups")
+      .select("id")
+      .eq("id", value.resultsGroupId)
+      .maybeSingle();
+
+    if (error) {
+      return actionFailure(error.message);
+    }
+    if (!group) {
+      return actionFailure("活动组不存在，请重新选择。");
+    }
+  }
+
+  if (value.resultsContestId) {
+    const { data: contest, error } = await supabase
+      .from("contests")
+      .select("id,group_id")
+      .eq("id", value.resultsContestId)
+      .is("archived_at", null)
+      .neq("status", "draft")
+      .maybeSingle();
+
+    if (error) return actionFailure(error.message);
+    if (!contest) return actionFailure("赛程活动不存在或不可用，请重新选择。");
+    if (contest.group_id) return actionFailure("组内活动请选所属活动组作为赛程入口。");
+  }
+
+  if (value.nominationContestId) {
+    const { data: contest, error } = await supabase
+      .from("contests")
+      .select("id")
+      .eq("id", value.nominationContestId)
+      .is("archived_at", null)
+      .neq("status", "draft")
+      .maybeSingle();
+
+    if (error) return actionFailure(error.message);
+    if (!contest) return actionFailure("提名活动不存在或不可用，请重新选择。");
+  }
+
+  const { error } = await supabase.from("site_settings").upsert({
+    key: "site_navigation",
+    value,
+  });
+
+  if (error) {
+    return actionFailure(error.message);
+  }
+
+  revalidatePath("/", "layout");
+  revalidatePath("/admin/homepage");
+  return actionSuccess("投票与提名入口已保存");
 }
 
 export async function updateHomepageHeroImageAction(imageMeta: unknown) {

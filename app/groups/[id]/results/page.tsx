@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import { ImageIcon } from "lucide-react";
 import {
@@ -318,6 +319,7 @@ export default async function GroupResultsPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+      <ActivityBreadcrumb group={group} current="赛程结果" />
       <ContestCallingAutoRefresh watches={callingAutoRefreshWatches} />
       <div className="mb-8 overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFFCF4]/90 shadow-sm">
         <div className="aspect-video bg-muted">

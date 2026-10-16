@@ -184,7 +184,7 @@ function ContestActions({
           选项
         </Link>
       </Button>
-      <Button asChild size="sm" variant="outline" className="w-full md:w-auto">
+      <Button asChild size="sm" variant="view" className="w-full md:w-auto">
         <Link href={`/contests/${contest.id}`}>打开</Link>
       </Button>
       <ArchiveContestDialog
@@ -382,10 +382,10 @@ export function AdminContestsGroupedList({
             />
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-            <Button type="button" variant="outline" onClick={expandAll}>
+            <Button type="button" variant="view" onClick={expandAll}>
               全部展开
             </Button>
-            <Button type="button" variant="outline" onClick={collapseAll}>
+            <Button type="button" variant="view" onClick={collapseAll}>
               全部收起
             </Button>
           </div>
