@@ -2,6 +2,7 @@ import Link from "next/link";
 import { HomepageBracketForm } from "@/components/homepage-bracket-form";
 import { HomepageHeroForm } from "@/components/homepage-hero-form";
 import { HomepageHeroUploader } from "@/components/homepage-hero-uploader";
+import { SiteNavigationForm } from "@/components/site-navigation-form";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth";
+import { getSiteNavigationSettings } from "@/lib/site-navigation";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import type { HomepageBracketValue, HomepageHeroValue } from "@/lib/types";
 
@@ -27,6 +29,7 @@ export default async function AdminHomepagePage({
     { data: tournaments },
     { data: heroSetting },
     { data: bracketSetting },
+    navigation,
   ] =
     await Promise.all([
       supabase
@@ -35,7 +38,7 @@ export default async function AdminHomepagePage({
         .order("created_at", { ascending: false }),
       supabase
         .from("contests")
-        .select("id,title")
+        .select("id,title,group_id")
         .is("archived_at", null)
         .neq("status", "draft")
         .order("created_at", { ascending: false }),
@@ -54,9 +57,14 @@ export default async function AdminHomepagePage({
         .select("value")
         .eq("key", "homepage_bracket")
         .maybeSingle(),
+      getSiteNavigationSettings(),
     ]);
   const heroValue = (heroSetting?.value ?? null) as HomepageHeroValue | null;
   const bracketValue = (bracketSetting?.value ?? null) as HomepageBracketValue | null;
+  const groupOptions = (groups ?? []).map((group) => ({
+    id: group.id,
+    label: group.name,
+  }));
   const tournamentOptions = (tournaments ?? []).map((tournament) => ({
     id: tournament.id,
     label: tournament.name,
@@ -68,7 +76,7 @@ export default async function AdminHomepagePage({
         <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-normal">首页</h1>
           <p className="mt-3 text-muted-foreground">
-            选择首页 Hero 推荐展示的活动、活动组或赛事对阵图。
+            设置首页推荐内容、对阵图、投票和提名入口。
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
@@ -90,6 +98,19 @@ export default async function AdminHomepagePage({
         </div>
       ) : null}
 
+      <Card className="mb-6">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle>投票与提名入口</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          <SiteNavigationForm
+            groups={groupOptions}
+            contests={(contests ?? []).map((contest) => ({ id: contest.id, label: contest.title, groupId: contest.group_id }))}
+            value={navigation}
+          />
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <Card>
           <CardHeader className="p-4 sm:p-6">
@@ -97,10 +118,7 @@ export default async function AdminHomepagePage({
           </CardHeader>
           <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
             <HomepageHeroForm
-              groups={(groups ?? []).map((group) => ({
-                id: group.id,
-                label: group.name,
-              }))}
+              groups={groupOptions}
               contests={(contests ?? []).map((contest) => ({
                 id: contest.id,
                 label: contest.title,

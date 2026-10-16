@@ -198,7 +198,7 @@ export function SitePageForm({ initialValue }: { initialValue: SitePageFormValue
             {pageVisibilityLabel[value.visibility]}
           </Badge>
           {value.id ? (
-            <Button asChild variant="outline" className="w-full">
+            <Button asChild variant="view" className="w-full">
               <Link href={`/pages/${value.slug}`} target="_blank" rel="noopener noreferrer">
                 <Eye className="size-4" />
                 打开阅读页
@@ -218,7 +218,8 @@ export function SitePageForm({ initialValue }: { initialValue: SitePageFormValue
         </Button>
         <Button
           type="button"
-          variant={mode === "preview" ? "default" : "outline"}
+          variant="view"
+          className={mode === "preview" ? "ring-2 ring-[#B99450]/50" : undefined}
           onClick={() => setMode("preview")}
         >
           <Eye className="size-4" />
@@ -249,7 +250,7 @@ export function SitePageForm({ initialValue }: { initialValue: SitePageFormValue
         </div>
       </div>
 
-      <div className="sticky bottom-4 z-20 flex items-center justify-between gap-4 rounded-2xl border border-[#EED8AA] bg-[#FFFCF4]/95 p-4 shadow-lg backdrop-blur">
+      <div className="sticky bottom-[calc(var(--site-bottom-nav-height)+1rem+env(safe-area-inset-bottom,0px))] z-20 flex items-center justify-between gap-4 rounded-2xl border border-[#EED8AA] bg-[#FFFCF4]/95 p-4 shadow-lg backdrop-blur lg:bottom-4">
         <span className="text-sm text-muted-foreground">
           {dirty ? "有未保存的修改" : "所有修改已保存"}
         </span>

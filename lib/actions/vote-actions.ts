@@ -230,6 +230,7 @@ export async function submitVoteAction(formData: FormData) {
     return voteError(friendlyVoteWriteError(error));
   }
 
+  revalidatePath("/");
   revalidatePath(`/contests/${contestId}`);
   revalidatePath(`/contests/${contestId}/results`);
   if (contest.group_id) {
@@ -283,6 +284,7 @@ export async function supplementLoveVotesAction(input: unknown) {
   }
 
   const contestIds = uniqueStrings(normalizedItems.map((item) => item.contestId));
+  revalidatePath("/");
   for (const contestId of contestIds) {
     revalidatePath(`/contests/${contestId}`);
     revalidatePath(`/contests/${contestId}/vote`);

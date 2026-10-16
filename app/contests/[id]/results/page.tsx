@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import {
   ContestCallingAutoRefresh,
@@ -348,6 +349,7 @@ export default async function ResultsPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
+      <ActivityBreadcrumb group={group} contest={contest} current="投票结果" />
       <ContestCallingAutoRefresh watches={callingAutoRefreshWatches} />
       <div className="butter-panel mb-8 p-8">
         <div className="mb-4 flex flex-wrap gap-2">

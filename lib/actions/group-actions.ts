@@ -287,6 +287,7 @@ export async function submitGroupVotes(input: GroupVoteInput) {
     return { ok: false, error: friendlyGroupVoteWriteError(writeError) };
   }
 
+  revalidatePath("/");
   for (const preparedVote of preparedVotes) {
     revalidatePath(`/contests/${preparedVote.contestId}`);
     revalidatePath(`/contests/${preparedVote.contestId}/results`);

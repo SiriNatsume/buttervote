@@ -241,6 +241,14 @@ export type HomepageBracketValue = {
   tournamentId?: string | null;
 };
 
+export type SiteNavigationValue = {
+  resultsGroupId: string | null;
+  resultsContestId?: string | null;
+  resultsGroupIds?: string[];
+  resultsContestIds?: string[];
+  nominationContestId: string | null;
+};
+
 export type SiteSetting = {
   key: string;
   value: Json;
@@ -362,6 +370,7 @@ export type ContestCallingEvent = {
 export type HallOfFameEntry = {
   id: string;
   contest_id: string | null;
+  contest_group_id: string | null;
   event_title: string;
   winner_name: string;
   description: string;
@@ -441,7 +450,23 @@ type Relationship = {
   referencedColumns: string[];
 };
 
+export type QQGroupSyncConfig = {
+  user_group_id: string; qq_group_id: string; last_synced_at: string | null; member_count: number;
+};
+export type QQGroupRosterMember = {
+  user_group_id: string; qq_user_id: string; nickname: string; card: string;
+};
+export type QQGroupSyncJob = {
+  id: string; user_group_id: string; qq_group_id: string; requested_by: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  requested_at: string; started_at: string | null; finished_at: string | null;
+  lease_id: string | null; error: string | null; member_count: number | null;
+};
+
 type Tables = {
+  qq_group_sync_configs: Table<QQGroupSyncConfig, QQGroupSyncConfig, Partial<QQGroupSyncConfig>>;
+  qq_group_roster: Table<QQGroupRosterMember, QQGroupRosterMember, Partial<QQGroupRosterMember>>;
+  qq_group_sync_jobs: Table<QQGroupSyncJob, Partial<QQGroupSyncJob>, Partial<QQGroupSyncJob>>;
   site_pages: Table<
     SitePage,
     {
@@ -481,6 +506,7 @@ type Tables = {
     {
       id?: string;
       contest_id?: string | null;
+      contest_group_id?: string | null;
       event_title: string;
       winner_name: string;
       description?: string;
@@ -502,6 +528,13 @@ type Tables = {
         columns: ["contest_id"];
         isOneToOne: false;
         referencedRelation: "contests";
+        referencedColumns: ["id"];
+      },
+      {
+        foreignKeyName: "hall_of_fame_entries_contest_group_id_fkey";
+        columns: ["contest_group_id"];
+        isOneToOne: false;
+        referencedRelation: "contest_groups";
         referencedColumns: ["id"];
       },
     ]
@@ -887,6 +920,24 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      resolve_qq_profile: {
+        Args: { p_qq_user_id: string; p_verified_auth_user_id?: string | null; p_nickname?: string | null; p_avatar_url?: string | null };
+        Returns: string;
+      };
+      take_qq_email_rate_limit: {
+        Args: { p_key: string; p_limit: number; p_seconds: number }; Returns: boolean;
+      };
+      sync_qq_profile_memberships: {
+        Args: { p_profile_id: string; p_join_codes?: string[]; p_days?: number }; Returns: undefined;
+      };
+      request_qq_group_sync: {
+        Args: { p_user_group_id: string; p_qq_group_id: string; p_admin_id: string }; Returns: string;
+      };
+      claim_qq_group_sync_job: { Args: Record<string, never>; Returns: QQGroupSyncJob[] };
+      finish_qq_group_sync_job: {
+        Args: { p_job_id: string; p_lease_id: string; p_members?: Json; p_error?: string | null; p_days?: number };
+        Returns: boolean;
+      };
       get_group_homepage_contests: {
         Args: {
           p_group_id: string;

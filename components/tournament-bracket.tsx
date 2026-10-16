@@ -12,6 +12,7 @@ import {
   type TournamentMatchTooltipData,
 } from "@/components/tournament-match-tooltip";
 import { TournamentBracketShareButton } from "@/components/tournament-bracket-share-button";
+import { contestVoteHref } from "@/lib/vote-entry";
 
 const ROUND_COLUMNS = [
   { round: "round_of_16", title: "16 强", count: 8, span: 1 },
@@ -138,6 +139,7 @@ function MatchNode({ match }: { match: TournamentBracketMatch | null }) {
 
   const tooltipData: TournamentMatchTooltipData = {
     contestId: match.contest.id,
+    voteHref: contestVoteHref(match.contest.id, match.contest.group_id),
     contestTitle: match.contest.title,
     status: match.contest.status,
     scheduledStartsAt: match.scheduledStartsAt,

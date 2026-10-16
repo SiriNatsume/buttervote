@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Cropper, { type Area, type Point } from "react-easy-crop";
 import { ImagePlus, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
@@ -35,6 +35,7 @@ export type ImageCropUploadProps = {
     imageWidth?: number | null;
     imageHeight?: number | null;
     imageSize?: number | null;
+    imageVersion?: number;
   };
   onUploaded: (result: {
     imagePath: string;
@@ -44,6 +45,7 @@ export type ImageCropUploadProps = {
     publicUrl: string;
   }) => void | Promise<void>;
   disabled?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 };
 
 const modeConfig: Record<
@@ -85,12 +87,14 @@ export function ImageCropUpload({
   value,
   onUploaded,
   disabled = false,
+  onBusyChange,
 }: ImageCropUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const config = modeConfig[mode];
-  const [previewUrl, setPreviewUrl] = useState<string | null>(() =>
-    getPublicImageUrl(value?.imagePath),
-  );
+  const [previewUrl, setPreviewUrl] = useState<string | null>(() => {
+    const url = getPublicImageUrl(value?.imagePath);
+    return url && value?.imageVersion ? `${url}?v=${value.imageVersion}` : url;
+  });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
@@ -98,6 +102,12 @@ export function ImageCropUpload({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const busyCallbackRef = useRef(onBusyChange);
+  useEffect(() => { busyCallbackRef.current = onBusyChange; }, [onBusyChange]);
+  useEffect(() => {
+    busyCallbackRef.current?.(dialogOpen || isUploading);
+    return () => busyCallbackRef.current?.(false);
+  }, [dialogOpen, isUploading]);
 
   const outputMimeType = /\.jpe?g$/i.test(storagePath)
     ? "image/jpeg"

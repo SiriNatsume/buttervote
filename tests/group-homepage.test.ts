@@ -17,6 +17,7 @@ function contest(
 ): GroupHomepageContest {
   return {
     id: `${title}-${status}`,
+    voteHref: "/groups/group/vote",
     title,
     description: null,
     imageUrl: null,

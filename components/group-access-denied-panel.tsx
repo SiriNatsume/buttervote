@@ -28,7 +28,7 @@ export function GroupAccessDeniedPanel({
             </h1>
           </div>
           <p className="mt-3 leading-7 text-muted-foreground">
-            如果你是相关 QQ 群成员，请通过对应 QQ bot 链接重新验证。
+            如果你已加入相关 QQ 群，请联系管理员同步群成员，或通过对应 QQ Bot 链接重新验证。
           </p>
           <Button asChild className="mt-6">
             <Link href={backHref}>返回</Link>

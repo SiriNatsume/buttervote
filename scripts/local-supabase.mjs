@@ -69,6 +69,9 @@ export function prepareLocalSupabaseWorkdir() {
   mkdirSync(GENERATED_MIGRATIONS, { recursive: true });
 
   copyFileSync(configSource, path.join(GENERATED_SUPABASE, "config.toml"));
+  mkdirSync(path.join(GENERATED_SUPABASE, "templates"), { recursive: true });
+  copyFileSync(path.join(ROOT, "supabase", "local", "templates", "qq-email.html"),
+    path.join(GENERATED_SUPABASE, "templates", "qq-email.html"));
   copyFileSync(seedSource, path.join(GENERATED_SUPABASE, "seed.sql"));
   copyFileSync(
     serviceRoleSource,
@@ -111,6 +114,7 @@ function runCommand(command, args, { capture = false, allowFailure = false } = {
   const result = spawnSync(command, args, {
     cwd: ROOT,
     encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
     stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
     windowsHide: true,
   });

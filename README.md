@@ -14,7 +14,7 @@
 
 ## 本地运行
 
-本项目提供与生产环境完全隔离的本地 Supabase。需要 Node.js 20+、Docker Desktop：
+本项目提供与生产环境完全隔离的本地 Supabase。需要 Node.js 22+（本次验证使用 24）、Docker Desktop：
 
 ```bash
 npm install
@@ -73,9 +73,17 @@ npm run supabase:local:reset
 
 现有生产项目只应用经过审查的待执行 migration。不要将 `setup:local`、`supabase:local:reset` 或任何 `--linked` reset 用于生产项目。浏览器端不得直接调用 service-role-only RPC，所有写入仍必须走 Server Action 或 Route Handler。
 
-## QQ Bot 一次性链接登录
+## QQ 邮箱验证码登录（默认）
 
-QQ 登录不接 QQ OAuth，也不把 QQ 身份塞进 Supabase Auth。QQ 身份只能由 bot 后端带 `BOT_API_SECRET` 调用网站接口传入，网站生成短期一次性 token，数据库只保存 `token_hash`。用户点击链接后，网站按 `qq_user_id` 查找或创建 `profiles` 记录，创建自建 `app_sessions`，并设置 HttpOnly `app_session` cookie。
+用户填写数字 QQ 号，网站向固定的 `QQ号@qq.com` 发送 8 位验证码，验证后自动注册或登录。收件人由服务端生成，不接受英文邮箱别名或另一个收件地址。原有 QQ Bot 链接登录保留为备用，已有邮箱密码账号仍可从折叠入口登录。
+
+两种 QQ 登录都通过 `resolve_qq_profile` 按 `qq_user_id` 取得同一个 `profiles.id`，使用原有 `app_sessions`，因此投票、提名、真爱票和管理员角色保持不变。Supabase Auth 只负责发送和校验验证码；其临时会话不进入浏览器。新数字 QQ Auth 用户不会在验证前创建投票 profile。
+
+上线配置与 Bot 群同步说明见 [QQ 邮箱登录与群成员同步](docs/qq-email-login.md)。必须先应用新迁移、配置 SMTP 及验证码邮件模板，再启用新页面。公共邮箱注册可以继续关闭，服务端仅为通过格式校验的数字 QQ 邮箱建立待验证身份。
+
+## QQ Bot 一次性链接登录（备用）
+
+Bot 登录不接 QQ OAuth。Bot 身份由后端带 `BOT_API_SECRET` 调用网站接口传入，网站生成短期一次性 token，数据库只保存 `token_hash`。用户确认链接后，网站按 `qq_user_id` 查找或创建共用的 `profiles` 记录，创建自建 `app_sessions`，并设置 HttpOnly `app_session` cookie。Bot 必须传入真实数字 QQ 号，才能与同号邮箱登录关联；opaque OpenID 不能直接当作 QQ 号映射。
 
 Bot 请求登录链接：
 

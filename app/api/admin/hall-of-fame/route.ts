@@ -74,6 +74,7 @@ export async function POST(request: Request) {
   const parsed = hallOfFameEntryInputSchema.safeParse({
     entryId: getFormText(formData, "entryId"),
     contestId: getFormText(formData, "contestId"),
+    contestGroupId: getFormText(formData, "contestGroupId"),
     eventTitle: getFormText(formData, "eventTitle"),
     winnerName: getFormText(formData, "winnerName"),
     description: getFormText(formData, "description"),
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
     return jsonError(getValidationMessage(parsed.error), 400);
   }
 
-  const { entryId, contestId, eventTitle, winnerName, description } = parsed.data;
+  const { entryId, contestId, contestGroupId, eventTitle, winnerName, description } = parsed.data;
   const fileValue = formData.get("poster");
   const file = fileValue instanceof File && fileValue.size > 0 ? fileValue : null;
   const thumbnailValue = formData.get("thumbnail");
@@ -123,6 +124,19 @@ export async function POST(request: Request) {
       return jsonError("验证关联活动失败，请稍后重试。", 500);
     }
     if (!contest) return jsonError("关联赛事不存在。", 400);
+  }
+
+  if (contestGroupId) {
+    const { data: group, error: groupError } = await supabase
+      .from("contest_groups")
+      .select("id")
+      .eq("id", contestGroupId)
+      .maybeSingle();
+    if (groupError) {
+      logServerError("contest group lookup failed", groupError);
+      return jsonError("验证夺冠历程活动组失败，请稍后重试。", 500);
+    }
+    if (!group) return jsonError("关联活动组不存在。", 400);
   }
 
   const { data: existing, error: lookupError } = entryId
@@ -211,6 +225,7 @@ export async function POST(request: Request) {
       .from("hall_of_fame_entries")
       .update({
         contest_id: contestId,
+        contest_group_id: contestGroupId,
         event_title: eventTitle,
         winner_name: winnerName,
         description,
@@ -238,6 +253,7 @@ export async function POST(request: Request) {
     const { error } = await supabase.from("hall_of_fame_entries").insert({
       id: targetEntryId,
       contest_id: contestId,
+      contest_group_id: contestGroupId,
       event_title: eventTitle,
       winner_name: winnerName,
       description,

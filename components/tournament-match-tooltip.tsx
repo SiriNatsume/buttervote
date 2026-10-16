@@ -21,6 +21,7 @@ import {
 } from "@/lib/contest-rank-styles";
 import type { ContestStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { actionStyles } from "@/lib/action-styles";
 
 export type TournamentMatchTooltipParticipant = {
   name: string;
@@ -34,6 +35,7 @@ export type TournamentMatchTooltipParticipant = {
 
 export type TournamentMatchTooltipData = {
   contestId: string;
+  voteHref: string;
   detailsHref?: string;
   contestTitle: string;
   status: ContestStatus;
@@ -352,8 +354,8 @@ function TooltipPanel({
 
       {displayState === "voting" ? (
         <Link
-          href={`/contests/${data.contestId}/vote`}
-          className="match-in-progress-breathe mx-4 mb-3 block rounded-md px-3 py-2 text-center text-xs font-medium text-[#3F7A48] transition-colors hover:text-[#2F693A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#75A97D] focus-visible:ring-offset-2"
+          href={data.voteHref}
+          className={cn(actionStyles.participation, "mx-4 mb-3 block px-3 py-2 text-center text-xs font-medium")}
         >
           进入投票
         </Link>

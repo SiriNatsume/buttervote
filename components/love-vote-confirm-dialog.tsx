@@ -53,7 +53,7 @@ export function LoveVoteConfirmDialog({
           </Button>
           <LoadingButton
             type="button"
-            variant="love"
+            variant="loveParticipation"
             loading={Boolean(loading)}
             loadingText="提交中..."
             onClick={onConfirm}

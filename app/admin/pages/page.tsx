@@ -91,7 +91,7 @@ export default async function AdminPagesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        <Button asChild size="sm" variant="outline">
+                        <Button asChild size="sm" variant="view">
                           <Link
                             href={`/pages/${page.slug}`}
                             target="_blank"

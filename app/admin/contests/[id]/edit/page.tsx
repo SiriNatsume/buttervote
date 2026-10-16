@@ -140,11 +140,11 @@ export default async function EditContestPage({
             </Link>
           </Button>
           {contest.group_id ? (
-            <Button asChild variant="outline">
+            <Button asChild variant="view">
               <Link href={`/admin/groups/${contest.group_id}`}>打开活动组</Link>
             </Button>
           ) : null}
-          <Button asChild>
+          <Button asChild variant="view">
             <Link href={`/contests/${contest.id}`}>打开活动</Link>
           </Button>
           {!contest.archived_at ? (

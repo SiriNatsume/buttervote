@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import { BarChart3, FileText, ImageIcon, Send, Settings, Trophy } from "lucide-react";
 import { GroupContestControl } from "@/components/group-contest-control";
 import { GroupHomepageSection } from "@/components/group-homepage-section";
 import { GroupRecentResults } from "@/components/group-recent-results";
 import { GroupShareButton } from "@/components/group-share-button";
+import { SiteFooter } from "@/components/site-footer";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -167,9 +169,14 @@ export default async function GroupDetailPage({
     ) : null;
 
   return (
-    <div className="mx-auto w-full max-w-[1680px] px-4 py-8 sm:px-6 sm:py-12">
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] xl:gap-12">
-        <aside className="space-y-7 lg:sticky lg:top-28 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-3">
+    <div className="group-overview-layout mx-auto grid w-full max-w-[1680px] grid-cols-1 gap-8 px-4 py-8 sm:px-6 sm:py-12 lg:py-0 xl:gap-12">
+      <aside
+        className="group-overview-sidebar min-w-0"
+        aria-label="活动组信息"
+        tabIndex={0}
+      >
+        <ActivityBreadcrumb group={group} />
+        <div className="space-y-7">
           <section>
             <div className="aspect-video overflow-hidden rounded-xl border border-[#EED8AA]/70 bg-muted shadow-sm">
               {coverUrl ? (
@@ -204,21 +211,21 @@ export default async function GroupDetailPage({
             ) : null}
             <div className="mt-5 flex flex-wrap gap-2">
               {hasNominationEntry ? (
-                <Button asChild variant="secondary">
+                <Button asChild variant="nomination">
                   <Link href={`/groups/${group.id}/nominate`}>
                     <Send className="size-4" />参与提名
                   </Link>
                 </Button>
               ) : null}
               {hasVotingEntry ? (
-                <Button asChild>
+                <Button asChild variant="participation">
                   <Link href={`/groups/${group.id}/vote`}>
                     <BarChart3 className="size-4" />前往投票
                   </Link>
                 </Button>
               ) : null}
               {recent.length > 0 ? (
-                <Button asChild variant="outline">
+                <Button asChild variant="view">
                   <Link href={`/groups/${group.id}/results`}>
                     <Trophy className="size-4" />查看结果
                   </Link>
@@ -227,20 +234,6 @@ export default async function GroupDetailPage({
               <GroupShareButton groupId={group.id} />
             </div>
           </section>
-
-          {ongoing.length > 0 ? (
-            <GroupHomepageSection title="投票进行中">
-              <div className="space-y-2">
-                {ongoing.map((contest) => (
-                  <GroupContestControl
-                    key={contest.id}
-                    contest={contest}
-                    referenceNow={referenceNow}
-                  />
-                ))}
-              </div>
-            </GroupHomepageSection>
-          ) : null}
 
           {upcoming.length > 0 ? (
             <GroupHomepageSection title="即将开始">
@@ -257,9 +250,15 @@ export default async function GroupDetailPage({
           ) : null}
 
           <div className="hidden lg:block">{relatedPagesSection}</div>
-        </aside>
+        </div>
+      </aside>
 
-        <main className="min-w-0 space-y-8">
+      <section
+        className="group-overview-main min-w-0 lg:flex lg:flex-col"
+        aria-label="活动组比赛概览"
+        tabIndex={0}
+      >
+        <div className="shrink-0 space-y-8 lg:grow">
           {showBracket ? (
             <GroupHomepageSection title="对阵图">
               {bracket && bracket.rounds.length > 0 ? (
@@ -281,13 +280,30 @@ export default async function GroupDetailPage({
             </GroupHomepageSection>
           ) : null}
 
+          {ongoing.length > 0 ? (
+            <GroupHomepageSection title="投票进行中">
+              <div className="grid gap-2 lg:grid-cols-2">
+                {ongoing.map((contest) => (
+                  <GroupContestControl
+                    key={contest.id}
+                    contest={contest}
+                    referenceNow={referenceNow}
+                  />
+                ))}
+              </div>
+            </GroupHomepageSection>
+          ) : null}
+
           {recent.length > 0 ? (
             <GroupRecentResults contests={recent} referenceNow={referenceNow} />
           ) : null}
 
           <div className="lg:hidden">{relatedPagesSection}</div>
-        </main>
-      </div>
+        </div>
+        <div className="hidden shrink-0 lg:block">
+          <SiteFooter />
+        </div>
+      </section>
     </div>
   );
 }

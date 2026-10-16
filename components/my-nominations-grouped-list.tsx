@@ -82,7 +82,11 @@ function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
 }
 
-function matchesNomination(item: MyNominationItem, query: string) {
+function matchesNomination(
+  item: MyNominationItem,
+  query: string,
+  includeContest: boolean,
+) {
   if (!query) {
     return true;
   }
@@ -90,9 +94,13 @@ function matchesNomination(item: MyNominationItem, query: string) {
   const haystack = [
     item.name,
     item.description,
-    item.contest?.title ?? "未知活动",
-    nominationStatusLabel[item.status],
-    item.status,
+    ...(includeContest
+      ? [
+          item.contest?.title ?? "未知活动",
+          nominationStatusLabel[item.status],
+          item.status,
+        ]
+      : []),
   ]
     .filter(Boolean)
     .join(" ")
@@ -171,10 +179,12 @@ function NominationCard({
   nomination,
   editingId,
   onToggleEdit,
+  showContest = true,
 }: {
   nomination: MyNominationItem;
   editingId: string | null;
   onToggleEdit: (id: string) => void;
+  showContest?: boolean;
 }) {
   const editable =
     nomination.status === "draft" ||
@@ -201,17 +211,17 @@ function NominationCard({
             </div>
             <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span>{formatDateTime(nomination.created_at)}</span>
-              <span>·</span>
-              {nomination.contest ? (
+              {showContest ? <span>·</span> : null}
+              {showContest && nomination.contest ? (
                 <Link
                   href={`/contests/${nomination.contest.id}`}
                   className="underline-offset-4 hover:text-primary hover:underline"
                 >
                   {nomination.contest.title}
                 </Link>
-              ) : (
+              ) : showContest ? (
                 <span>未知活动</span>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -243,6 +253,7 @@ function NominationCard({
             type="button"
             variant={isEditing ? "secondary" : "outline"}
             className="w-full sm:w-auto"
+            aria-expanded={isEditing}
             onClick={() => onToggleEdit(nomination.id)}
           >
             {isEditing ? "收起编辑" : "编辑"}
@@ -302,7 +313,7 @@ function NominationCard({
                 </div>
               ) : null}
               <FormSubmitButton
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto bg-[#EFF5FC] text-[#3F6B94] hover:bg-[#DDEAF7] hover:text-[#315575] focus-visible:ring-[#719AC2]"
                 disabled={needsImageBeforeSubmit}
                 loadingText="保存中..."
               >
@@ -332,8 +343,12 @@ function NominationCard({
 
 export function MyNominationsGroupedList({
   nominations,
+  groupByContest = true,
+  emptyMessage = "你还没有提交过提名。进入正在提名的活动后，可以提交你的第一个候选项。",
 }: {
   nominations: MyNominationItem[];
+  groupByContest?: boolean;
+  emptyMessage?: string;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | NominationStatus>(
@@ -356,11 +371,11 @@ export function MyNominationsGroupedList({
           ...group,
           nominations: group.nominations.filter((nomination) =>
             (statusFilter === "all" || nomination.status === statusFilter) &&
-            matchesNomination(nomination, query),
+            matchesNomination(nomination, query, groupByContest),
           ),
         }))
         .filter((group) => group.nominations.length > 0),
-    [groups, query, statusFilter],
+    [groups, query, statusFilter, groupByContest],
   );
   const totalMatches = filteredGroups.reduce(
     (sum, group) => sum + group.nominations.length,
@@ -399,7 +414,7 @@ export function MyNominationsGroupedList({
   if (nominations.length === 0) {
     return (
       <div className="rounded-2xl border p-8 text-muted-foreground">
-        你还没有提交过提名。进入正在提名的活动后，可以提交你的第一个候选项。
+        {emptyMessage}
       </div>
     );
   }
@@ -412,20 +427,27 @@ export function MyNominationsGroupedList({
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
+              aria-label={
+                groupByContest ? "搜索提名、简介或活动名称" : "搜索提名名称或简介"
+              }
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜索提名、简介或活动名称"
+              placeholder={
+                groupByContest ? "搜索提名、简介或活动名称" : "搜索提名名称或简介"
+              }
               className="pl-9"
             />
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-            <Button type="button" variant="outline" onClick={expandAll}>
-              全部展开
-            </Button>
-            <Button type="button" variant="outline" onClick={collapseAll}>
-              全部收起
-            </Button>
-          </div>
+          {groupByContest ? (
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+              <Button type="button" variant="view" onClick={expandAll}>
+                全部展开
+              </Button>
+              <Button type="button" variant="view" onClick={collapseAll}>
+                全部收起
+              </Button>
+            </div>
+          ) : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {statusFilters.map((filter) => (
@@ -434,18 +456,43 @@ export function MyNominationsGroupedList({
               type="button"
               size="sm"
               variant={statusFilter === filter.value ? "default" : "outline"}
+              aria-pressed={statusFilter === filter.value}
               onClick={() => setStatusFilter(filter.value)}
             >
               {filter.label}
+              {!groupByContest ? (
+                <span className="tabular-nums opacity-80">
+                  {filter.value === "all"
+                    ? nominations.length
+                    : nominations.filter((item) => item.status === filter.value)
+                        .length}
+                </span>
+              ) : null}
             </Button>
           ))}
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="mt-3 text-sm text-muted-foreground" aria-live="polite">
           共 {totalMatches} 条提名
         </p>
       </div>
 
-      {filteredGroups.length > 0 ? (
+      {!groupByContest && totalMatches > 0 ? (
+        <div className="space-y-3">
+          {filteredGroups
+            .flatMap((group) => group.nominations)
+            .map((nomination) => (
+              <NominationCard
+                key={nomination.id}
+                nomination={nomination}
+                editingId={editingId}
+                showContest={false}
+                onToggleEdit={(id) =>
+                  setEditingId((current) => (current === id ? null : id))
+                }
+              />
+            ))}
+        </div>
+      ) : filteredGroups.length > 0 ? (
         <div className="space-y-4">
           {filteredGroups.map((group) => {
             const isOpen = openGroupIds.has(group.key);

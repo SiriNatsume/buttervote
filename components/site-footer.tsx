@@ -1,25 +1,18 @@
-import { MascotFigure } from "@/components/mascot";
-
 export function SiteFooter() {
   const currentYear = new Date().getFullYear();
-  const yearText = currentYear > 2026 ? `2026-${currentYear}` : "2026";
+  const yearText = currentYear > 2026 ? `2026 - ${currentYear}` : "2026";
 
   return (
     <footer className="mx-auto mt-12 w-full max-w-6xl border-t border-[#EED8AA]/70 px-4 py-8 text-center text-sm leading-7 text-muted-foreground sm:px-6">
-      <MascotFigure
-        kind="avatarIcon"
-        decorative
-        className="mx-auto mb-3 h-14 w-14 opacity-95"
-      />
       <p>
         © {yearText}{" "}
         <a
-          href="https://sirinatsume.com/"
+          href="https://github.com/SiriNatsume/buttervote"
           target="_blank"
           rel="noreferrer"
           className="font-medium text-[#5C321E] underline-offset-4 transition-colors hover:text-orange-700 hover:underline"
         >
-          SiriNatsume
+          SuperCUT Butter Group
         </a>
       </p>
       <p>Built with Supabase, Tailwind CSS and shadcn/ui</p>

@@ -60,7 +60,7 @@ export function ContestGroupCard({
         </p>
       </CardContent>
       <CardFooter>
-        <Button asChild className="w-full">
+        <Button asChild variant="view" className="w-full">
           <Link href={`/groups/${group.id}`}>
             查看活动组
             <ArrowRight className="size-4" />

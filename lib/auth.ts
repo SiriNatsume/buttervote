@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getProfileByAppSession } from "@/lib/auth/app-session";
 import { createClient } from "@/lib/supabase/server";
+import { safeReturnTo } from "@/lib/security/token";
 import type { Profile } from "@/lib/types";
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -40,11 +41,11 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   return data;
 }
 
-export async function requireUser(): Promise<Profile> {
+export async function requireUser(returnTo?: string): Promise<Profile> {
   const profile = await getCurrentProfile();
 
   if (!profile) {
-    redirect("/login");
+    redirect(returnTo ? `/login?returnTo=${encodeURIComponent(safeReturnTo(returnTo))}` : "/login");
   }
 
   return profile;

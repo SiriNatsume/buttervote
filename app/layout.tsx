@@ -5,6 +5,9 @@ import "./globals.css";
 import { AppProviders } from "@/components/app-providers";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteNavigation } from "@/components/site-navigation";
+import { PageSectionProvider } from "@/components/page-section-provider";
+import { getSiteNavigationData } from "@/lib/site-navigation";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -25,20 +28,25 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.png", apple: "/apple-icon.png" },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const navigation = await getSiteNavigationData();
+
   return (
     <html lang="zh-CN">
       <body
-        className={`${inter.variable} ${notoSansSc.variable} flex min-h-screen flex-col`}
+        className={`${inter.variable} ${notoSansSc.variable} flex min-h-screen flex-col pb-[calc(var(--site-bottom-nav-height)+env(safe-area-inset-bottom,0px))] lg:pb-0`}
       >
         <AppProviders>
-          <SiteHeader />
-          <main className="flex-1">{children}</main>
-          <SiteFooter />
+          <PageSectionProvider>
+            <SiteHeader navigation={navigation} />
+            <main className="site-main flex-1">{children}</main>
+            <SiteFooter />
+            <SiteNavigation mobile navigation={navigation} />
+          </PageSectionProvider>
         </AppProviders>
       </body>
     </html>

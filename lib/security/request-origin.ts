@@ -7,7 +7,16 @@ export function hasSameOrigin(request: Request) {
   if (!origin) return false;
 
   try {
-    return new URL(origin).origin === new URL(request.url).origin;
+    const target = new URL(request.url);
+    // Next.js may reconstruct request.url using its listener hostname (for
+    // example localhost) even when the browser actually requested 127.0.0.1.
+    // Host identifies that requested origin; do not trust X-Forwarded-Host.
+    const host = request.headers.get("host");
+    if (host) {
+      if (/[\s/\\@?#]/.test(host)) return false;
+      target.host = host;
+    }
+    return new URL(origin).origin === target.origin;
   } catch {
     return false;
   }

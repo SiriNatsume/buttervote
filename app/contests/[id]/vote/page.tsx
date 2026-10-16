@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { redirect } from "next/navigation";
 import { Countdown } from "@/components/countdown";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
@@ -14,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { tallyVotes } from "@/lib/tally";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
+import { contestVoteHref } from "@/lib/vote-entry";
 import { formatDateTime } from "@/lib/time";
 import { loadVisibleContestResultData } from "@/lib/visible-result-data";
 
@@ -24,13 +26,22 @@ export default async function VotePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  const user = await requireUser();
   const [{ id }, query] = await Promise.all([params, searchParams]);
+  const supabase = await createClient();
+  const { data: voteEntry } = await supabase
+    .from("contests")
+    .select("group_id")
+    .eq("id", id)
+    .is("archived_at", null)
+    .maybeSingle();
+
+  if (voteEntry?.group_id) {
+    redirect(contestVoteHref(id, voteEntry.group_id));
+  }
+
+  const user = await requireUser(`/contests/${id}/vote`);
   await applyDueScheduledTransitionsForContest(id, { revalidate: false });
-  const [supabase, dataClient] = await Promise.all([
-    createClient(),
-    createServerDataClient(),
-  ]);
+  const dataClient = await createServerDataClient();
   const [{ data: contest }, { data: existingVote }, { data: candidates }] =
     await Promise.all([
       supabase
@@ -75,6 +86,7 @@ export default async function VotePage({
     if (!canParticipate) {
       return (
         <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+          <ActivityBreadcrumb group={group} contest={contest} current="本轮投票" />
           <GroupAccessDeniedPanel backHref={`/contests/${contest.id}`} />
         </div>
       );
@@ -122,6 +134,7 @@ export default async function VotePage({
 
     return (
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+        <ActivityBreadcrumb group={group} contest={contest} current="本轮投票" />
         <MascotEmptyState
           kind="voteSuccess"
           title="已投票"
@@ -208,6 +221,7 @@ export default async function VotePage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
+      <ActivityBreadcrumb group={group} contest={contest} current="本轮投票" />
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-normal">
           投票：{contest.title}

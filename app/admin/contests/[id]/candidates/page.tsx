@@ -177,7 +177,7 @@ export default async function AdminContestCandidatesPage({
           <Button asChild variant="outline">
             <Link href={`/admin/contests/${contest.id}/edit`}>编辑活动</Link>
           </Button>
-          <Button asChild>
+          <Button asChild variant="view">
             <Link href={`/contests/${contest.id}`}>打开活动</Link>
           </Button>
         </div>

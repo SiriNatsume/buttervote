@@ -30,7 +30,7 @@ function membershipStatusMeta(
 }
 
 export default async function MyUserGroupsPage() {
-  const user = await requireUser();
+  const user = await requireUser("/me/groups");
   const memberships = await getUserGroupMemberships(user.id);
   const statuses = memberships.map((membership) =>
     getUserGroupMembershipStatus(membership),
@@ -44,7 +44,7 @@ export default async function MyUserGroupsPage() {
         <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-normal">我的用户组</h1>
           <p className="mt-3 text-muted-foreground">
-            查看你通过 QQ bot 验证获得的用户组身份。
+            查看你已验证的用户组身份和有效期。
           </p>
         </div>
         <Button asChild variant="outline">
@@ -70,7 +70,7 @@ export default async function MyUserGroupsPage() {
             {hasExpired ? (
               <div className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 <ShieldX className="mt-0.5 size-4" />
-                <span>部分用户组身份已过期，请通过对应 QQ bot 链接重新验证。</span>
+                <span>部分用户组身份已过期，请联系管理员同步群成员，或通过对应 QQ Bot 链接重新验证。</span>
               </div>
             ) : null}
           </div>
@@ -100,7 +100,7 @@ export default async function MyUserGroupsPage() {
                   </CardHeader>
                   <CardContent className="space-y-3 p-4 pt-0 text-sm sm:p-6 sm:pt-0">
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">来源：{membership.source}</Badge>
+                      <Badge variant="outline">来源：{({ qq_roster: "群成员名单", qq_ticket: "QQ 验证", manual: "管理员设置" } as Record<string, string>)[membership.source] ?? "其他"}</Badge>
                       {userGroup?.join_code ? (
                         <Badge variant="love">{userGroup.join_code}</Badge>
                       ) : null}

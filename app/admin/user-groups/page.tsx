@@ -56,7 +56,7 @@ export default async function AdminUserGroupsPage() {
         <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-normal">用户组</h1>
           <p className="mt-3 text-muted-foreground">
-            管理 QQ bot ticket 可续期的网站内用户组。
+            管理网站用户组，支持同步 QQ 群成员及 QQ Bot 验证。
           </p>
         </div>
         <Button asChild variant="outline">
@@ -129,7 +129,7 @@ export default async function AdminUserGroupsPage() {
                         )}
                       </div>
                     </div>
-                    <Button asChild size="sm" variant="outline">
+                    <Button asChild size="sm" variant="view">
                       <Link href={`/admin/user-groups/${userGroup.id}`}>
                         查看成员
                       </Link>

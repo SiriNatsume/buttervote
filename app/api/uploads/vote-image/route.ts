@@ -30,6 +30,14 @@ async function canUploadPath(storagePath: string, profileId: string, isAdmin: bo
 
   if (
     new RegExp(
+      `^nomination-drafts/${profileId}/${uuidPattern}/image\\.jpe?g$`,
+    ).test(storagePath)
+  ) {
+    return true;
+  }
+
+  if (
+    new RegExp(
       `^nomination-drafts/${uuidPattern}/image\\.jpe?g$`,
     ).test(storagePath)
   ) {

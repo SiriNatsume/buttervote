@@ -268,6 +268,7 @@ export function LoveVoteSupplementPanel({
 
       <LoadingButton
         type="button"
+        variant="loveParticipation"
         loading={pending}
         loadingText="补投中..."
         disabled={selectedCount === 0}

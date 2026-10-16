@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import {
   BarChart3,
   CalendarClock,
+  ClipboardList,
   Heart,
   ImageIcon,
   Send,
@@ -27,6 +29,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { formatDateTime } from "@/lib/time";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
+import { contestVoteHref } from "@/lib/vote-entry";
 
 export default async function ContestDetailPage({
   params,
@@ -65,6 +68,7 @@ export default async function ContestDetailPage({
         .maybeSingle()
     : { data: null };
   const imageUrl = getPublicImageUrl(contest.image_path);
+  const voteHref = contestVoteHref(contest.id, contest.group_id);
   const isAdmin = profile?.role === "admin";
   const dataClient = await createServerDataClient();
   const resultVisibilityByContest = await loadContestResultVisibilityByContest(
@@ -137,7 +141,7 @@ export default async function ContestDetailPage({
     if (isRestrictedGroup && !canParticipateGroup) {
       nominationLimitText = profile
         ? "你暂时没有参与该活动组提名的权限。"
-        : "该活动组仅限指定用户组成员提名，请通过 QQ bot 专属链接登录。";
+        : "该活动组仅限指定用户组成员提名，请验证 QQ 邮箱；若资格未更新，请联系管理员同步群成员或使用 QQ Bot 验证。";
       nominationLimitReached = true;
     } else if (!profile) {
       nominationLimitText = "登录后可以提交提名。";
@@ -232,7 +236,7 @@ export default async function ContestDetailPage({
             }
         : contest.status === "voting" && !hasVoted && canUseGroupParticipation
           ? {
-              href: `/contests/${contest.id}/vote`,
+              href: voteHref,
               label: "去投票",
               icon: BarChart3,
             }
@@ -252,6 +256,7 @@ export default async function ContestDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
+      <ActivityBreadcrumb group={group} contest={contest} />
       <div className="mb-8 overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFFCF4]/90 shadow-sm">
         <div className="aspect-video bg-muted">
           {imageUrl ? (
@@ -350,25 +355,31 @@ export default async function ContestDetailPage({
                 </Button>
               ) : null}
               {canSupplementLoveVote ? (
-                <Button asChild size="lg" variant="love">
-                  <Link href={`/contests/${contest.id}/vote`}>
+                <Button asChild size="lg" variant="loveParticipation">
+                  <Link href={voteHref}>
                     <Heart className="size-4 fill-current" />
                     补投真爱票
                   </Link>
                 </Button>
               ) : null}
               {cta && CtaIcon ? (
-                <Button asChild size="lg">
+                <Button asChild size="lg" variant={cta.href.endsWith("/nominate") ? "nomination" : cta.href.endsWith("/results") ? "view" : "participation"}>
                   <Link href={cta.href}>
                     <CtaIcon className="size-4" />
                     {cta.label}
                   </Link>
                 </Button>
               ) : null}
+              <Button asChild size="lg" variant="view">
+                <Link href={`/contests/${contest.id}/my-nominations`}>
+                  <ClipboardList className="size-4" />
+                  我的提名
+                </Link>
+              </Button>
               {contest.status === "voting" &&
               resultsVisible &&
               (hasVoted || isAdmin) ? (
-                <Button asChild size="lg" variant="outline">
+                <Button asChild size="lg" variant="view">
                   <Link href={`/contests/${contest.id}/results`}>
                     <Trophy className="size-4" />
                     {isAdmin && !hasVoted ? "预览票数" : "查看结果"}
