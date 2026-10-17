@@ -35,6 +35,7 @@ import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
 import { buildPublicDrawSummaries } from "@/lib/tournament-draw-summary";
 import { loadVisibleContestResultData } from "@/lib/visible-result-data";
 import type { ContestCallingEvent, ContestCallingSession, LoveVoteAllocation, TournamentEntry, Vote } from "@/lib/types";
+import { getProfileDisplayName } from "@/lib/qq-profile-display";
 
 type VoteProfile = {
   id: string;
@@ -61,12 +62,7 @@ type TournamentDrawLogInfo = {
 };
 
 function voterDisplayName(profile?: VoteProfile | null) {
-  return (
-    profile?.display_name ||
-    profile?.qq_nickname ||
-    profile?.email ||
-    "未知用户"
-  );
+  return getProfileDisplayName(profile, "未知用户");
 }
 
 function formatJson(value: unknown) {

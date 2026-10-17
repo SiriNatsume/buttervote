@@ -8,6 +8,8 @@ import {
   timingSafeEqualString,
 } from "@/lib/security/token";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
+import { getCachedQQProfileDisplay } from "@/lib/auth/qq-profile";
+import { getProfileAvatarUrl } from "@/lib/qq-profile-display";
 
 export const runtime = "nodejs";
 
@@ -69,12 +71,16 @@ export async function POST(request: Request) {
   const token = generateRandomToken();
   const returnTo = safeReturnTo(body.data.returnTo);
   const userGroupJoinCodes = [...new Set(body.data.userGroupJoinCodes ?? [])];
+  const cachedDisplay = body.data.qqNickname ? null : await getCachedQQProfileDisplay(body.data.qqUserId);
+  const nickname = body.data.qqNickname || cachedDisplay?.nickname || null;
+  const avatar = getProfileAvatarUrl({ qq_user_id: body.data.qqUserId,
+    qq_avatar_url: body.data.qqAvatarUrl || cachedDisplay?.avatar_url });
 
   const { error } = await supabase.from("qq_login_tickets").insert({
     token_hash: sha256(token),
     qq_user_id: body.data.qqUserId,
-    qq_nickname: body.data.qqNickname || null,
-    qq_avatar_url: body.data.qqAvatarUrl || null,
+    qq_nickname: nickname,
+    qq_avatar_url: avatar,
     return_to: returnTo,
     user_group_join_codes: userGroupJoinCodes,
     expires_at: expiresAt.toISOString(),

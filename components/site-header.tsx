@@ -5,17 +5,13 @@ import { createServerDataClient } from "@/lib/supabase/server-data";
 import { SiteAccountMenu } from "@/components/mobile-site-menu";
 import { SiteNavigation } from "@/components/site-navigation";
 import type { SiteNavigationData } from "@/lib/page-navigation";
+import { getProfileAvatarUrl, getProfileDisplayName } from "@/lib/qq-profile-display";
 import logo from "@/img/网站logo.png";
 
 export async function SiteHeader({ navigation }: { navigation: SiteNavigationData }) {
   const profile = await getCurrentProfile();
-  const displayName =
-    profile?.qq_nickname ||
-    profile?.display_name ||
-    profile?.email ||
-    "已登录用户";
-  const avatarUrl =
-    typeof profile?.qq_avatar_url === "string" ? profile.qq_avatar_url : null;
+  const displayName = getProfileDisplayName(profile, "已登录用户");
+  const avatarUrl = getProfileAvatarUrl(profile);
   let hasRejectedNominations = false;
 
   if (profile) {

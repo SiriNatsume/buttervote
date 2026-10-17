@@ -75,6 +75,7 @@ export type Profile = {
   qq_nickname: string | null;
   qq_avatar_url: string | null;
   login_provider: string;
+  qq_identity_updated_at?: string | null;
   created_at: string;
 } & Record<string, unknown>;
 
@@ -455,6 +456,7 @@ export type QQGroupSyncConfig = {
 };
 export type QQGroupRosterMember = {
   user_group_id: string; qq_user_id: string; nickname: string; card: string;
+  observed_at?: string;
 };
 export type QQGroupSyncJob = {
   id: string; user_group_id: string; qq_group_id: string; requested_by: string;
@@ -920,6 +922,10 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      get_qq_profile_display: {
+        Args: { p_qq_user_id: string };
+        Returns: { nickname: string | null; avatar_url: string | null; observed_at: string | null }[];
+      };
       get_qq_email_account_state: {
         Args: { p_qq_user_id: string };
         Returns: { registered: boolean; email_confirmed: boolean; has_password: boolean }[];
