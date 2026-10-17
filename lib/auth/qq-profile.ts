@@ -2,6 +2,13 @@ import "server-only";
 
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 import { getUserGroupMembershipDays } from "@/lib/permissions/user-groups";
+import { getProfileAvatarUrl } from "@/lib/qq-profile-display";
+
+export async function getCachedQQProfileDisplay(qq: string) {
+  const { data, error } = await createRequiredServiceClient().rpc("get_qq_profile_display", { p_qq_user_id: qq });
+  // Display enrichment must not prevent the existing login flow.
+  return error ? null : data?.[0] ?? null;
+}
 
 // Only call with a bot-authenticated identity or an email returned by verifyOtp.
 export async function resolveQQProfile(qq: string, options: {
@@ -13,7 +20,7 @@ export async function resolveQQProfile(qq: string, options: {
     p_qq_user_id: qq,
     p_verified_auth_user_id: options.verifiedAuthUserId ?? null,
     p_nickname: options.nickname ?? null,
-    p_avatar_url: options.avatarUrl ?? null,
+    p_avatar_url: getProfileAvatarUrl({ qq_user_id: qq, qq_avatar_url: options.avatarUrl }),
   });
   if (error || !data) throw new Error(error?.message ?? "QQ_ACCOUNT_UNAVAILABLE");
   return data;

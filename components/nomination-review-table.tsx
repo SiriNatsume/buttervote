@@ -10,6 +10,7 @@ import {
 import { toUserFacingError } from "@/lib/action-error";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import type { Nomination } from "@/lib/types";
+import { getProfileDisplayName } from "@/lib/qq-profile-display";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,7 @@ function UserIdentity({
   return (
     <div className="space-y-1 text-sm text-muted-foreground">
       <div className="font-medium text-foreground">
-        {profile.display_name || profile.qq_nickname || profile.email || "未命名用户"}
+        {getProfileDisplayName(profile)}
       </div>
       {profile.qq_nickname ? <div>QQ 昵称：{profile.qq_nickname}</div> : null}
       {profile.qq_user_id ? <div>QQ：{profile.qq_user_id}</div> : null}

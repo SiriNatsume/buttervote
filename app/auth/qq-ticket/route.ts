@@ -4,10 +4,11 @@ import {
   getAppSessionCookieName,
   getAppSessionMaxAgeSeconds,
 } from "@/lib/auth/app-session";
-import { resolveQQProfile, syncQQProfileMemberships } from "@/lib/auth/qq-profile";
+import { getCachedQQProfileDisplay, resolveQQProfile, syncQQProfileMemberships } from "@/lib/auth/qq-profile";
 import { safeReturnTo, sha256 } from "@/lib/security/token";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 import type { QQLoginTicket } from "@/lib/types";
+import { getProfileAvatarUrl, getQQTicketNickname } from "@/lib/qq-profile-display";
 
 export const runtime = "nodejs";
 
@@ -41,7 +42,7 @@ function noStoreHeaders(contentType = "text/html; charset=utf-8") {
 
 function renderConfirmPage(token: string, ticket: QQLoginTicket) {
   const nickname = ticket.qq_nickname?.trim() || "QQ 用户";
-  const avatar = ticket.qq_avatar_url?.trim();
+  const avatar = getProfileAvatarUrl(ticket);
   const avatarHtml = avatar
     ? `<img src="${escapeHtml(avatar)}" alt="QQ 头像" class="avatar" />`
     : `<div class="avatar placeholder">Q</div>`;
@@ -165,7 +166,8 @@ export async function GET(request: NextRequest) {
     return redirectToLogin(request, result.error);
   }
 
-  return renderConfirmPage(token, result.ticket);
+  const cached = await getCachedQQProfileDisplay(result.ticket.qq_user_id);
+  return renderConfirmPage(token, { ...result.ticket, qq_nickname: getQQTicketNickname(result.ticket, cached) });
 }
 
 export async function POST(request: NextRequest) {
@@ -199,8 +201,9 @@ export async function POST(request: NextRequest) {
     return redirectToLogin(request, "qq_ticket_used");
   }
 
+  const cached = await getCachedQQProfileDisplay(claimedTicket.qq_user_id);
   const profileId = await resolveQQProfile(claimedTicket.qq_user_id, {
-    nickname: claimedTicket.qq_nickname,
+    nickname: getQQTicketNickname(claimedTicket, cached),
     avatarUrl: claimedTicket.qq_avatar_url,
   });
   await syncQQProfileMemberships(profileId, claimedTicket.user_group_join_codes ?? []);

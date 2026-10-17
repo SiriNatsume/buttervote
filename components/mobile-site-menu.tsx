@@ -24,6 +24,8 @@ type MobileMenuProfile = {
 
 export function SiteAccountMenu({ profile }: { profile: MobileMenuProfile }) {
   const [open, setOpen] = useState(false);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const avatarUrl = profile?.avatarUrl && profile.avatarUrl !== failedAvatarUrl ? profile.avatarUrl : null;
   const pathname = usePathname();
   const hasRejectedNominations = Boolean(profile?.hasRejectedNominations);
 
@@ -51,8 +53,9 @@ export function SiteAccountMenu({ profile }: { profile: MobileMenuProfile }) {
       className="relative ml-auto shrink-0"
     >
       <summary className="relative flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-full border border-[#E9E1D2] bg-[#FFFEFA] py-1 pl-1 pr-2.5 text-[#49372C] transition-colors hover:bg-[#FFF3D0] [&::-webkit-details-marker]:hidden">
-        {profile.avatarUrl ? (
-          <img src={profile.avatarUrl} alt="" className="size-7 shrink-0 rounded-full bg-[#FFF0C0] object-cover lg:size-[30px]" />
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" onError={() => setFailedAvatarUrl(avatarUrl)} referrerPolicy="no-referrer"
+            className="size-7 shrink-0 rounded-full bg-[#FFF0C0] object-cover lg:size-[30px]" />
         ) : (
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#FFF0C0] lg:size-[30px]">
             <UserRound className="size-4" aria-hidden="true" />
@@ -69,10 +72,12 @@ export function SiteAccountMenu({ profile }: { profile: MobileMenuProfile }) {
       <div className="absolute right-0 top-full z-50 mt-3 w-[min(86vw,20rem)] rounded-2xl border border-[#EED8AA]/80 bg-[#FFFCF4] p-3 shadow-xl">
         {profile ? (
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-[#FFF8E8] p-3">
-            {profile.avatarUrl ? (
+            {avatarUrl ? (
               <img
-                src={profile.avatarUrl}
+                src={avatarUrl}
                 alt="头像"
+                onError={() => setFailedAvatarUrl(avatarUrl)}
+                referrerPolicy="no-referrer"
                 className="size-9 rounded-full border border-[#EED8AA] object-cover"
               />
             ) : null}

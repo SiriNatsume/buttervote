@@ -32,6 +32,7 @@ import { formatUserGroupMembershipExpiry } from "@/lib/user-group-membership";
 import { QQGroupSyncPanel } from "@/components/qq-group-sync-panel";
 import { fetchAllRows, fetchRowsByIds } from "@/lib/supabase-pagination";
 import { loadQQGroupSyncSnapshot } from "@/lib/qq-group-sync-snapshot";
+import { getProfileDisplayName } from "@/lib/qq-profile-display";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +87,7 @@ export default async function AdminUserGroupDetailPage({
   ];
   const { data: profiles, error: profilesError } = await fetchRowsByIds(profileIds, (batch) => supabase
           .from("profiles")
-          .select("id,email,display_name,qq_nickname")
+          .select("id,email,display_name,qq_nickname,qq_user_id")
           .in("id", batch).order("id"));
   if (profilesError) throw new Error("无法读取用户组成员资料。");
   const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
@@ -148,7 +149,7 @@ export default async function AdminUserGroupDetailPage({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <h3 className="break-words font-semibold">
-                            {profile?.display_name || profile?.qq_nickname || "未命名用户"}
+                            {getProfileDisplayName(profile)}
                           </h3>
                           <p className="mt-1 break-words text-sm text-muted-foreground">
                             {profile?.qq_nickname || "无 QQ 昵称"} ·{" "}
@@ -229,7 +230,7 @@ export default async function AdminUserGroupDetailPage({
                       return (
                         <TableRow key={membership.id}>
                           <TableCell className="font-medium">
-                            {profile?.display_name || "未命名用户"}
+                            {getProfileDisplayName(profile)}
                           </TableCell>
                           <TableCell>{profile?.qq_nickname || "无"}</TableCell>
                           <TableCell>{profile?.email || "无"}</TableCell>
