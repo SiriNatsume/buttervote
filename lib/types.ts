@@ -920,6 +920,10 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      get_qq_email_account_state: {
+        Args: { p_qq_user_id: string };
+        Returns: { registered: boolean; email_confirmed: boolean; has_password: boolean }[];
+      };
       resolve_qq_profile: {
         Args: { p_qq_user_id: string; p_verified_auth_user_id?: string | null; p_nickname?: string | null; p_avatar_url?: string | null };
         Returns: string;
@@ -934,6 +938,10 @@ export type Database = {
         Args: { p_user_group_id: string; p_qq_group_id: string; p_admin_id: string }; Returns: string;
       };
       claim_qq_group_sync_job: { Args: Record<string, never>; Returns: QQGroupSyncJob[] };
+      remove_qq_group_roster_members: {
+        Args: { p_user_group_id: string; p_admin_id: string; p_qq_user_ids?: string[]; p_remove_all?: boolean };
+        Returns: number;
+      };
       finish_qq_group_sync_job: {
         Args: { p_job_id: string; p_lease_id: string; p_members?: Json; p_error?: string | null; p_days?: number };
         Returns: boolean;

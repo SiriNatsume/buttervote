@@ -3,6 +3,7 @@ import "server-only";
 import { requireUser } from "@/lib/auth";
 import { getEnvNumber } from "@/lib/security/token";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { fetchAllRows, fetchRowsByIds } from "@/lib/supabase-pagination";
 import type {
   ContestGroupAccessMode,
   Profile,
@@ -14,7 +15,7 @@ export type UserGroupMembershipWithGroup = UserGroupMember & {
   user_group: Pick<UserGroup, "id" | "name" | "description" | "join_code"> | null;
 };
 
-export type UserGroupMembershipStatus = "active" | "expired" | "revoked";
+export { getUserGroupMembershipStatus, type UserGroupMembershipStatus } from "@/lib/user-group-membership";
 
 export function getUserGroupMembershipDays() {
   return getEnvNumber("USER_GROUP_MEMBERSHIP_DAYS", 7);
@@ -26,34 +27,18 @@ export function getUserGroupMembershipExpiresAt(from = new Date()) {
   );
 }
 
-export function getUserGroupMembershipStatus(
-  membership: Pick<UserGroupMember, "expires_at" | "revoked_at">,
-  now = new Date(),
-): UserGroupMembershipStatus {
-  if (membership.revoked_at) {
-    return "revoked";
-  }
-
-  if (!membership.expires_at) {
-    return "expired";
-  }
-
-  return new Date(membership.expires_at).getTime() > now.getTime()
-    ? "active"
-    : "expired";
-}
-
 export async function getEffectiveUserGroupIds(
   profileId: string,
 ): Promise<string[]> {
   const supabase = await createServerDataClient();
-  const { data } = await supabase
+  const { data, error } = await fetchAllRows(() => supabase
     .from("user_group_members")
     .select("user_group_id")
     .eq("profile_id", profileId)
     .is("revoked_at", null)
     .not("expires_at", "is", null)
-    .gt("expires_at", new Date().toISOString());
+    .gt("expires_at", new Date().toISOString()).order("id"));
+  if (error) throw new Error("无法读取用户组资格，请重试。");
 
   return (data ?? []).map((membership) => membership.user_group_id);
 }
@@ -62,25 +47,24 @@ export async function getUserGroupMemberships(
   profileId: string,
 ): Promise<UserGroupMembershipWithGroup[]> {
   const supabase = await createServerDataClient();
-  const { data: memberships } = await supabase
+  const { data: memberships, error: membershipError } = await fetchAllRows(() => supabase
     .from("user_group_members")
     .select(
       "id,user_group_id,profile_id,source,joined_at,last_verified_at,expires_at,revoked_at",
     )
     .eq("profile_id", profileId)
-    .order("joined_at", { ascending: false });
+    .order("joined_at", { ascending: false }).order("id"));
+  if (membershipError) throw new Error("无法读取用户组成员身份，请重试。");
 
   const userGroupIds = [
     ...new Set((memberships ?? []).map((membership) => membership.user_group_id)),
   ];
 
-  const { data: userGroups } =
-    userGroupIds.length > 0
-      ? await supabase
+  const { data: userGroups, error: groupsError } = await fetchRowsByIds(userGroupIds, (batch) => supabase
           .from("user_groups")
           .select("id,name,description,join_code")
-          .in("id", userGroupIds)
-      : { data: [] };
+          .in("id", batch).order("id"));
+  if (groupsError) throw new Error("无法读取用户组资料，请重试。");
   const userGroupById = new Map(
     (userGroups ?? []).map((userGroup) => [userGroup.id, userGroup]),
   );
@@ -115,10 +99,11 @@ export async function canParticipateContestGroup(params: {
     return true;
   }
 
-  const { data: allowedRows } = await supabase
+  const { data: allowedRows, error: allowedError } = await fetchAllRows(() => supabase
     .from("contest_group_allowed_user_groups")
     .select("user_group_id")
-    .eq("contest_group_id", params.contestGroupId);
+    .eq("contest_group_id", params.contestGroupId).order("id"));
+  if (allowedError) throw new Error("无法读取活动组允许的用户组，请重试。");
 
   const allowedUserGroupIds = new Set(
     (allowedRows ?? []).map((row) => row.user_group_id),

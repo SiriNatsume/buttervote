@@ -70,6 +70,10 @@ content_path = "./supabase/templates/qq-email.html"
 subject = "Butter Vote 登录验证码"
 content_path = "./supabase/templates/qq-email.html"
 
+[auth.email.template.recovery]
+subject = "Butter Vote 重设密码验证码"
+content_path = "./supabase/templates/qq-email.html"
+
 [auth.sms]
 enable_signup = false
 enable_confirmations = false

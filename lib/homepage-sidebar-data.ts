@@ -93,18 +93,18 @@ export async function loadHomepageSidebarData(input: {
         )
       : { data: [], error: null },
     needsMemberships
-      ? privateClient
+      ? fetchAllRows(() => privateClient
           .from("contest_group_allowed_user_groups")
           .select("contest_group_id,user_group_id")
-          .in("contest_group_id", restrictedGroupIds)
+          .in("contest_group_id", restrictedGroupIds).order("id"))
       : { data: [], error: null },
     needsMemberships
-      ? privateClient
+      ? fetchAllRows(() => privateClient
           .from("user_group_members")
           .select("user_group_id")
           .eq("profile_id", profile.id)
           .is("revoked_at", null)
-          .gt("expires_at", new Date(referenceNow).toISOString())
+          .gt("expires_at", new Date(referenceNow).toISOString()).order("id"))
       : { data: [], error: null },
     nominationContestId
       ? fetchAllRows(() =>

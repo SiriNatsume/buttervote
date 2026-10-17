@@ -29,6 +29,13 @@ export async function getCurrentProfile(): Promise<Profile | null> {
     return null;
   }
 
+  // QQ accounts use revocable app_sessions. A leftover Supabase cookie must
+  // not restore an old QQ session after password recovery or bypass the
+  // canonical QQ profile through the legacy email login path.
+  if (/^[1-9][0-9]{4,11}@qq\.com$/i.test(user.email ?? "")) {
+    return null;
+  }
+
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")

@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/time";
+import { formatUserGroupMembershipExpiry } from "@/lib/user-group-membership";
 
 function membershipStatusMeta(
   status: ReturnType<typeof getUserGroupMembershipStatus>,
@@ -110,7 +111,7 @@ export default async function MyUserGroupsPage() {
                       <div>
                         最近验证时间：{formatDateTime(membership.last_verified_at)}
                       </div>
-                      <div>有效期至：{formatDateTime(membership.expires_at)}</div>
+                      <div>有效期：{formatUserGroupMembershipExpiry(membership.expires_at)}</div>
                     </div>
                   </CardContent>
                 </Card>

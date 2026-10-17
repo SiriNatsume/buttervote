@@ -3,6 +3,7 @@ import { Inter, Noto_Sans_SC } from "next/font/google";
 import "highlight.js/styles/github.css";
 import "./globals.css";
 import { AppProviders } from "@/components/app-providers";
+import { BackToTop } from "@/components/back-to-top";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNavigation } from "@/components/site-navigation";
@@ -43,9 +44,12 @@ export default async function RootLayout({
         <AppProviders>
           <PageSectionProvider>
             <SiteHeader navigation={navigation} />
-            <main className="site-main flex-1">{children}</main>
+            <main className="site-main flex-1 focus:outline-none" tabIndex={-1}>
+              {children}
+            </main>
             <SiteFooter />
             <SiteNavigation mobile navigation={navigation} />
+            <BackToTop />
           </PageSectionProvider>
         </AppProviders>
       </body>

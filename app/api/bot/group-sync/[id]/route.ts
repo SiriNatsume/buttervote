@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isAuthorizedBot } from "@/lib/security/bot-auth";
 import { rosterResultSchema } from "@/lib/validation/qq-auth";
@@ -29,5 +30,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
   if (error) return NextResponse.json({ error: "同步失败，原名单未更改。" }, { status: 400 });
   if (!data) return NextResponse.json({ error: "同步任务已过期或完成。" }, { status: 409 });
+  revalidatePath("/admin/user-groups/[id]", "page");
+  revalidatePath("/admin/user-groups");
+  revalidatePath("/me/groups");
+  revalidatePath("/");
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }

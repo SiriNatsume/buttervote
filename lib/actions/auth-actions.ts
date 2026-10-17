@@ -51,6 +51,13 @@ export async function loginAction(formData: FormData) {
     loginError(parsed.error.issues[0]?.message ?? "登录信息无效。");
   }
 
+  // Numeric QQ mailboxes must use the canonical QQ profile and app session.
+  // The legacy Supabase-cookie path is kept only for other email accounts.
+  const qq = parsed.data.email.match(/^([1-9][0-9]{4,11})@qq\.com$/i)?.[1];
+  if (qq) {
+    redirect(`/login?${new URLSearchParams({ qq, returnTo: safeReturnTo(String(formData.get("returnTo") ?? "/")), error: "请在上方使用 QQ 号和密码登录。" })}`);
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
@@ -62,30 +69,7 @@ export async function loginAction(formData: FormData) {
 }
 
 export async function signUpAction(formData: FormData) {
-  const parsed = credentialSchema.safeParse({
-    email: formData.get("email"),
-    password: formData.get("password"),
-  });
-
-  if (!parsed.success) {
-    loginError(parsed.error.issues[0]?.message ?? "注册信息无效。");
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
-  });
-
-  if (error) {
-    loginError(authErrorMessage(error.message));
-  }
-
-  if (!data.session) {
-    redirect("/login?notice=email_confirmation_sent");
-  }
-
-  redirect("/?registered=1");
+  redirect(`/register?${new URLSearchParams({ returnTo: safeReturnTo(String(formData.get("returnTo") ?? "/")) })}`);
 }
 
 export async function logoutAction() {

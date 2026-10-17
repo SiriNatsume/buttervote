@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { HomepageBackToTop } from "@/components/homepage-back-to-top";
 import { ContestCard } from "@/components/contest-card";
 import {
   ContestGroupCard,
@@ -282,7 +281,6 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
-      <HomepageBackToTop />
     </div>
   );
 }

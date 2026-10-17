@@ -3,7 +3,6 @@ import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ClipboardList, Send } from "lucide-react";
 import { StatusBadge } from "@/components/contest-badges";
-import { HomepageBackToTop } from "@/components/homepage-back-to-top";
 import {
   MyNominationsGroupedList,
   type MyNominationItem,
@@ -155,10 +154,6 @@ export default async function ContestMyNominationsPage({
             ? "你还没有在本活动中提交提名，可以点击“去提名”提交第一个候选项。"
             : "你还没有在本活动中提交过提名。"
         }
-      />
-      <HomepageBackToTop
-        showOnDesktop
-        focusTarget="#contest-my-nominations-heading"
       />
     </div>
   );
