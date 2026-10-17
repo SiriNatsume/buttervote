@@ -18,18 +18,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { fetchAllRows } from "@/lib/supabase-pagination";
+import { getUserGroupMembershipStatus } from "@/lib/user-group-membership";
+
+export const dynamic = "force-dynamic";
 
 export default async function AdminUserGroupsPage() {
   await requireAdmin();
   const supabase = await createServerDataClient();
-  const [{ data: userGroups }, { data: memberships }] = await Promise.all([
-    supabase
+  const [{ data: userGroups, error: groupsError }, { data: memberships, error: membersError }] = await Promise.all([
+    fetchAllRows(() => supabase
       .from("user_groups")
       .select("id,name,description,join_code,created_at,updated_at")
-      .order("created_at", { ascending: false }),
-    supabase.from("user_group_members").select("user_group_id,expires_at,revoked_at"),
+      .order("created_at", { ascending: false }).order("id")),
+    fetchAllRows(() => supabase.from("user_group_members").select("user_group_id,expires_at,revoked_at").order("id")),
   ]);
-  const now = Date.now();
+  if (groupsError || membersError) throw new Error("无法读取用户组及成员统计，请重试。");
+  const now = new Date();
   const memberStats = new Map<string, { total: number; active: number }>();
 
   for (const membership of memberships ?? []) {
@@ -39,11 +44,7 @@ export default async function AdminUserGroupsPage() {
     };
     current.total += 1;
 
-    if (
-      !membership.revoked_at &&
-      membership.expires_at &&
-      new Date(membership.expires_at).getTime() > now
-    ) {
+    if (getUserGroupMembershipStatus(membership, now) === "active") {
       current.active += 1;
     }
 

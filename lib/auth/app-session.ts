@@ -54,10 +54,10 @@ export async function getProfileByAppSession(): Promise<Profile | null> {
   return profile;
 }
 
-export async function createAppSession(profileId: string) {
+export async function createAppSession(profileId: string, maxAgeSeconds = getAppSessionMaxAgeSeconds()) {
   const supabase = createRequiredServiceClient();
   const sessionToken = generateRandomToken();
-  const expiresAt = new Date(Date.now() + getAppSessionMaxAgeSeconds() * 1000);
+  const expiresAt = new Date(Date.now() + maxAgeSeconds * 1000);
 
   const { error } = await supabase.from("app_sessions").insert({
     profile_id: profileId,
@@ -70,6 +70,13 @@ export async function createAppSession(profileId: string) {
   }
 
   return { sessionToken, expiresAt };
+}
+
+export async function revokeProfileAppSessions(profileId: string) {
+  const { error } = await createRequiredServiceClient().from("app_sessions")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("profile_id", profileId).is("revoked_at", null);
+  if (error) throw new Error("APP_SESSION_REVOCATION_FAILED");
 }
 
 export async function revokeCurrentAppSession() {

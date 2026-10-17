@@ -73,13 +73,15 @@ npm run supabase:local:reset
 
 现有生产项目只应用经过审查的待执行 migration。不要将 `setup:local`、`supabase:local:reset` 或任何 `--linked` reset 用于生产项目。浏览器端不得直接调用 service-role-only RPC，所有写入仍必须走 Server Action 或 Route Handler。
 
-## QQ 邮箱验证码登录（默认）
+## QQ 账号密码登录（默认）
 
-用户填写数字 QQ 号，网站向固定的 `QQ号@qq.com` 发送 8 位验证码，验证后自动注册或登录。收件人由服务端生成，不接受英文邮箱别名或另一个收件地址。原有 QQ Bot 链接登录保留为备用，已有邮箱密码账号仍可从折叠入口登录。
+登录、注册共用一个分步入口：先填写数字 QQ 号。已有密码的账号显示密码输入框；新账号自动向固定的 `QQ号@qq.com` 发送 8 位验证码，填写验证码并设置、确认密码后自动注册和登录。以前只用验证码或 Bot 的账号验证邮箱后设置密码，沿用原账号。忘记密码可在 `/forgot-password` 验证 QQ 邮箱重设密码。
 
-两种 QQ 登录都通过 `resolve_qq_profile` 按 `qq_user_id` 取得同一个 `profiles.id`，使用原有 `app_sessions`，因此投票、提名、真爱票和管理员角色保持不变。Supabase Auth 只负责发送和校验验证码；其临时会话不进入浏览器。新数字 QQ Auth 用户不会在验证前创建投票 profile。
+勾选「记住密码」会保持此设备的登录状态（默认 30 天）；未勾选使用浏览器会话 cookie，服务端最多保留 12 小时。密码仅交给 Supabase Auth 校验和保存，不写入浏览器本地存储。原有 QQ Bot 链接登录保留为备用，其他邮箱密码账号仍可从折叠入口登录。
 
-上线配置与 Bot 群同步说明见 [QQ 邮箱登录与群成员同步](docs/qq-email-login.md)。必须先应用新迁移、配置 SMTP 及验证码邮件模板，再启用新页面。公共邮箱注册可以继续关闭，服务端仅为通过格式校验的数字 QQ 邮箱建立待验证身份。
+两种 QQ 登录都通过 `resolve_qq_profile` 按 `qq_user_id` 取得同一个 `profiles.id`，使用原有 `app_sessions`，因此投票、提名、真爱票和管理员角色保持不变。Supabase Auth 负责密码及邮件验证码；临时 Auth 会话不进入浏览器。重设密码后撤销原有网站会话。
+
+上线配置与 Bot 群同步说明见 [QQ 邮箱登录与群成员同步](docs/qq-email-login.md)。必须先应用 `20261017143010_qq_password_auth.sql`，并为 Confirm signup、Magic Link、Reset Password 三个邮件模板配置 `{{ .Token }}`。公共邮箱注册继续关闭，服务端仅为数字 QQ 邮箱建立待验证身份。
 
 ## QQ Bot 一次性链接登录（备用）
 

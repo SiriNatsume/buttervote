@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { updateGroupAction } from "@/lib/actions/admin-actions";
 import { requireAdmin } from "@/lib/auth";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 import { DeleteContestGroupDialog } from "@/components/delete-contest-group-dialog";
 import { FormStatusFieldset } from "@/components/form-status-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -32,9 +33,9 @@ export default async function EditGroupPage({
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const supabase = await createServerDataClient();
   const [
-    { data: group },
-    { data: userGroups },
-    { data: allowedUserGroups },
+    { data: group, error: groupError },
+    { data: userGroups, error: userGroupsError },
+    { data: allowedUserGroups, error: allowedGroupsError },
     { data: homepageSettings },
     { data: tournamentStages },
     { data: groupContests },
@@ -48,14 +49,14 @@ export default async function EditGroupPage({
         )
         .eq("id", id)
         .maybeSingle(),
-      supabase
+      fetchAllRows(() => supabase
         .from("user_groups")
         .select("id,name,description,join_code")
-        .order("created_at", { ascending: false }),
-      supabase
+        .order("created_at", { ascending: false }).order("id")),
+      fetchAllRows(() => supabase
         .from("contest_group_allowed_user_groups")
         .select("user_group_id")
-        .eq("contest_group_id", id),
+        .eq("contest_group_id", id).order("id")),
       supabase
         .from("contest_group_homepage_settings")
         .select("show_bracket,featured_tournament_id")
@@ -81,6 +82,7 @@ export default async function EditGroupPage({
         .order("title", { ascending: true }),
     ]);
 
+  if (groupError || userGroupsError || allowedGroupsError) throw new Error("无法读取活动组和用户组权限设置，请重试。");
   if (!group) {
     notFound();
   }

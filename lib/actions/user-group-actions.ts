@@ -6,6 +6,7 @@ import { getActionAdmin } from "@/lib/auth";
 import { getUserGroupMembershipExpiresAt } from "@/lib/permissions/user-groups";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import type { ContestGroupAccessMode } from "@/lib/types";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 
 type ActionResult<T extends Record<string, unknown> = Record<string, unknown>> =
   | ({ ok: true; message?: string } & T)
@@ -230,10 +231,11 @@ export async function deleteUserGroup(
   }
 
   const supabase = await createServerDataClient();
-  const { data: affectedGroups } = await supabase
+  const { data: affectedGroups, error: affectedGroupsError } = await fetchAllRows(() => supabase
     .from("contest_group_allowed_user_groups")
     .select("contest_group_id")
-    .eq("user_group_id", parsed.data.userGroupId);
+    .eq("user_group_id", parsed.data.userGroupId).order("id"));
+  if (affectedGroupsError) return actionFailure("无法读取用户组关联活动，请稍后重试。");
 
   const { error } = await supabase
     .from("user_groups")
@@ -306,9 +308,12 @@ export async function renewUserGroupMember(
   const supabase = await createServerDataClient();
   const { data: member } = await supabase
     .from("user_group_members")
-    .select("user_group_id,profile_id")
+    .select("user_group_id,profile_id,expires_at,revoked_at")
     .eq("id", parsed.data.memberId)
     .maybeSingle();
+  if (member?.expires_at === "infinity" && !member.revoked_at) {
+    return actionSuccess("该成员已长期有效，无需续期。");
+  }
   const { error } = await supabase
     .from("user_group_members")
     .update({

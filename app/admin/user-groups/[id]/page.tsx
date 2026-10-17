@@ -28,8 +28,12 @@ import {
 } from "@/components/ui/table";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { formatDateTime } from "@/lib/time";
+import { formatUserGroupMembershipExpiry } from "@/lib/user-group-membership";
 import { QQGroupSyncPanel } from "@/components/qq-group-sync-panel";
-import { createRequiredServiceClient } from "@/lib/supabase/service";
+import { fetchAllRows, fetchRowsByIds } from "@/lib/supabase-pagination";
+import { loadQQGroupSyncSnapshot } from "@/lib/qq-group-sync-snapshot";
+
+export const dynamic = "force-dynamic";
 
 function statusMeta(status: ReturnType<typeof getUserGroupMembershipStatus>) {
   if (status === "active") {
@@ -53,47 +57,38 @@ export default async function AdminUserGroupDetailPage({
   await requireAdmin();
   const { id } = await params;
   const supabase = await createServerDataClient();
-  const [{ data: userGroup }, { data: memberships }] = await Promise.all([
+  const [{ data: userGroup, error: userGroupError }, { data: memberships, error: membershipsError }] = await Promise.all([
     supabase
       .from("user_groups")
       .select("id,name,description,join_code,created_at,updated_at")
       .eq("id", id)
       .maybeSingle(),
-    supabase
+    fetchAllRows(() => supabase
       .from("user_group_members")
       .select(
         "id,user_group_id,profile_id,source,joined_at,last_verified_at,expires_at,revoked_at",
       )
       .eq("user_group_id", id)
-      .order("joined_at", { ascending: false }),
+      .order("joined_at", { ascending: false }).order("id")),
   ]);
+
+  if (userGroupError || membershipsError) throw new Error("无法读取用户组及成员列表。");
 
   if (!userGroup) {
     notFound();
   }
 
-  const service = createRequiredServiceClient();
   const requestedPage = Number((await searchParams).rosterPage ?? 1);
-  const rosterPage = Number.isSafeInteger(requestedPage) ? Math.max(1, Math.min(200, requestedPage)) : 1;
-  const [syncConfig, syncJob, roster] = await Promise.all([
-    service.from("qq_group_sync_configs").select("user_group_id,qq_group_id,last_synced_at,member_count").eq("user_group_id", id).maybeSingle(),
-    service.from("qq_group_sync_jobs").select("id,user_group_id,qq_group_id,requested_by,status,requested_at,started_at,finished_at,lease_id,error,member_count")
-      .eq("user_group_id", id).order("requested_at", { ascending: false }).limit(1).maybeSingle(),
-    service.from("qq_group_roster").select("user_group_id,qq_user_id,nickname,card", { count: "exact" }).eq("user_group_id", id)
-      .order("qq_user_id").range((rosterPage - 1) * 50, rosterPage * 50 - 1),
-  ]);
-  if (syncConfig.error || syncJob.error || roster.error) throw new Error("无法读取 QQ 群同步状态。");
+  const snapshot = await loadQQGroupSyncSnapshot(id, requestedPage);
 
   const profileIds = [
     ...new Set((memberships ?? []).map((membership) => membership.profile_id)),
   ];
-  const { data: profiles } =
-    profileIds.length > 0
-      ? await supabase
+  const { data: profiles, error: profilesError } = await fetchRowsByIds(profileIds, (batch) => supabase
           .from("profiles")
           .select("id,email,display_name,qq_nickname")
-          .in("id", profileIds)
-      : { data: [] };
+          .in("id", batch).order("id"));
+  if (profilesError) throw new Error("无法读取用户组成员资料。");
   const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
 
   return (
@@ -131,8 +126,7 @@ export default async function AdminUserGroupDetailPage({
         </CardContent>
       </Card>
 
-      <QQGroupSyncPanel userGroupId={id} config={syncConfig.data} job={syncJob.data}
-        members={roster.data ?? []} page={rosterPage} totalPages={Math.max(1, Math.ceil((roster.count ?? 0) / 50))} />
+      <QQGroupSyncPanel key={`${id}:${snapshot.page}`} userGroupId={id} {...snapshot} />
 
       <Card>
         <CardHeader>
@@ -169,7 +163,7 @@ export default async function AdminUserGroupDetailPage({
                         <div>
                           最近验证：{formatDateTime(membership.last_verified_at)}
                         </div>
-                        <div>有效期至：{formatDateTime(membership.expires_at)}</div>
+                        <div>有效期：{formatUserGroupMembershipExpiry(membership.expires_at)}</div>
                       </dl>
                       <div className="mt-4 grid grid-cols-2 gap-2">
                         <TransitionActionForm
@@ -182,6 +176,7 @@ export default async function AdminUserGroupDetailPage({
                             variant="outline"
                             className="w-full"
                             loadingText="续期中..."
+                            disabled={membership.expires_at === "infinity" && !membership.revoked_at}
                           >
                             <CalendarClock className="size-4" />
                             续期
@@ -219,7 +214,7 @@ export default async function AdminUserGroupDetailPage({
                       <TableHead>来源</TableHead>
                       <TableHead>首次加入</TableHead>
                       <TableHead>最近验证</TableHead>
-                      <TableHead>过期时间</TableHead>
+                      <TableHead>有效期</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
@@ -243,7 +238,7 @@ export default async function AdminUserGroupDetailPage({
                           <TableCell>
                             {formatDateTime(membership.last_verified_at)}
                           </TableCell>
-                          <TableCell>{formatDateTime(membership.expires_at)}</TableCell>
+                          <TableCell>{formatUserGroupMembershipExpiry(membership.expires_at)}</TableCell>
                           <TableCell>
                             <Badge variant={meta.variant}>{meta.label}</Badge>
                           </TableCell>
@@ -262,6 +257,7 @@ export default async function AdminUserGroupDetailPage({
                                   size="sm"
                                   variant="outline"
                                   loadingText="续期中..."
+                                  disabled={membership.expires_at === "infinity" && !membership.revoked_at}
                                 >
                                   续期
                                 </FormSubmitButton>
