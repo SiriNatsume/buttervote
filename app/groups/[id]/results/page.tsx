@@ -18,31 +18,13 @@ import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
-import { fetchAllRows } from "@/lib/supabase-pagination";
-import { tallyVotes } from "@/lib/tally";
-import { loadVisibleContestResultData } from "@/lib/visible-result-data";
-import type { Candidate, Contest, ContestCallingSession, LoveVoteAllocation, Vote } from "@/lib/types";
+import { tallyResultsFromAggregates } from "@/lib/aggregate-tallies";
+import { loadVisibleContestTallies, type VisibleContestTallyRow } from "@/lib/visible-result-tallies";
+import type { Candidate, ContestCallingSession } from "@/lib/types";
 
 type ResultCandidate = Pick<
   Candidate,
   "id" | "contest_id" | "name" | "description" | "image_path" | "nominator_display_name" | "is_active"
->;
-
-type ResultContest = Pick<
-  Contest,
-  | "id"
-  | "title"
-  | "description"
-  | "status"
-  | "vote_type"
-  | "group_id"
-  | "created_at"
-  | "updated_at"
->;
-
-type GroupLoveVoteRow = Pick<
-  LoveVoteAllocation,
-  "contest_id" | "vote_id" | "candidate_id"
 >;
 
 export default async function GroupResultsPage({
@@ -163,6 +145,10 @@ export default async function GroupResultsPage({
       })
     : [];
   const candidateClient = isAdmin ? dataClient : supabase;
+  const talliesPromise = loadVisibleContestTallies(
+    isAdmin ? dataClient : supabase, fullResultVisibleContestIds,
+    { includeAdminOverride: isAdmin },
+  );
   const { data: candidateRows } =
     fullResultVisibleContestIds.length > 0
       ? await candidateClient
@@ -182,78 +168,13 @@ export default async function GroupResultsPage({
     candidatesByContest.set(candidate.contest_id, current);
   }
 
-  const votesByContest = new Map<string, Vote[]>();
-  const loveAllocationsByContest = new Map<
-    string,
-    Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>
-  >();
-
-  if (fullResultVisibleContestIds.length > 0) {
-    if (isAdmin) {
-      const [voteResult, loveResult] = await Promise.all([
-        fetchAllRows<Vote>(() =>
-          dataClient
-            .from("votes")
-            .select("id,contest_id,voter_id,payload,created_at")
-            .in("contest_id", fullResultVisibleContestIds)
-            .order("created_at", { ascending: true }),
-        ),
-        fetchAllRows<GroupLoveVoteRow>(() =>
-          dataClient
-            .from("love_vote_allocations")
-            .select("contest_id,vote_id,candidate_id")
-            .in("contest_id", fullResultVisibleContestIds),
-        ),
-      ]);
-      const error = voteResult.error ?? loveResult.error;
-
-      if (error) {
-        console.error("Failed to load group result votes.", error.message);
-      } else {
-        for (const vote of voteResult.data ?? []) {
-          const current = votesByContest.get(vote.contest_id) ?? [];
-          current.push(vote);
-          votesByContest.set(vote.contest_id, current);
-        }
-
-        for (const loveRow of loveResult.data ?? []) {
-          const current = loveAllocationsByContest.get(loveRow.contest_id) ?? [];
-          current.push({
-            vote_id: loveRow.vote_id,
-            candidate_id: loveRow.candidate_id,
-          });
-          loveAllocationsByContest.set(loveRow.contest_id, current);
-        }
-      }
-    } else {
-      const resultData = await loadVisibleContestResultData(
-        supabase,
-        fullResultVisibleContestIds,
-      );
-
-      if (resultData.error) {
-        console.error(
-          "Failed to load public group result votes.",
-          resultData.error.message,
-        );
-      } else {
-        for (const vote of resultData.votes) {
-          const publicVote: Vote = { ...vote, voter_id: null };
-          const current = votesByContest.get(vote.contest_id) ?? [];
-          current.push(publicVote);
-          votesByContest.set(vote.contest_id, current);
-        }
-
-        for (const loveRow of resultData.loveAllocations) {
-          const current = loveAllocationsByContest.get(loveRow.contest_id) ?? [];
-          current.push({
-            vote_id: loveRow.vote_id,
-            candidate_id: loveRow.candidate_id,
-          });
-          loveAllocationsByContest.set(loveRow.contest_id, current);
-        }
-      }
-    }
+  const talliesByContest = new Map<string, VisibleContestTallyRow[]>();
+  const resultData = await talliesPromise;
+  if (resultData.error) throw new Error("无法读取活动组结果，请稍后重试。");
+  for (const tally of resultData.tallies) {
+    const current = talliesByContest.get(tally.contest_id) ?? [];
+    current.push(tally);
+    talliesByContest.set(tally.contest_id, current);
   }
 
   const summaries: GroupContestResultSummary[] = visibleContests
@@ -267,20 +188,12 @@ export default async function GroupResultsPage({
         : null;
       const fullResultsVisible =
         resultVisibility?.fullResultsVisible === true;
-      const results = fullResultsVisible
-        ? tallyVotes({
-            voteType: contest.vote_type,
-            candidates: candidatesByContest.get(contest.id) ?? [],
-            votes: votesByContest.get(contest.id) ?? [],
-            loveVoteWeight: contest.group_id
-              ? Number(group.love_vote_weight)
-              : null,
-            loveVoteScoreMode: resultVisibility?.showWeightedLoveScore
-              ? "weighted"
-              : "base",
-            loveAllocations: loveAllocationsByContest.get(contest.id) ?? [],
-          })
-        : [];
+      const results = fullResultsVisible ? tallyResultsFromAggregates({
+        candidates: candidatesByContest.get(contest.id) ?? [],
+        tallies: talliesByContest.get(contest.id) ?? [],
+        loveVoteWeight: Number(group.love_vote_weight),
+        showWeightedLoveScore: resultVisibility?.showWeightedLoveScore === true,
+      }) : [];
       const resultPublishedAt = contest.updated_at ?? contest.created_at ?? null;
 
       return {

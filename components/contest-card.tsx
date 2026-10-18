@@ -31,6 +31,8 @@ export function ContestCard({ contest }: { contest: ContestCardContest }) {
               <img
                 src={imageUrl}
               alt={`${contest.title} 封面`}
+              loading="lazy"
+              decoding="async"
               className="size-full object-cover"
             />
           ) : (

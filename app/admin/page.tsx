@@ -7,6 +7,7 @@ import {
 } from "@/components/admin-contests-grouped-list";
 import { ContestForm } from "@/components/contest-form";
 import { NominationReviewTable } from "@/components/nomination-review-table";
+import { TablePagination } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,37 +19,71 @@ import { requireAdmin } from "@/lib/auth";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import type { ContestStatus, VoteType } from "@/lib/types";
+import { decodeReviewCursor, encodeReviewCursor, reviewCursorFilter, REVIEW_PAGE_SIZE, type ReviewCursor } from "@/lib/review-pagination";
 // import { createRequiredServiceClient } from "@/lib/supabase/service";
 
 
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reviewAfter?: string; reviewBefore?: string }>;
 }) {
   await requireAdmin();
   const query = await searchParams;
   await applyScheduledTransitions({ revalidate: false });
   const supabase = await createServerDataClient();
-  const [{ data: contests }, { data: nominations }, { data: groups }] =
+  let cursor = query.reviewAfter && query.reviewBefore ? null
+    : decodeReviewCursor(query.reviewBefore ?? query.reviewAfter);
+  let backwards = Boolean(cursor && query.reviewBefore);
+  const loadReviewRows = (position: ReviewCursor | null, reverse: boolean) => {
+    let request = supabase.from("nominations").select(
+      "id,contest_id,submitter_id,name,description,status,image_path,image_width,image_height,image_size,nominator_display_name,nominator_note,rejection_reason,rejected_at,created_at,updated_at,contests!inner(title,archived_at)",
+    ).eq("status", "pending").is("contests.archived_at", null);
+    if (position) {
+      request = (reverse ? request.lte("created_at", position.created_at) : request.gte("created_at", position.created_at))
+        .or(reviewCursorFilter(position, reverse));
+    }
+    return request.order("created_at", { ascending: !reverse })
+      .order("id", { ascending: !reverse }).limit(REVIEW_PAGE_SIZE + 1);
+  };
+  const [{ data: contests }, reviewResult, { data: groups }, pendingResult] =
     await Promise.all([
       supabase
         .from("contests")
         .select("id,title,description,status,vote_type,max_choices,image_path,group_id,created_at")
         .is("archived_at", null)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("nominations")
-        .select(
-          "id,contest_id,submitter_id,name,description,status,image_path,image_width,image_height,image_size,nominator_display_name,nominator_note,rejection_reason,rejected_at,created_at,updated_at, contests(title,archived_at)",
-        )
-        .eq("status", "pending")
-        .order("created_at", { ascending: true }),
+      loadReviewRows(cursor, backwards),
       supabase
         .from("contest_groups")
         .select("id,name")
         .order("created_at", { ascending: false }),
+      supabase.from("nominations").select("id,contests!inner(id)", { count: "exact", head: true })
+        .eq("status", "pending").is("contests.archived_at", null),
     ]);
+  const totalPendingCount = pendingResult.count;
+  if (reviewResult.error || pendingResult.error || totalPendingCount === null) throw new Error("无法读取待审核提名，请重试。");
+  let reviewRows = reviewResult.data ?? [];
+  if (cursor && reviewRows.length === 0) {
+    // Another admin may have finished this part of the queue. Resume at the
+    // oldest remaining item without relying on the cursor row still existing.
+    const firstPage = await loadReviewRows(null, false);
+    if (firstPage.error) throw new Error("无法读取待审核提名，请重试。");
+    reviewRows = firstPage.data ?? [];
+    cursor = null;
+    backwards = false;
+  }
+  const hasMore = reviewRows.length > REVIEW_PAGE_SIZE;
+  const nominations = reviewRows.slice(0, REVIEW_PAGE_SIZE);
+  if (backwards) nominations.reverse();
+  const hasPrevious = Boolean(cursor) && (!backwards || hasMore);
+  const hasNext = backwards ? Boolean(cursor) : hasMore;
+  const firstNomination = nominations[0];
+  const lastNomination = nominations[nominations.length - 1];
+  const previousReviewHref = hasPrevious && firstNomination
+    ? `/admin?reviewBefore=${encodeReviewCursor(firstNomination)}#pending-nominations` : null;
+  const nextReviewHref = hasNext && lastNomination
+    ? `/admin?reviewAfter=${encodeReviewCursor(lastNomination)}#pending-nominations` : null;
 
   const contestItems: AdminContestItem[] = (contests ?? []).map((contest) => ({
     id: contest.id,
@@ -168,12 +203,22 @@ export default async function AdminPage({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="pending-nominations" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>待审核提名</CardTitle>
         </CardHeader>
         <CardContent>
-          <NominationReviewTable nominations={nominationsWithProfiles} />
+          <NominationReviewTable
+            key={`${backwards ? "before" : "after"}:${cursor ? encodeReviewCursor(cursor) : "first"}`}
+            nominations={nominationsWithProfiles}
+          />
+          <TablePagination
+            label="待审核提名分页"
+            totalCount={totalPendingCount}
+            itemCount={nominationsWithProfiles.length}
+            previousHref={previousReviewHref}
+            nextHref={nextReviewHref}
+          />
         </CardContent>
       </Card>
     </div>

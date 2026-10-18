@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { getResultsHref, getResultsMembership, type SiteNavigationData } from "@/lib/page-navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createServerDataClient } from "@/lib/supabase/server-data";
+import { getPublicSiteSettings } from "@/lib/site-settings";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import type { SiteNavigationValue } from "@/lib/types";
 import { siteNavigationSettingsSchema } from "@/lib/validation/site-navigation";
@@ -12,18 +12,8 @@ const defaultResultsGroupId = "3098422a-97aa-482d-a9e6-a4d7e8a67f43";
 
 export const getSiteNavigationSettings = cache(
   async (): Promise<SiteNavigationValue> => {
-    const supabase = await createServerDataClient();
-    const { data, error } = await supabase
-      .from("site_settings")
-      .select("value")
-      .eq("key", "site_navigation")
-      .maybeSingle();
-
-    if (error) {
-      console.error("Failed to load site navigation settings.", error);
-    }
-
-    const parsed = siteNavigationSettingsSchema.safeParse(data?.value);
+    const settings = await getPublicSiteSettings();
+    const parsed = siteNavigationSettingsSchema.safeParse(settings.get("site_navigation"));
     return parsed.success
       ? parsed.data
       : { resultsGroupId: defaultResultsGroupId, nominationContestId: null };
@@ -42,7 +32,7 @@ export const getSiteNavigationData = cache(async (): Promise<SiteNavigationData>
   const supabase = await createClient();
   const { data, error } = await fetchAllRows(() => supabase
     .from("contests")
-    .select("id")
+    .select("id", { count: "exact" })
     .in("group_id", membership.resultsGroupIds)
     .is("archived_at", null)
     .neq("status", "draft")

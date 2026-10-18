@@ -26,6 +26,21 @@ import { getTournamentBracket } from "@/lib/tournament-bracket";
 
 type RelatedPage = { id: string; title: string; slug: string };
 
+async function loadRelatedPages(supabase: Awaited<ReturnType<typeof createClient>>, groupId: string) {
+  const { data: relations } = await supabase.from("contest_group_pages")
+    .select("page_id,sort_order").eq("contest_group_id", groupId)
+    .order("sort_order", { ascending: true });
+  const pageIds = (relations ?? []).map((relation) => relation.page_id);
+  if (pageIds.length === 0) return [];
+  const { data: pages } = await supabase.from("site_pages")
+    .select("id,title,slug").eq("visibility", "public").in("id", pageIds);
+  const pageById = new Map((pages ?? []).map((page) => [page.id, page]));
+  return pageIds.flatMap((pageId) => {
+    const page = pageById.get(pageId);
+    return page ? [page] : [];
+  });
+}
+
 function RelatedPages({ pages }: { pages: RelatedPage[] }) {
   return (
     <div className="space-y-1">
@@ -87,45 +102,26 @@ export default async function GroupDetailPage({
   const publicHomepageContests = (contests ?? []).filter(
     (contest) => contest.status !== "admin_nominating",
   );
-  const homepageContests = await loadGroupHomepageContests({
-    publicClient: supabase,
-    contests: publicHomepageContests,
-    loveVoteWeight: Number(group.love_vote_weight),
-  });
+  const showBracket = settings?.show_bracket === true;
+  const isRestricted = group.access_mode === "restricted";
+  const [homepageContests, relatedPages, bracket, canParticipate] = await Promise.all([
+    loadGroupHomepageContests({
+      publicClient: supabase,
+      contests: publicHomepageContests,
+      loveVoteWeight: Number(group.love_vote_weight),
+    }),
+    loadRelatedPages(supabase, id),
+    showBracket && settings?.featured_tournament_id
+      ? getTournamentBracket(supabase, settings.featured_tournament_id)
+      : null,
+    isRestricted
+      ? canParticipateContestGroup({ contestGroupId: group.id, profile })
+      : Boolean(profile),
+  ]);
   const { ongoing, upcoming, recent } =
     partitionGroupHomepageContests(homepageContests);
   const referenceNow = Date.now();
 
-  const { data: pageRelations } = await supabase
-    .from("contest_group_pages")
-    .select("page_id,sort_order")
-    .eq("contest_group_id", id)
-    .order("sort_order", { ascending: true });
-  const pageIds = (pageRelations ?? []).map((relation) => relation.page_id);
-  const { data: pageRows } =
-    pageIds.length > 0
-      ? await supabase
-          .from("site_pages")
-          .select("id,title,slug")
-          .eq("visibility", "public")
-          .in("id", pageIds)
-      : { data: [] as RelatedPage[] };
-  const pageById = new Map((pageRows ?? []).map((page) => [page.id, page]));
-  const relatedPages = pageIds.flatMap((pageId) => {
-    const page = pageById.get(pageId);
-    return page ? [page] : [];
-  });
-
-  const showBracket = settings?.show_bracket === true;
-  const bracket =
-    showBracket && settings?.featured_tournament_id
-      ? await getTournamentBracket(supabase, settings.featured_tournament_id)
-      : null;
-
-  const isRestricted = group.access_mode === "restricted";
-  const canParticipate = isRestricted
-    ? await canParticipateContestGroup({ contestGroupId: group.id, profile })
-    : Boolean(profile);
   const hasVotingContest = ongoing.some((contest) => contest.status === "voting");
   let nominatableContests = (contests ?? []).filter((contest) =>
     canNominateByStatus(contest, profile),

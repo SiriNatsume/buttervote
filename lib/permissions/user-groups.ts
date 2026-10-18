@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { requireUser } from "@/lib/auth";
 import { getEnvNumber } from "@/lib/security/token";
 import { createServerDataClient } from "@/lib/supabase/server-data";
@@ -27,13 +28,13 @@ export function getUserGroupMembershipExpiresAt(from = new Date()) {
   );
 }
 
-export async function getEffectiveUserGroupIds(
+export const getEffectiveUserGroupIds = cache(async (
   profileId: string,
-): Promise<string[]> {
+): Promise<string[]> => {
   const supabase = await createServerDataClient();
   const { data, error } = await fetchAllRows(() => supabase
     .from("user_group_members")
-    .select("user_group_id")
+    .select("user_group_id", { count: "exact" })
     .eq("profile_id", profileId)
     .is("revoked_at", null)
     .not("expires_at", "is", null)
@@ -41,7 +42,7 @@ export async function getEffectiveUserGroupIds(
   if (error) throw new Error("无法读取用户组资格，请重试。");
 
   return (data ?? []).map((membership) => membership.user_group_id);
-}
+});
 
 export async function getUserGroupMemberships(
   profileId: string,
@@ -99,10 +100,13 @@ export async function canParticipateContestGroup(params: {
     return true;
   }
 
-  const { data: allowedRows, error: allowedError } = await fetchAllRows(() => supabase
+  const [{ data: allowedRows, error: allowedError }, effectiveUserGroupIds] = await Promise.all([
+    fetchAllRows(() => supabase
     .from("contest_group_allowed_user_groups")
-    .select("user_group_id")
-    .eq("contest_group_id", params.contestGroupId).order("id"));
+    .select("user_group_id", { count: "exact" })
+    .eq("contest_group_id", params.contestGroupId).order("id")),
+    getEffectiveUserGroupIds(params.profile.id),
+  ]);
   if (allowedError) throw new Error("无法读取活动组允许的用户组，请重试。");
 
   const allowedUserGroupIds = new Set(
@@ -113,7 +117,6 @@ export async function canParticipateContestGroup(params: {
     return false;
   }
 
-  const effectiveUserGroupIds = await getEffectiveUserGroupIds(params.profile.id);
   return effectiveUserGroupIds.some((userGroupId) =>
     allowedUserGroupIds.has(userGroupId),
   );

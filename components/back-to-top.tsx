@@ -20,21 +20,30 @@ export function BackToTop() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    let frame: number | null = null;
     const updateVisibility = () =>
       setVisible(
         window.scrollY > 320 ||
           getScrollContainers().some((container) => container.scrollTop > 320),
       );
+    const scheduleUpdate = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        updateVisibility();
+      });
+    };
 
     updateVisibility();
-    window.addEventListener("scroll", updateVisibility, {
+    window.addEventListener("scroll", scheduleUpdate, {
       capture: true,
       passive: true,
     });
-    window.addEventListener("resize", updateVisibility);
+    window.addEventListener("resize", scheduleUpdate);
     return () => {
-      window.removeEventListener("scroll", updateVisibility, true);
-      window.removeEventListener("resize", updateVisibility);
+      window.removeEventListener("scroll", scheduleUpdate, true);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (frame !== null) window.cancelAnimationFrame(frame);
     };
   }, [pathname]);
 

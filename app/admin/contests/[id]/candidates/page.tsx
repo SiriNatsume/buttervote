@@ -22,23 +22,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Candidate, Vote } from "@/lib/types";
-
-function payloadIncludesCandidate(vote: Vote, candidateId: string) {
-  const payload = vote.payload;
-
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return false;
-  }
-
-  const record = payload as Record<string, unknown>;
-  return (
-    record.candidateId === candidateId ||
-    (Array.isArray(record.candidateIds) &&
-      record.candidateIds.includes(candidateId)) ||
-    (Array.isArray(record.ranking) && record.ranking.includes(candidateId))
-  );
-}
+import type { Candidate } from "@/lib/types";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 
 function CandidateEditCard({
   contestId,
@@ -127,7 +112,7 @@ export default async function AdminContestCandidatesPage({
   await requireAdmin();
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const supabase = await createServerDataClient();
-  const [{ data: contest }, { data: candidates }, { data: votes }] =
+  const [{ data: contest }, { data: candidates }, { data: voteUsage, error: usageError }] =
     await Promise.all([
       supabase
         .from("contests")
@@ -141,15 +126,13 @@ export default async function AdminContestCandidatesPage({
         )
         .eq("contest_id", id)
         .order("created_at", { ascending: true }),
-      supabase
-        .from("votes")
-        .select("id,contest_id,voter_id,payload,created_at")
-        .eq("contest_id", id),
+      fetchAllRows(() => supabase.rpc("get_admin_candidate_vote_usage", { p_contest_id: id }, { count: "exact" }).order("candidate_id")),
     ]);
 
   if (!contest) {
     notFound();
   }
+  if (usageError) throw new Error("无法读取候选项的历史投票状态，请重试。");
 
   const activeCandidates = (candidates ?? []).filter(
     (candidate) => candidate.is_active !== false,
@@ -157,12 +140,7 @@ export default async function AdminContestCandidatesPage({
   const deletedCandidates = (candidates ?? []).filter(
     (candidate) => candidate.is_active === false,
   );
-  const hasVotesByCandidate = new Map(
-    (candidates ?? []).map((candidate) => [
-      candidate.id,
-      (votes ?? []).some((vote) => payloadIncludesCandidate(vote, candidate.id)),
-    ]),
-  );
+  const candidatesWithVotes = new Set((voteUsage ?? []).map((row) => row.candidate_id));
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
@@ -250,7 +228,7 @@ export default async function AdminContestCandidatesPage({
               contestId={contest.id}
               descriptionMaxLength={contest.candidate_description_max_length}
               candidate={candidate}
-              hasVotes={hasVotesByCandidate.get(candidate.id) ?? false}
+              hasVotes={candidatesWithVotes.has(candidate.id)}
             />
           ))}
         </div>

@@ -76,7 +76,7 @@ export async function loadHomepageSidebarData(input: {
       ? fetchAllRows(() =>
           privateClient
             .from("votes")
-            .select("id,contest_id,payload")
+            .select("id,contest_id,payload", { count: "exact" })
             .eq("voter_id", profile.id)
             .in("contest_id", contestIds)
             .order("id", { ascending: true }),
@@ -86,7 +86,7 @@ export async function loadHomepageSidebarData(input: {
       ? fetchAllRows(() =>
           privateClient
             .from("love_vote_allocations")
-            .select("group_id,vote_id,candidate_id")
+            .select("group_id,vote_id,candidate_id", { count: "exact" })
             .eq("voter_id", profile.id)
             .in("group_id", [...activeGroupIds])
             .order("id", { ascending: true }),
@@ -95,13 +95,13 @@ export async function loadHomepageSidebarData(input: {
     needsMemberships
       ? fetchAllRows(() => privateClient
           .from("contest_group_allowed_user_groups")
-          .select("contest_group_id,user_group_id")
+          .select("contest_group_id,user_group_id", { count: "exact" })
           .in("contest_group_id", restrictedGroupIds).order("id"))
       : { data: [], error: null },
     needsMemberships
       ? fetchAllRows(() => privateClient
           .from("user_group_members")
-          .select("user_group_id")
+          .select("user_group_id", { count: "exact" })
           .eq("profile_id", profile.id)
           .is("revoked_at", null)
           .gt("expires_at", new Date(referenceNow).toISOString()).order("id"))
@@ -110,7 +110,7 @@ export async function loadHomepageSidebarData(input: {
       ? fetchAllRows(() =>
           privateClient
             .from("nominations")
-            .select("contest_id,status")
+            .select("contest_id,status", { count: "exact" })
             .eq("submitter_id", profile.id)
             .eq("contest_id", nominationContestId)
             .order("id", { ascending: true }),
@@ -141,7 +141,7 @@ export async function loadHomepageSidebarData(input: {
     ? await fetchAllRows(() =>
         (profile.role === "admin" ? privateClient : input.publicClient)
           .from("candidates")
-          .select("id,contest_id")
+          .select("id,contest_id", { count: "exact" })
           .in("id", selectedCandidateIds)
           .in("contest_id", supplementContests.map((contest) => contest.id))
           .eq("is_active", true)

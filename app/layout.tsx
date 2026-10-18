@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Inter, Noto_Sans_SC } from "next/font/google";
 import "highlight.js/styles/github.css";
 import "./globals.css";
@@ -6,7 +7,7 @@ import { AppProviders } from "@/components/app-providers";
 import { BackToTop } from "@/components/back-to-top";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { SiteNavigation } from "@/components/site-navigation";
+import { AsyncSiteNavigation } from "@/components/async-site-navigation";
 import { PageSectionProvider } from "@/components/page-section-provider";
 import { getSiteNavigationData } from "@/lib/site-navigation";
 
@@ -18,7 +19,7 @@ const inter = Inter({
 
 const notoSansSc = Noto_Sans_SC({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "variable",
   variable: "--font-noto-sans-sc",
   display: "swap",
 });
@@ -29,12 +30,12 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.png", apple: "/apple-icon.png" },
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const navigation = await getSiteNavigationData();
+  const navigation = getSiteNavigationData();
 
   return (
     <html lang="zh-CN">
@@ -48,7 +49,9 @@ export default async function RootLayout({
               {children}
             </main>
             <SiteFooter />
-            <SiteNavigation mobile navigation={navigation} />
+            <Suspense fallback={null}>
+              <AsyncSiteNavigation mobile navigation={navigation} />
+            </Suspense>
             <BackToTop />
           </PageSectionProvider>
         </AppProviders>

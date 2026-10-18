@@ -9,6 +9,7 @@ import { ContestCallingAdminPanel } from "@/components/contest-calling-admin-pan
 import { ContestCallingStage } from "@/components/contest-calling-stage";
 import { MascotEmptyState } from "@/components/mascot";
 import { ResultList } from "@/components/result-list";
+import { TablePagination } from "@/components/table-pagination";
 import { TournamentDrawSummaryCard } from "@/components/tournament-draw-summary-card";
 import { Heart } from "lucide-react";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
@@ -24,17 +25,17 @@ import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transiti
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
-import { fetchAllRows } from "@/lib/supabase-pagination";
+import { fetchPageRows } from "@/lib/supabase-pagination";
 import {
   normalizeContestCallingEvent,
   withContestCallingPhaseProgress,
 } from "@/lib/contest-calling";
-import { tallyVotes } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { resolvePreliminaryGroup } from "@/lib/tournament-rules";
 import { buildPublicDrawSummaries } from "@/lib/tournament-draw-summary";
-import { loadVisibleContestResultData } from "@/lib/visible-result-data";
-import type { ContestCallingEvent, ContestCallingSession, LoveVoteAllocation, TournamentEntry, Vote } from "@/lib/types";
+import { loadVisibleContestTallies } from "@/lib/visible-result-tallies";
+import { tallyResultsFromAggregates } from "@/lib/aggregate-tallies";
+import type { ContestCallingEvent, ContestCallingSession, TournamentEntry, Vote } from "@/lib/types";
 import { getProfileDisplayName } from "@/lib/qq-profile-display";
 
 type VoteProfile = {
@@ -46,7 +47,9 @@ type VoteProfile = {
   login_provider: string | null;
 };
 
-type AdminVoteRow = Vote & {
+type AuditVote = Pick<Vote, "id" | "contest_id" | "voter_id" | "created_at">;
+
+type AdminVoteRow = AuditVote & {
   profile?: VoteProfile | null;
 };
 
@@ -71,10 +74,12 @@ function formatJson(value: unknown) {
 
 export default async function ResultsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ votePage?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   await applyDueScheduledTransitionsForContest(id, { revalidate: false });
   const supabase = await createClient();
   const [{ data: contest }, profile] = await Promise.all([
@@ -94,13 +99,9 @@ export default async function ResultsPage({
 
   const isAdmin = profile?.role === "admin";
   const dataClient = isAdmin ? await createServerDataClient() : supabase;
-  const resultVisibilityByContest =
-    await loadContestResultVisibilityByContest(dataClient, [contest], {
+  const visibilityPromise = loadContestResultVisibilityByContest(dataClient, [contest], {
       includeAdminOverride: isAdmin,
     });
-  const resultVisibility =
-    resultVisibilityByContest.get(contest.id) ??
-    hiddenContestResultVisibility();
   let callingSessionQuery = dataClient
     .from("contest_calling_sessions")
     .select(
@@ -118,9 +119,23 @@ export default async function ResultsPage({
     ]);
   }
 
-  const { data: callingSessions } = await callingSessionQuery
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const [
+    { data: callingSessions }, { data: candidates }, { data: group },
+    { data: tournamentStage }, resultVisibilityByContest,
+  ] = await Promise.all([
+    callingSessionQuery.order("created_at", { ascending: false }).limit(1),
+    dataClient.from("candidates")
+      .select("id,name,description,image_path,nominator_display_name,is_active,created_at")
+      .eq("contest_id", id).order("created_at", { ascending: true }),
+    contest.group_id
+      ? supabase.from("contest_groups").select("id,name,love_vote_weight")
+          .eq("id", contest.group_id).maybeSingle()
+      : { data: null },
+    supabase.from("tournament_stages").select("id,tournament_id,kind,metadata")
+      .eq("contest_id", id).maybeSingle(),
+    visibilityPromise,
+  ]);
+  const resultVisibility = resultVisibilityByContest.get(contest.id) ?? hiddenContestResultVisibility();
   const callingSession =
     ((callingSessions?.[0] ?? null) as ContestCallingSession | null) ?? null;
   const callingCurrentStep = Math.max(
@@ -166,27 +181,26 @@ export default async function ResultsPage({
         ]
       : [];
 
-  const { data: candidates } = await dataClient
-    .from("candidates")
-    .select("id,name,description,image_path,nominator_display_name,is_active,created_at")
-    .eq("contest_id", id)
-    .order("created_at", { ascending: true });
   const visibleCandidates = isAdmin
     ? candidates ?? []
     : (candidates ?? []).filter((candidate) => candidate.is_active !== false);
 
-  const { data: group } = contest.group_id
-    ? await supabase
-        .from("contest_groups")
-        .select("id,name,love_vote_weight")
-        .eq("id", contest.group_id)
-        .maybeSingle()
-    : { data: null };
-  const { data: tournamentStage } = await supabase
-    .from("tournament_stages")
-    .select("id,tournament_id,kind,metadata")
-    .eq("contest_id", id)
-    .maybeSingle();
+  const auditPageSize = 50;
+  const scorePromise = canDisplayFullResults
+    ? loadVisibleContestTallies(dataClient, [id], { includeAdminOverride: isAdmin })
+    : Promise.resolve({ tallies: [], error: null });
+  const loveCountPromise = canDisplayFullResults && group && resultVisibility.showWeightedLoveScore
+    ? dataClient.rpc("get_visible_contest_love_vote_allocations", {
+        p_contest_ids: [id], p_include_admin_override: isAdmin,
+      }, { count: "exact", head: true })
+    : Promise.resolve({ count: 0, error: null });
+  const auditPromise = isAdmin
+    ? fetchPageRows<AuditVote>(() => dataClient.from("votes")
+        .select("id,contest_id,voter_id,created_at", { count: "exact" })
+        .eq("contest_id", id).order("created_at", { ascending: true }).order("id", { ascending: true }),
+      Number(query.votePage), auditPageSize)
+    : Promise.resolve(null);
+
   const drawLogTournamentId = canReadAllVotes
     ? tournamentStage?.tournament_id ?? null
     : null;
@@ -207,108 +221,45 @@ export default async function ResultsPage({
           .eq("tournament_id", tournamentStage.tournament_id)
       : { data: [] };
 
-  let votes: Vote[] = [];
-  let adminVoteRows: AdminVoteRow[] = [];
-  let loveAllocations: Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">> =
-    [];
-
-  if (isAdmin) {
-    const [
-      { data: voteRows, error: voteRowsError },
-      { data: loveRows, error: loveRowsError },
-    ] = await Promise.all([
-      fetchAllRows<Vote>(() =>
-        dataClient
-          .from("votes")
-          .select("id,contest_id,voter_id,payload,created_at")
-          .eq("contest_id", id)
-          .order("created_at", { ascending: true }),
-      ),
-      contest.group_id
-        ? fetchAllRows<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>(
-            () =>
-              dataClient
-                .from("love_vote_allocations")
-                .select("vote_id,candidate_id")
-                .eq("contest_id", id),
-          )
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-    if (voteRowsError || loveRowsError) {
-      console.error(
-        "Failed to load contest result votes.",
-        voteRowsError?.message ?? loveRowsError?.message,
-      );
-    } else {
-      const voterIds = [
-        ...new Set(
-          (voteRows ?? [])
-            .map((vote) => vote.voter_id)
-            .filter((voterId): voterId is string => Boolean(voterId)),
-        ),
-      ];
-      const voterProfiles: VoteProfile[] = [];
-      for (let index = 0; index < voterIds.length; index += 500) {
-        const voterIdChunk = voterIds.slice(index, index + 500);
-        const { data, error } = await fetchAllRows<VoteProfile>(() =>
-          dataClient
-            .from("profiles")
-            .select("id,display_name,email,qq_nickname,qq_user_id,login_provider")
-            .in("id", voterIdChunk),
-        );
-        if (error) {
-          console.error("Failed to load contest voter profiles.", error.message);
-          continue;
-        }
-        voterProfiles.push(...data);
-      }
-      const profileById = new Map(
-        voterProfiles.map((voterProfile) => [
-          voterProfile.id,
-          voterProfile,
-        ]),
-      );
-
-      adminVoteRows = (voteRows ?? []).map((vote) => ({
-        ...vote,
-        profile: vote.voter_id ? profileById.get(vote.voter_id) ?? null : null,
-      }));
-      votes = adminVoteRows;
-      loveAllocations = loveRows ?? [];
-    }
-  } else if (canDisplayFullResults) {
-    const publicResultData = await loadVisibleContestResultData(supabase, [id]);
-    if (publicResultData.error) {
-      console.error(
-        "Failed to load public contest result votes.",
-        publicResultData.error.message,
-      );
-    } else {
-      votes = publicResultData.votes.map((vote) => ({
-        ...vote,
-        voter_id: null,
-      }));
-      loveAllocations = publicResultData.loveAllocations.map((allocation) => ({
-        vote_id: allocation.vote_id,
-        candidate_id: allocation.candidate_id,
-      }));
-    }
+  const [scoreData, loveCountResult, auditResult] = await Promise.all([
+    scorePromise, loveCountPromise, auditPromise,
+  ]);
+  if (scoreData.error || loveCountResult.error) {
+    console.error("Failed to load contest result aggregates.", scoreData.error?.message ?? loveCountResult.error?.message);
+    throw new Error("无法读取活动结果，请稍后重试。");
   }
-
+  let adminVoteRows: AdminVoteRow[] = [];
+  let auditPage = 1;
+  let auditTotalPages = 1;
+  let auditTotalCount = 0;
+  if (auditResult) {
+    if (auditResult.error) throw new Error("无法读取投票记录，请稍后重试。");
+    auditPage = auditResult.page;
+    auditTotalPages = auditResult.totalPages;
+    auditTotalCount = auditResult.totalCount;
+    const voterIds = [...new Set(auditResult.data.flatMap((vote) => vote.voter_id ? [vote.voter_id] : []))];
+    const { data: voterProfiles, error } = voterIds.length > 0
+      ? await dataClient.from("profiles")
+          .select("id,display_name,email,qq_nickname,qq_user_id,login_provider").in("id", voterIds)
+      : { data: [], error: null };
+    if (error) console.error("Failed to load contest voter profiles.", error.message);
+    const profileById = new Map((voterProfiles ?? []).map((voterProfile) => [voterProfile.id, voterProfile]));
+    adminVoteRows = auditResult.data.map((vote) => ({
+      ...vote, profile: vote.voter_id ? profileById.get(vote.voter_id) ?? null : null,
+    }));
+  }
   const shouldHideLoveWeight = !resultVisibility.showWeightedLoveScore;
-  const results = tallyVotes({
-    voteType: contest.vote_type,
+  const results = canDisplayFullResults ? tallyResultsFromAggregates({
     candidates: visibleCandidates,
-    votes,
-    loveVoteWeight: group ? Number(group.love_vote_weight) : null,
-    loveVoteScoreMode: shouldHideLoveWeight ? "base" : "weighted",
-    loveAllocations,
-  });
+    tallies: scoreData.tallies,
+    loveVoteWeight: group ? Number(group.love_vote_weight) : 1,
+    showWeightedLoveScore: !shouldHideLoveWeight,
+  }) : [];
   const showLoveBreakdown =
     canDisplayFullResults &&
     resultVisibility.showWeightedLoveScore &&
     contest.status !== "voting";
-  const totalLoveVotes = loveAllocations.length;
+  const totalLoveVotes = loveCountResult.count ?? 0;
   const entryByCandidateId = new Map<string, TournamentEntry>();
 
   for (const entry of (tournamentEntries ?? []) as TournamentEntry[]) {
@@ -477,7 +428,7 @@ export default async function ResultsPage({
           )}
 
           {isAdmin && adminVoteRows.length > 0 ? (
-            <Card>
+            <Card id="audit-votes" className="scroll-mt-24">
               <CardHeader>
                 <CardTitle>投票记录</CardTitle>
               </CardHeader>
@@ -485,6 +436,7 @@ export default async function ResultsPage({
                 {adminVoteRows.map((vote) => (
                   <div
                     key={vote.id}
+                    data-vote-id={vote.id}
                     className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFFCF4]/80 p-4 text-sm"
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -517,6 +469,14 @@ export default async function ResultsPage({
                     </div>
                   </div>
                 ))}
+                <TablePagination
+                  label="投票记录分页"
+                  totalCount={auditTotalCount}
+                  itemCount={adminVoteRows.length}
+                  pageLabel={`第 ${auditPage} / ${auditTotalPages} 页`}
+                  previousHref={auditPage > 1 ? `/contests/${id}/results?votePage=${auditPage - 1}#audit-votes` : null}
+                  nextHref={auditPage < auditTotalPages ? `/contests/${id}/results?votePage=${auditPage + 1}#audit-votes` : null}
+                />
               </CardContent>
             </Card>
           ) : null}

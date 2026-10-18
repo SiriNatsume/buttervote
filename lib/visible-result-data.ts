@@ -40,10 +40,10 @@ export async function loadVisibleContestResultData(
   };
   const [voteResult, loveResult] = await Promise.all([
     fetchAllRows<VisibleVoteRow>(() =>
-      supabase.rpc("get_visible_contest_vote_payloads", args),
+      supabase.rpc("get_visible_contest_vote_payloads", args, { count: "exact" }),
     ),
     fetchAllRows<VisibleLoveVoteRow>(() =>
-      supabase.rpc("get_visible_contest_love_vote_allocations", args),
+      supabase.rpc("get_visible_contest_love_vote_allocations", args, { count: "exact" }),
     ),
   ]);
   const error = voteResult.error ?? loveResult.error;

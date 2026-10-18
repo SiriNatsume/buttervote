@@ -922,6 +922,14 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      get_admin_user_group_member_stats: {
+        Args: Record<string, never>;
+        Returns: Array<{ user_group_id: string; total: number; active: number }>;
+      };
+      get_admin_candidate_vote_usage: {
+        Args: { p_contest_id: string };
+        Returns: Array<{ candidate_id: string }>;
+      };
       get_qq_profile_display: {
         Args: { p_qq_user_id: string };
         Returns: { nickname: string | null; avatar_url: string | null; observed_at: string | null }[];

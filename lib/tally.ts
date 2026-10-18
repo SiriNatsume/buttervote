@@ -156,7 +156,7 @@ export function tallyVotes(params: {
     }
   }
 
-  const ordered = candidates
+  return rankTallyResults(candidates
     .map((candidate) => ({
       candidateId: candidate.id,
       name: candidate.name,
@@ -172,11 +172,13 @@ export function tallyVotes(params: {
       score:
         (normalScores.get(candidate.id) ?? 0) +
         (loveScores.get(candidate.id) ?? 0),
-      rank: 0,
-      position: 0,
-      resolvedRank: 0,
-    }))
-    .sort((a, b) => {
+    })));
+}
+
+export function rankTallyResults(
+  results: Array<Omit<TallyResult, "rank" | "position" | "resolvedRank">>,
+): TallyResult[] {
+  const ordered = [...results].sort((a, b) => {
       if (b.score !== a.score) {
         return b.score - a.score;
       }

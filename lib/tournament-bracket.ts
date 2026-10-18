@@ -1,25 +1,24 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { createServiceClient } from "@/lib/supabase/service";
-import { tallyVotes } from "@/lib/tally";
 import {
   entryOutcomeIsHiddenInMatch,
   inheritedCandidateIsPublic,
   latestBracketVersion,
   resolveBracketResultVisibility,
 } from "@/lib/tournament-bracket-visibility";
-import { loadVisibleContestResultData } from "@/lib/visible-result-data";
+import { loadVisibleContestTallies } from "@/lib/visible-result-tallies";
+import { visibleTallyScore } from "@/lib/visible-tally-score";
 import type {
   Candidate,
   Contest,
   Database,
-  LoveVoteAllocation,
   Tournament,
   TournamentEntry,
   TournamentMatch,
-  Vote,
 } from "@/lib/types";
 
 type BracketClient = SupabaseClient<Database>;
@@ -49,12 +48,6 @@ type BracketCandidate = Pick<
   | "inherited_from_candidate_id"
   | "is_active"
   | "created_at"
->;
-
-type PublicVoteRow = Pick<Vote, "id" | "contest_id" | "payload" | "created_at">;
-type PublicLoveVoteRow = Pick<
-  LoveVoteAllocation,
-  "vote_id" | "candidate_id" | "contest_id"
 >;
 
 type BracketTournament = Pick<
@@ -227,12 +220,15 @@ function matchCandidateIdForEntry(
 async function fetchCandidateLineage(
   supabase: BracketClient,
   seedCandidateIds: string[],
+  knownCandidates: BracketCandidate[],
 ) {
-  const candidates = new Map<string, BracketCandidate>();
-  let pending = [...new Set(seedCandidateIds)];
+  const candidates = new Map(knownCandidates.map((candidate) => [candidate.id, candidate]));
+  const requested = new Set(candidates.keys());
+  let pending = [...new Set(seedCandidateIds)].filter((id) => !requested.has(id));
 
   while (pending.length > 0) {
     const current = pending;
+    current.forEach((id) => requested.add(id));
     pending = [];
 
     const { data } = await supabase
@@ -251,11 +247,12 @@ async function fetchCandidateLineage(
       candidates.set(candidate.id, candidate);
       if (
         candidate.inherited_from_candidate_id &&
-        !candidates.has(candidate.inherited_from_candidate_id)
+        !requested.has(candidate.inherited_from_candidate_id)
       ) {
         pending.push(candidate.inherited_from_candidate_id);
       }
     }
+    pending = [...new Set(pending)];
   }
 
   return candidates;
@@ -268,137 +265,50 @@ async function tallyVisibleContestScores(
   fullResultVisibleContestIds: ReadonlySet<string>,
   weightedLoveScoreContestIds: ReadonlySet<string>,
 ) {
-  const details = new Map<
-    string,
-    {
-      byCandidate: Map<
-        string,
-        {
-          score: number;
-          normalScore: number;
-          loveScore: number;
-          loveVoteCount: number;
-          lastVoteAt: string | null;
-        }
-      >;
-      loveVoteWeight: number | null;
-      firstVoteAt: string | null;
-    }
-  >();
-  const visibleContests = contests.filter((contest) =>
-    fullResultVisibleContestIds.has(contest.id),
-  );
-  const visibleContestIds = visibleContests.map((contest) => contest.id);
-
-  if (visibleContestIds.length === 0) {
-    return details;
-  }
-
-  const groupIds = [
-    ...new Set(
-      visibleContests
-        .map((contest) => contest.group_id)
-        .filter((groupId): groupId is string => Boolean(groupId)),
-    ),
-  ];
-  const { data: groups } =
+  const details = new Map<string, {
+    byCandidate: Map<string, {
+      score: number;
+      normalScore: number;
+      loveScore: number;
+      loveVoteCount: number;
+      lastVoteAt: string | null;
+    }>;
+    loveVoteWeight: number | null;
+  }>();
+  const visibleContests = contests.filter((contest) => fullResultVisibleContestIds.has(contest.id));
+  if (visibleContests.length === 0) return details;
+  const contestById = new Map(visibleContests.map((contest) => [contest.id, contest]));
+  const groupIds = [...new Set(visibleContests.flatMap((contest) => contest.group_id ? [contest.group_id] : []))];
+  const [{ data: groups }, aggregateResult] = await Promise.all([
     groupIds.length > 0
-      ? await structureClient
-          .from("contest_groups")
-          .select("id,love_vote_weight")
-          .in("id", groupIds)
-      : { data: [] };
-  const loveVoteWeightByGroup = new Map(
-    (groups ?? []).map((group) => [group.id, Number(group.love_vote_weight)]),
-  );
-  const [{ data: candidates, error: candidatesError }, resultData] =
-    await Promise.all([
-      structureClient
-        .from("candidates")
-        .select(
-          "id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at",
-        )
-        .in("contest_id", visibleContestIds)
-        .eq("is_active", true)
-        .order("created_at", { ascending: true }),
-      loadVisibleContestResultData(supabase, visibleContestIds, {
-        includeAdminOverride: false,
-      }),
-    ]);
-
-  if (candidatesError || resultData.error) {
-    console.error(
-      "Failed to load tournament bracket scores.",
-      candidatesError?.message ?? resultData.error?.message,
-    );
+      ? structureClient.from("contest_groups").select("id,love_vote_weight").in("id", groupIds)
+      : { data: [] },
+    loadVisibleContestTallies(supabase, visibleContests.map((contest) => contest.id), { includeAdminOverride: false }),
+  ]);
+  if (aggregateResult.error) {
+    console.error("Failed to load tournament bracket tallies.", aggregateResult.error.message);
     return details;
   }
-
-  const candidatesByContest = new Map<string, BracketCandidate[]>();
-  for (const candidate of (candidates ?? []) as BracketCandidate[]) {
-    const current = candidatesByContest.get(candidate.contest_id) ?? [];
-    current.push(candidate);
-    candidatesByContest.set(candidate.contest_id, current);
-  }
-
-  const votesByContest = new Map<string, PublicVoteRow[]>();
-  for (const vote of resultData.votes as PublicVoteRow[]) {
-    const current = votesByContest.get(vote.contest_id) ?? [];
-    current.push(vote);
-    votesByContest.set(vote.contest_id, current);
-  }
-
-  const loveRowsByContest = new Map<string, PublicLoveVoteRow[]>();
-  for (const loveRow of resultData.loveAllocations as PublicLoveVoteRow[]) {
-    const current = loveRowsByContest.get(loveRow.contest_id) ?? [];
-    current.push(loveRow);
-    loveRowsByContest.set(loveRow.contest_id, current);
-  }
-
-  for (const contest of visibleContests) {
-    const weightedLoveScoreVisible = weightedLoveScoreContestIds.has(contest.id);
-    const results = tallyVotes({
-      voteType: contest.vote_type,
-      candidates: candidatesByContest.get(contest.id) ?? [],
-      votes: (votesByContest.get(contest.id) ?? []).map((vote) => ({
-        ...vote,
-        voter_id: null,
-      })),
-      loveVoteWeight: contest.group_id
-        ? loveVoteWeightByGroup.get(contest.group_id) ?? null
-        : null,
-      loveVoteScoreMode: weightedLoveScoreVisible ? "weighted" : "base",
-      loveAllocations: loveRowsByContest.get(contest.id) ?? [],
+  const weightByGroup = new Map((groups ?? []).map((group) => [group.id, Number(group.love_vote_weight)]));
+  for (const tally of aggregateResult.tallies) {
+    const contest = contestById.get(tally.contest_id);
+    if (!contest) continue;
+    const weight = contest.group_id ? weightByGroup.get(contest.group_id) : 1;
+    if (weight === undefined) continue;
+    const weighted = weightedLoveScoreContestIds.has(contest.id);
+    const current = details.get(contest.id) ?? {
+      byCandidate: new Map(),
+      loveVoteWeight: weighted && contest.group_id ? weight : null,
+    };
+    current.byCandidate.set(tally.candidate_id, {
+      score: visibleTallyScore(tally, weighted, weight),
+      normalScore: tally.normal_score,
+      loveScore: weighted ? tally.love_score : Math.round(tally.love_score / weight),
+      loveVoteCount: tally.love_vote_count,
+      lastVoteAt: tally.last_vote_at,
     });
-    details.set(
-      contest.id,
-      {
-        byCandidate: new Map(
-          results.map((result) => [
-            result.candidateId,
-            {
-              score: result.score,
-              normalScore: result.normalScore,
-              loveScore: result.loveScore,
-              loveVoteCount: result.loveVoteCount,
-              lastVoteAt: result.lastVoteAt,
-            },
-          ]),
-        ),
-        loveVoteWeight:
-          weightedLoveScoreVisible && contest.group_id
-            ? loveVoteWeightByGroup.get(contest.group_id) ?? null
-            : null,
-        firstVoteAt:
-          (votesByContest.get(contest.id) ?? []).reduce<string | null>(
-            (earliest, vote) =>
-              !earliest || vote.created_at < earliest ? vote.created_at : earliest,
-            null,
-          ),
-      },
-    );
+    details.set(contest.id, current);
   }
-
   return details;
 }
 
@@ -488,28 +398,28 @@ async function loadTournamentBracket(
         .filter((entryId): entryId is string => Boolean(entryId)),
     ),
   ];
-  const { data: entries } =
+  const [{ data: entries }, { data: matchCandidates }] = await Promise.all([
     entryIds.length > 0
-      ? await structureClient
+      ? structureClient
           .from("tournament_entries")
           .select(
             "id,root_candidate_id,current_candidate_id,source_candidate_id,screening_rank,preliminary_group,preliminary_rank,is_group_winner,status",
           )
           .in("id", entryIds)
-      : { data: [] };
-  const entryById = new Map(
-    ((entries ?? []) as BracketEntry[]).map((entry) => [entry.id, entry]),
-  );
-  const { data: matchCandidates } =
+      : { data: [] },
     contestIds.length > 0
-      ? await structureClient
+      ? structureClient
           .from("candidates")
           .select(
             "id,contest_id,name,description,image_path,nominator_display_name,inherited_from_candidate_id,is_active,created_at",
           )
           .in("contest_id", contestIds)
           .eq("is_active", true)
-      : { data: [] };
+      : { data: [] },
+  ]);
+  const entryById = new Map(
+    ((entries ?? []) as BracketEntry[]).map((entry) => [entry.id, entry]),
+  );
   const activeMatchCandidates = (matchCandidates ?? []) as BracketCandidate[];
   const candidateMap = await fetchCandidateLineage(structureClient, [
     ...candidateIdsFromEntries((entries ?? []) as BracketEntry[]),
@@ -517,11 +427,7 @@ async function loadTournamentBracket(
       candidate.id,
       candidate.inherited_from_candidate_id,
     ]),
-  ].filter((candidateId): candidateId is string => Boolean(candidateId)));
-
-  for (const candidate of activeMatchCandidates) {
-    candidateMap.set(candidate.id, candidate);
-  }
+  ].filter((candidateId): candidateId is string => Boolean(candidateId)), activeMatchCandidates);
 
   const visibilityContestIds = [
     ...new Set([
@@ -785,17 +691,17 @@ async function loadTournamentBracket(
   };
 }
 
-export async function getTournamentBracket(
+export const getTournamentBracket = cache(async (
   supabase: BracketClient,
   tournamentId: string,
-) {
+) => {
   try {
     return await loadTournamentBracket(supabase, tournamentId);
   } catch (error) {
     console.error("Failed to load tournament bracket.", error);
     return null;
   }
-}
+});
 
 export async function getTournamentBracketsForGroup(
   supabase: BracketClient,

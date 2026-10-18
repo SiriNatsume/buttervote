@@ -13,11 +13,11 @@ import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
-import { tallyVotes } from "@/lib/tally";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
 import { contestVoteHref } from "@/lib/vote-entry";
 import { formatDateTime } from "@/lib/time";
-import { loadVisibleContestResultData } from "@/lib/visible-result-data";
+import { loadVisibleContestTallies } from "@/lib/visible-result-tallies";
+import { tallyResultsFromAggregates } from "@/lib/aggregate-tallies";
 
 export default async function VotePage({
   params,
@@ -187,7 +187,7 @@ export default async function VotePage({
     );
 
   if (resultVisibilityByContest.get(contest.id)?.fullResultsVisible) {
-    const resultData = await loadVisibleContestResultData(
+    const resultData = await loadVisibleContestTallies(
       user.role === "admin" ? dataClient : supabase,
       [id],
       { includeAdminOverride: user.role === "admin" },
@@ -199,13 +199,11 @@ export default async function VotePage({
         resultData.error.message,
       );
     } else {
-      const results = tallyVotes({
-        voteType: contest.vote_type,
+      const results = tallyResultsFromAggregates({
         candidates: candidates ?? [],
-        votes: resultData.votes.map((vote) => ({ ...vote, voter_id: null })),
-        loveVoteWeight: group ? Number(group.love_vote_weight) : null,
-        loveVoteScoreMode: "base",
-        loveAllocations: resultData.loveAllocations,
+        tallies: resultData.tallies,
+        loveVoteWeight: group ? Number(group.love_vote_weight) : 1,
+        showWeightedLoveScore: false,
       });
 
       realtimeScores = Object.fromEntries(

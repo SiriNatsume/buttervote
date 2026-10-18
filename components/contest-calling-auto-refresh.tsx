@@ -77,7 +77,7 @@ export function ContestCallingAutoRefresh({
     let cancelled = false;
 
     async function checkCallingState() {
-      if (cancelled || inFlightRef.current || refreshCooldownRef.current !== null) {
+      if (cancelled || document.visibilityState !== "visible" || inFlightRef.current || refreshCooldownRef.current !== null) {
         return;
       }
 
