@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types";
+import { supabaseFetch } from "@/lib/supabase/fetch";
 
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,6 +13,7 @@ export function createServiceClient() {
   }
 
   return createClient<Database>(url, serviceRoleKey, {
+    global: { fetch: supabaseFetch },
     auth: {
       persistSession: false,
       autoRefreshToken: false,

@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createAppSession, getAppSessionCookieName, getAppSessionMaxAgeSeconds } from "@/lib/auth/app-session";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
+import { supabaseFetch } from "@/lib/supabase/fetch";
 import { sha256 } from "@/lib/security/token";
 import { qqEmailAddress } from "@/lib/validation/qq-auth";
 
@@ -11,6 +12,7 @@ export function createEmailAuthClient() {
   // Never write a second Supabase session into the browser. Both QQ methods use
   // app_sessions and the canonical profile id returned by resolveQQProfile.
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    global: { fetch: supabaseFetch },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }

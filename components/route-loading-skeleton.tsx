@@ -1,4 +1,9 @@
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+
+type PageLoadingSkeletonProps = {
+  variant?: "cards" | "detail" | "form" | "table";
+};
 
 function SkeletonBlock({ className }: { className?: string }) {
   return (
@@ -11,11 +16,9 @@ function SkeletonBlock({ className }: { className?: string }) {
   );
 }
 
-export function PageLoadingSkeleton({
+function SkeletonContent({
   variant = "cards",
-}: {
-  variant?: "cards" | "detail" | "form" | "table";
-}) {
+}: PageLoadingSkeletonProps) {
   if (variant === "table") {
     return (
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-12 sm:px-6">
@@ -70,6 +73,26 @@ export function PageLoadingSkeleton({
         {[0, 1, 2, 3, 4, 5].map((item) => (
           <SkeletonBlock key={item} className="h-72" />
         ))}
+      </div>
+    </div>
+  );
+}
+
+export function PageLoadingSkeleton(props: PageLoadingSkeletonProps) {
+  return (
+    <div className="relative w-full min-w-0" role="status" aria-label="正在加载页面">
+      <div aria-hidden="true">
+        <SkeletonContent {...props} />
+      </div>
+      <div className="route-loading-recovery absolute inset-x-4 top-24 z-10 mx-auto max-w-md rounded-2xl border border-[#EED8AA] bg-[#FFFCF4] p-5 text-center shadow-sm sm:inset-x-6">
+        <p className="font-semibold">页面加载时间较长</p>
+        <p className="mb-4 mt-2 text-sm text-muted-foreground">
+          网络可能较慢，请重新加载后再试。
+        </p>
+        {/* A native link works even when the browser cannot load JavaScript. */}
+        <a href="" className={buttonVariants({ size: "sm" })}>
+          重新加载
+        </a>
       </div>
     </div>
   );
