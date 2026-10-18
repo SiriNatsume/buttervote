@@ -19,7 +19,11 @@ export function HomepageSidebarView({ data }: { data: HomepageSidebarData }) {
   const [expanded, setExpanded] = useState(false);
   const showPersonal = data.signedIn && data.personalDataAvailable;
   const showNominations = data.signedIn && data.nominationDataAvailable;
-  const showNominationAction = data.canNominate && Boolean(data.nominationActionHref);
+  const guestActionHref = data.signedIn ? null : "/#public-contests";
+  const voteActionHref = data.actionHref ?? guestActionHref;
+  const nominationActionHref = data.nominationActionHref ?? guestActionHref;
+  const nominationHistoryHref = data.nominationHistoryHref ?? guestActionHref;
+  const showNominationAction = !data.signedIn || (data.canNominate && Boolean(nominationActionHref));
   const voteActionLabel = data.canSupplementLoveVote ? "补投真爱票" : "前往投票";
   const voteActionClassName = `${actionClassName} ${data.canSupplementLoveVote ? actionStyles.loveParticipation : actionStyles.participation} mt-3`;
   const activeFilter = showPersonal ? filter : "all";
@@ -62,8 +66,8 @@ export function HomepageSidebarView({ data }: { data: HomepageSidebarData }) {
             ))}
             {showPersonal && data.loveBalances === null ? <p className="mt-1.5 text-xs text-muted-foreground">真爱票额度暂时无法加载</p> : null}
           </div>
-          {data.actionHref ? (
-            <Link href={homepageActionHref(data.signedIn, data.actionHref)} className={voteActionClassName}>
+          {voteActionHref ? (
+            <Link href={homepageActionHref(data.signedIn, voteActionHref)} className={voteActionClassName}>
               {voteActionLabel}
             </Link>
           ) : (
@@ -91,11 +95,11 @@ export function HomepageSidebarView({ data }: { data: HomepageSidebarData }) {
             </div>
           </div>
           <div className={`mt-2 grid gap-3 ${showNominationAction ? "grid-cols-2" : "grid-cols-1"}`}>
-            {showNominationAction && data.nominationActionHref ? (
-              <Link href={homepageActionHref(data.signedIn, data.nominationActionHref)} className={nominationActionClassName}>前往提名</Link>
+            {showNominationAction && nominationActionHref ? (
+              <Link href={homepageActionHref(data.signedIn, nominationActionHref)} className={nominationActionClassName}>前往提名</Link>
             ) : null}
-            {data.nominationHistoryHref ? (
-              <Link href={homepageActionHref(data.signedIn, data.nominationHistoryHref)} className={secondaryActionClassName}>查看提名</Link>
+            {nominationHistoryHref ? (
+              <Link href={homepageActionHref(data.signedIn, nominationHistoryHref)} className={secondaryActionClassName}>查看提名</Link>
             ) : (
               <button type="button" disabled className={`${secondaryActionClassName} cursor-not-allowed opacity-50`}>查看提名</button>
             )}
