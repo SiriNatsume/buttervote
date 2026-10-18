@@ -4,6 +4,10 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ClipboardList, Send } from "lucide-react";
 import { StatusBadge } from "@/components/contest-badges";
 import {
+  ExistingNominationsList,
+  type ExistingNomination,
+} from "@/components/existing-nominations-list";
+import {
   MyNominationsGroupedList,
   type MyNominationItem,
 } from "@/components/my-nominations-grouped-list";
@@ -11,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import type { ContestStatus, NominationStatus } from "@/lib/types";
@@ -29,7 +34,7 @@ export default async function ContestMyNominationsPage({
   const { data: contest } = await supabase
     .from("contests")
     .select(
-      "id,title,status,group_id,max_nominations_per_user,candidate_description_max_length,nomination_image_required,archived_at",
+      "id,title,status,group_id,max_nominations_per_user,candidate_description_max_length,nomination_image_required,show_existing_nominations,show_nominator_info,archived_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -39,18 +44,57 @@ export default async function ContestMyNominationsPage({
   }
 
   const dataClient = await createServerDataClient();
-  const { data: nominations, error } = await dataClient
-    .from("nominations")
-    .select(
-      "id,contest_id,name,description,status,rejection_reason,rejected_at,created_at,image_path,image_width,image_height,image_size,nominator_display_name",
-    )
-    .eq("contest_id", contest.id)
-    .eq("submitter_id", user.id)
-    .order("created_at", { ascending: false });
+  const isAdmin = user.role === "admin";
+  const canShowExistingNominations =
+    ["nominating", "admin_nominating", "waiting"].includes(contest.status) &&
+    (isAdmin || contest.show_existing_nominations === true);
+  const [
+    { data: nominations, error },
+    { data: existingNominations, error: existingNominationsError },
+  ] = await Promise.all([
+    dataClient
+      .from("nominations")
+      .select(
+        "id,contest_id,name,description,status,rejection_reason,rejected_at,created_at,image_path,image_width,image_height,image_size,nominator_display_name",
+      )
+      .eq("contest_id", contest.id)
+      .eq("submitter_id", user.id)
+      .order("created_at", { ascending: false }),
+    canShowExistingNominations
+      ? fetchAllRows<ExistingNomination>(() =>
+          isAdmin
+            ? dataClient
+                .from("nominations")
+                .select(
+                  "id,name,description,status,nominator_display_name,created_at",
+                  { count: "exact" },
+                )
+                .eq("contest_id", contest.id)
+                .neq("status", "draft")
+                .order("created_at", { ascending: true })
+                .order("id", { ascending: true })
+            : supabase
+                .rpc(
+                  "get_visible_contest_nominations",
+                  { p_contest_id: contest.id },
+                  { count: "exact" },
+                )
+                .order("created_at", { ascending: true })
+                .order("id", { ascending: true }),
+        )
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
   if (error) {
     console.error("Failed to load personal contest nominations.", error.message);
     throw new Error("暂时无法读取你的提名，请稍后再试。");
+  }
+
+  if (existingNominationsError) {
+    console.error(
+      "Failed to load visible contest nominations.",
+      existingNominationsError.message,
+    );
   }
 
   const nominationItems: MyNominationItem[] = (nominations ?? []).map((item) => ({
@@ -64,7 +108,6 @@ export default async function ContestMyNominationsPage({
       nomination_image_required: contest.nomination_image_required === true,
     },
   }));
-  const isAdmin = user.role === "admin";
   const nominationOpen =
     contest.status === "nominating" ||
     (isAdmin && contest.status === "admin_nominating");
@@ -155,6 +198,22 @@ export default async function ContestMyNominationsPage({
             : "你还没有在本活动中提交过提名。"
         }
       />
+
+      {canShowExistingNominations ? (
+        <div className="mt-8">
+          {existingNominationsError ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              暂时无法读取本活动的已有提名，请稍后刷新。
+            </p>
+          ) : (
+            <ExistingNominationsList
+              nominations={existingNominations ?? []}
+              showNominatorInfo={contest.show_nominator_info !== false}
+              defaultOpen={false}
+            />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
