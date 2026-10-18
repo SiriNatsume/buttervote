@@ -9,10 +9,12 @@ import { HomepageHeroPanel } from "@/components/homepage-hero-panel";
 import { HomepageSidebar, HomepageSidebarSkeleton } from "@/components/homepage-sidebar";
 import { MascotEmptyState, MascotFigure } from "@/components/mascot";
 import { SiteFooter } from "@/components/site-footer";
-import { TournamentBracket } from "@/components/tournament-bracket";
+import { TournamentBracket, TournamentBracketSkeleton } from "@/components/tournament-bracket";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
+import { createServerDataClient } from "@/lib/supabase/server-data";
+import { getPublicSiteSettings } from "@/lib/site-settings";
 import { getTournamentBracket } from "@/lib/tournament-bracket";
 import type { TournamentBracketData } from "@/lib/tournament-bracket";
 import type { HomepageBracketValue, HomepageHeroValue } from "@/lib/types";
@@ -25,10 +27,23 @@ type Hero = {
   href: string;
 };
 
+async function FeaturedTournamentBracket({
+  data,
+}: {
+  data: Promise<TournamentBracketData | null>;
+}) {
+  const bracket = await data;
+  return bracket && bracket.rounds.length > 0 ? (
+    <div id="featured-tournament-bracket" className="mt-8 min-w-0 scroll-mt-24 lg:order-1 lg:mb-10 lg:mt-0">
+      <TournamentBracket bracket={bracket} />
+    </div>
+  ) : null;
+}
+
 export default async function HomePage() {
   await applyScheduledTransitions({ revalidate: false });
   const supabase = await createClient();
-  const [{ data: contests }, { data: heroSetting }, { data: bracketSetting }] =
+  const [{ data: contests }, settings] =
     await Promise.all([
       supabase
         .from("contests")
@@ -36,17 +51,20 @@ export default async function HomePage() {
         .is("archived_at", null)
         .neq("status", "draft")
         .order("created_at", { ascending: false }),
-      supabase
-        .from("site_settings")
-        .select("value")
-        .eq("key", "homepage_hero")
-        .maybeSingle(),
-      supabase
-        .from("site_settings")
-        .select("value")
-        .eq("key", "homepage_bracket")
-        .maybeSingle(),
+      getPublicSiteSettings(),
     ]);
+  const heroValue = (settings.get("homepage_hero") ?? null) as HomepageHeroValue | null;
+  const bracketValue = (settings.get("homepage_bracket") ?? null) as HomepageBracketValue | null;
+  const bracketTournamentId = settings.has("homepage_bracket")
+    ? bracketValue?.tournamentId ?? null
+    : heroValue?.featuredType === "tournament"
+      ? heroValue.featuredId ?? null
+      : null;
+  // Start the heavy diagram independently; the hero and activity links can
+  // stream as soon as their own data is ready.
+  const featuredBracket = bracketTournamentId
+    ? getTournamentBracket(supabase, bracketTournamentId)
+    : Promise.resolve(null);
   const publicContests = contests ?? [];
   const contestGroupIds = Array.from(
     new Set(
@@ -102,20 +120,12 @@ export default async function HomePage() {
       });
     }
   }
-  const heroValue = (heroSetting?.value ?? null) as HomepageHeroValue | null;
-  const bracketValue = (bracketSetting?.value ?? null) as HomepageBracketValue | null;
-  const bracketTournamentId =
-    bracketSetting !== null
-      ? bracketValue?.tournamentId ?? null
-      : heroValue?.featuredType === "tournament"
-        ? heroValue.featuredId ?? null
-        : null;
   let hero: Hero | null = null;
-  let featuredBracket: TournamentBracketData | null = null;
-  let heroTournamentBracket: TournamentBracketData | null = null;
 
   if (heroValue?.featuredType === "group" && heroValue.featuredId) {
-    const { data: group } = await supabase
+    const { data: group } = contestGroupById.has(heroValue.featuredId)
+      ? { data: contestGroupById.get(heroValue.featuredId) }
+      : await supabase
       .from("contest_groups")
       .select("id,name,description,cover_image_path")
       .eq("id", heroValue.featuredId)
@@ -133,7 +143,10 @@ export default async function HomePage() {
   }
 
   if (heroValue?.featuredType === "contest" && heroValue.featuredId) {
-    const { data: contest } = await supabase
+    const existingContest = publicContests.find((contest) => contest.id === heroValue.featuredId);
+    const { data: contest } = existingContest
+      ? { data: existingContest }
+      : await supabase
       .from("contests")
       .select("id,title,description,image_path")
       .eq("id", heroValue.featuredId)
@@ -152,28 +165,31 @@ export default async function HomePage() {
   }
 
   if (heroValue?.featuredType === "tournament" && heroValue.featuredId) {
-    const bracket = await getTournamentBracket(supabase, heroValue.featuredId);
-    heroTournamentBracket = bracket;
+    const dataClient = await createServerDataClient();
+    const [{ data: tournament }, { data: visibleMatches }] = await Promise.all([
+      dataClient.from("tournaments").select("id,name")
+        .eq("id", heroValue.featuredId).neq("status", "archived").maybeSingle(),
+      publicContests.length > 0 && bracketTournamentId === heroValue.featuredId
+        ? dataClient.from("tournament_matches").select("id,contests!inner(id)")
+            .eq("tournament_id", heroValue.featuredId)
+            .neq("contests.status", "draft")
+            .is("contests.archived_at", null)
+            .in("round", ["round_of_16", "quarterfinal", "semifinal", "final", "third_place"])
+            .limit(1)
+        : { data: [] },
+    ]);
 
-    if (bracket) {
+    if (tournament) {
       hero = {
-        title: heroValue.title || bracket.tournament.name,
+        title: heroValue.title || tournament.name,
         description: heroValue.description || "查看正赛赛程、投票进度和公开结果。",
         imagePath: heroValue.imagePath,
         href:
-          bracketTournamentId === heroValue.featuredId && bracket.rounds.length > 0
+          visibleMatches?.length
             ? "#featured-tournament-bracket"
             : "#public-contests",
       };
     }
-  }
-
-  if (bracketTournamentId) {
-    const bracket =
-      heroTournamentBracket && bracketTournamentId === heroValue?.featuredId
-        ? heroTournamentBracket
-        : await getTournamentBracket(supabase, bracketTournamentId);
-    featuredBracket = bracket && bracket.rounds.length > 0 ? bracket : null;
   }
 
   const heroImageUrl = getPublicImageUrl(hero?.imagePath);
@@ -208,6 +224,8 @@ export default async function HomePage() {
               {heroImageUrl ? (
                 <img
                   src={heroImageUrl}
+                  fetchPriority="high"
+                  decoding="async"
                   alt={`${activeHero.title} 首页图`}
                   data-homepage-hero-image="true"
                   className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.005]"
@@ -271,10 +289,14 @@ export default async function HomePage() {
               </MascotEmptyState>
             )}
           </section>
-          {featuredBracket ? (
-            <div id="featured-tournament-bracket" className="mt-8 min-w-0 scroll-mt-24 lg:order-1 lg:mb-10 lg:mt-0">
-              <TournamentBracket bracket={featuredBracket} />
-            </div>
+          {bracketTournamentId ? (
+            <Suspense fallback={
+              <div id="featured-tournament-bracket" className="mt-8 min-w-0 scroll-mt-24 lg:order-1 lg:mb-10 lg:mt-0">
+                <TournamentBracketSkeleton />
+              </div>
+            }>
+              <FeaturedTournamentBracket data={featuredBracket} />
+            </Suspense>
           ) : null}
           <div className="hidden lg:order-3 lg:block">
             <SiteFooter />

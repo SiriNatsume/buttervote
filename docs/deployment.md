@@ -2,6 +2,14 @@
 
 本文档用于把 Butter Vote 接入 GitHub 协作和 Cloudflare 自动部署。
 
+## 生产发布流程
+
+1. 在功能分支提交改动并推送到远端仓库。
+2. 创建目标为 `main` 的 PR，等待代码审查并处理反馈。
+3. 审查完成后合并 PR，由已连接仓库的 Cloudflare Workers Builds 自动部署。
+
+日常更新必须经过上述流程。只有维护者明确要求手动发布时，才使用下文的本地部署命令；不要将“部署更新”理解为跳过 PR 和审查直接执行 Wrangler。数据库迁移需要在 PR 中说明依赖顺序和目标环境的已执行状态，已应用的迁移不要重复执行。
+
 ## 不能提交到 GitHub 的内容
 
 - `.env`、`.env.local`、`.env.production`、`.dev.vars`
@@ -22,7 +30,7 @@ Cloudflare Workers Builds 连接 GitHub 仓库后，主站建议配置：
 - Production branch: `main`
 - Deploy command: `npm run deploy:raw`
 
-本地 Windows 部署可以继续使用：
+维护者明确要求手动发布时，本地 Windows 可使用：
 
 ```powershell
 npm run deploy
@@ -38,7 +46,7 @@ npm run deploy
 - Production branch: `main`
 - Deploy command: `npm run deploy:raw`
 
-本地 Windows 部署：
+维护者明确要求手动发布时，本地 Windows 可使用：
 
 ```powershell
 npm run deploy -- -Target cron

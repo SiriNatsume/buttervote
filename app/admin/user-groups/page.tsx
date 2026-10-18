@@ -19,37 +19,23 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { fetchAllRows } from "@/lib/supabase-pagination";
-import { getUserGroupMembershipStatus } from "@/lib/user-group-membership";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminUserGroupsPage() {
   await requireAdmin();
   const supabase = await createServerDataClient();
-  const [{ data: userGroups, error: groupsError }, { data: memberships, error: membersError }] = await Promise.all([
+  const [{ data: userGroups, error: groupsError }, { data: memberRows, error: membersError }] = await Promise.all([
     fetchAllRows(() => supabase
       .from("user_groups")
-      .select("id,name,description,join_code,created_at,updated_at")
+      .select("id,name,description,join_code,created_at,updated_at", { count: "exact" })
       .order("created_at", { ascending: false }).order("id")),
-    fetchAllRows(() => supabase.from("user_group_members").select("user_group_id,expires_at,revoked_at").order("id")),
+    fetchAllRows(() => supabase.rpc("get_admin_user_group_member_stats", {}, { count: "exact" }).order("user_group_id")),
   ]);
   if (groupsError || membersError) throw new Error("无法读取用户组及成员统计，请重试。");
-  const now = new Date();
-  const memberStats = new Map<string, { total: number; active: number }>();
-
-  for (const membership of memberships ?? []) {
-    const current = memberStats.get(membership.user_group_id) ?? {
-      total: 0,
-      active: 0,
-    };
-    current.total += 1;
-
-    if (getUserGroupMembershipStatus(membership, now) === "active") {
-      current.active += 1;
-    }
-
-    memberStats.set(membership.user_group_id, current);
-  }
+  const memberStats = new Map((memberRows ?? []).map((row) => [row.user_group_id, {
+    total: Number(row.total), active: Number(row.active),
+  }]));
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-10">

@@ -33,7 +33,7 @@ export async function loadVisibleContestTallies(
     supabase.rpc("get_visible_contest_tallies", {
       p_contest_ids: uniqueContestIds,
       p_include_admin_override: options.includeAdminOverride ?? false,
-    }),
+    }, { count: "exact" }).order("contest_id", { ascending: true }).order("candidate_id", { ascending: true }),
   );
 
   if (result.error) {

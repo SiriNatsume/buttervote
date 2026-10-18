@@ -321,8 +321,10 @@ function FinalColumn({
 
 export function TournamentBracket({
   bracket,
+  loading = false,
 }: {
   bracket: TournamentBracketData;
+  loading?: boolean;
 }) {
   if (bracket.rounds.length === 0) {
     return (
@@ -343,14 +345,16 @@ export function TournamentBracket({
   return (
     <section
       className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-[#EED8AA]/70 bg-[#FFF8E8] p-3 shadow-sm sm:p-4"
-      data-bracket-share-root
+      data-bracket-share-root={loading ? undefined : true}
+      role={loading ? "status" : undefined}
+      aria-busy={loading || undefined}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="min-w-0 truncate text-xl font-bold leading-7 text-[#4A2B1B] sm:text-2xl">
           {bracket.tournament.name}
         </h2>
         <div className="shrink-0">
-          <TournamentBracketShareButton bracket={bracket} />
+          {loading ? null : <TournamentBracketShareButton bracket={bracket} />}
         </div>
       </div>
 
@@ -417,4 +421,16 @@ export function TournamentBracket({
       </div>
     </section>
   );
+}
+
+// Reuse the fixed bracket geometry so streaming it in does not move the
+// activity list below it, including the responsive group-page scaling.
+export function TournamentBracketSkeleton() {
+  return <TournamentBracket loading bracket={{
+    tournament: { id: "loading", name: "正在加载对阵图…", status: "active", created_at: "", updated_at: "" },
+    groupId: null,
+    rounds: [{ key: "round_of_16", label: "16 强", matches: [] }],
+    hasVotingMatch: false,
+    visibilityVersion: "",
+  }} />;
 }

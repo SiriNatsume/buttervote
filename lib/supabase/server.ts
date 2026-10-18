@@ -1,8 +1,10 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import type { Database } from "@/lib/types";
 
-export async function createClient() {
+// Share the cookie-aware client only within the current server render.
+export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
@@ -31,4 +33,4 @@ export async function createClient() {
       },
     },
   );
-}
+});

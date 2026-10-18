@@ -34,6 +34,8 @@ export function ContestGroupCard({
             <img
               src={imageUrl}
               alt={`${group.name} 封面`}
+              loading="lazy"
+              decoding="async"
               className="size-full object-cover"
             />
           ) : (

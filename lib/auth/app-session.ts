@@ -33,25 +33,13 @@ export async function getProfileByAppSession(): Promise<Profile | null> {
 
   const { data: session } = await supabase
     .from("app_sessions")
-    .select("profile_id")
+    .select("profile:profiles!inner(id,email,display_name,role,qq_user_id,qq_nickname,qq_avatar_url,login_provider,created_at)")
     .eq("session_token_hash", sha256(sessionToken))
     .is("revoked_at", null)
     .gt("expires_at", new Date().toISOString())
-    .maybeSingle();
+    .maybeSingle<{ profile: Profile }>();
 
-  if (!session) {
-    return null;
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select(
-      "id,email,display_name,role,qq_user_id,qq_nickname,qq_avatar_url,login_provider,created_at",
-    )
-    .eq("id", session.profile_id)
-    .maybeSingle();
-
-  return profile;
+  return session?.profile ?? null;
 }
 
 export async function createAppSession(profileId: string, maxAgeSeconds = getAppSessionMaxAgeSeconds()) {

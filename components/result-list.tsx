@@ -100,6 +100,8 @@ export function ResultList({
                       <img
                         src={imageUrl}
                         alt={`${result.name} 图片`}
+                        loading="lazy"
+                        decoding="async"
                         className="size-full object-cover"
                       />
                     ) : (

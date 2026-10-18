@@ -224,6 +224,7 @@ export function NominationReviewTable({
         <div className="flex items-center gap-3">
           <Checkbox
             checked={allSelected}
+            aria-label="全选当前页提名"
             onCheckedChange={(value) => toggleAll(value === true)}
             disabled={isBatchPending || Boolean(pendingReview)}
           />
@@ -264,6 +265,7 @@ export function NominationReviewTable({
           return (
             <div
               key={nomination.id}
+              data-nomination-id={nomination.id}
               className="rounded-2xl border border-[#EED8AA]/70 bg-[#FFFCF4]/85 p-4 shadow-sm"
             >
               <div className="mb-3 flex items-center gap-2">
@@ -379,7 +381,7 @@ export function NominationReviewTable({
                 pendingReview.action === "reject";
 
               return (
-                <TableRow key={nomination.id}>
+                <TableRow key={nomination.id} data-nomination-id={nomination.id}>
                   <TableCell>
                     <Checkbox
                       checked={selectedSet.has(nomination.id)}

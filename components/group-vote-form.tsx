@@ -90,6 +90,8 @@ function CandidateImage({
         <img
           src={imageUrl}
           alt={`${candidate.name} 图片`}
+          loading="lazy"
+          decoding="async"
           className="size-full object-cover"
         />
       ) : (

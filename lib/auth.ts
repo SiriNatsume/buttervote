@@ -1,22 +1,25 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getProfileByAppSession } from "@/lib/auth/app-session";
 import { createClient } from "@/lib/supabase/server";
 import { safeReturnTo } from "@/lib/security/token";
 import type { Profile } from "@/lib/types";
 
-export async function getCurrentUser(): Promise<User | null> {
+export const getCurrentUser = cache(async (): Promise<User | null> => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   return user;
-}
+});
 
-export async function getCurrentProfile(): Promise<Profile | null> {
+// React's cache is request-scoped: a header and page share verification, but
+// revoked sessions and role changes are checked again on the next request.
+export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const appSessionProfile = await getProfileByAppSession();
 
   if (appSessionProfile) {
@@ -46,7 +49,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
     .maybeSingle();
 
   return data;
-}
+});
 
 export async function requireUser(returnTo?: string): Promise<Profile> {
   const profile = await getCurrentProfile();

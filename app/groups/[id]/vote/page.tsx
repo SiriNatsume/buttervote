@@ -13,10 +13,9 @@ import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
-import { tallyVotes } from "@/lib/tally";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
-import { loadVisibleContestResultData } from "@/lib/visible-result-data";
-import type { LoveVoteAllocation, Vote } from "@/lib/types";
+import { loadVisibleContestTallies } from "@/lib/visible-result-tallies";
+import { visibleTallyScore } from "@/lib/visible-tally-score";
 
 export default async function GroupVotePage({
   params,
@@ -67,6 +66,11 @@ export default async function GroupVotePage({
   }
 
   const contestIds = (contests ?? []).map((contest) => contest.id);
+  const visibilityPromise = loadContestResultVisibilityByContest(
+    user.role === "admin" ? dataClient : supabase,
+    contests ?? [],
+    { includeAdminOverride: user.role === "admin" },
+  );
   const [
     { data: candidates },
     { data: existingVotes },
@@ -131,12 +135,7 @@ export default async function GroupVotePage({
         : [],
     };
   });
-  const resultVisibilityByContest =
-    await loadContestResultVisibilityByContest(
-      user.role === "admin" ? dataClient : supabase,
-      contestsWithCandidates,
-      { includeAdminOverride: user.role === "admin" },
-    );
+  const resultVisibilityByContest = await visibilityPromise;
   const liveResultContestIds = contestsWithCandidates
     .filter(
       (contest) =>
@@ -148,7 +147,7 @@ export default async function GroupVotePage({
     | undefined;
 
   if (liveResultContestIds.length > 0) {
-    const resultData = await loadVisibleContestResultData(
+    const resultData = await loadVisibleContestTallies(
       user.role === "admin" ? dataClient : supabase,
       liveResultContestIds,
       { includeAdminOverride: user.role === "admin" },
@@ -160,44 +159,18 @@ export default async function GroupVotePage({
         resultData.error.message,
       );
     } else {
-      const votesByContest = new Map<string, Vote[]>();
-      const loveAllocationsByContest = new Map<
-        string,
-        Array<Pick<LoveVoteAllocation, "vote_id" | "candidate_id">>
-      >();
-
-      for (const vote of resultData.votes) {
-        const current = votesByContest.get(vote.contest_id) ?? [];
-        current.push({ ...vote, voter_id: null });
-        votesByContest.set(vote.contest_id, current);
-      }
-
-      for (const loveRow of resultData.loveAllocations) {
-        const current = loveAllocationsByContest.get(loveRow.contest_id) ?? [];
-        current.push({
-          vote_id: loveRow.vote_id,
-          candidate_id: loveRow.candidate_id,
-        });
-        loveAllocationsByContest.set(loveRow.contest_id, current);
-      }
-
+      const talliesByCandidate = new Map(resultData.tallies.map((tally) => [tally.candidate_id, tally]));
       realtimeScoresByContestId = Object.fromEntries(
         contestsWithCandidates
-          .filter((contest) => liveResultContestIds.includes(contest.id))
+          .filter((contest) => liveResultContestIds.includes(contest.id)
+            && contest.candidates.every((candidate) => talliesByCandidate.has(candidate.id)))
           .map((contest) => {
-            const results = tallyVotes({
-              voteType: contest.vote_type,
-              candidates: contest.candidates,
-              votes: votesByContest.get(contest.id) ?? [],
-              loveVoteWeight: Number(group.love_vote_weight),
-              loveVoteScoreMode: "base",
-              loveAllocations: loveAllocationsByContest.get(contest.id) ?? [],
-            });
-
             return [
               contest.id,
               Object.fromEntries(
-                results.map((result) => [result.candidateId, result.score]),
+                contest.candidates.map((candidate) => [candidate.id, visibleTallyScore(
+                  talliesByCandidate.get(candidate.id)!, false, Number(group.love_vote_weight),
+                )]),
               ),
             ];
           }),

@@ -18,3 +18,8 @@ pnpm-debug.log*
 *.tsbuildinfo
 .vercel
 .local/
+.DS_Store
+*.rsls
+*.rslsc
+supabase/.temp/
+docs/bot-group-sync.env
