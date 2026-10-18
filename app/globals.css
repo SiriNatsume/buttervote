@@ -508,6 +508,18 @@
 }
 
 @layer components {
+  /* Reveal recovery without waiting for hydration or a client-side timer. */
+  .route-loading-recovery {
+    visibility: hidden;
+    animation: reveal-loading-recovery 0s 10s forwards;
+  }
+
+  @keyframes reveal-loading-recovery {
+    to {
+      visibility: visible;
+    }
+  }
+
   .butter-panel {
     border: 1px solid rgb(238 216 170 / 0.7);
     border-radius: 1.5rem;

@@ -43,7 +43,7 @@ async function FeaturedTournamentBracket({
 export default async function HomePage() {
   await applyScheduledTransitions({ revalidate: false });
   const supabase = await createClient();
-  const [{ data: contests }, settings] =
+  const [{ data: contests, error: contestsError }, settings] =
     await Promise.all([
       supabase
         .from("contests")
@@ -53,6 +53,9 @@ export default async function HomePage() {
         .order("created_at", { ascending: false }),
       getPublicSiteSettings(),
     ]);
+  if (contestsError) {
+    throw new Error(`Failed to load homepage activities: ${contestsError.message}`);
+  }
   const heroValue = (settings.get("homepage_hero") ?? null) as HomepageHeroValue | null;
   const bracketValue = (settings.get("homepage_bracket") ?? null) as HomepageBracketValue | null;
   const bracketTournamentId = settings.has("homepage_bracket")
@@ -73,12 +76,15 @@ export default async function HomePage() {
         .filter((groupId): groupId is string => Boolean(groupId)),
     ),
   );
-  const { data: contestGroups } = contestGroupIds.length
+  const { data: contestGroups, error: contestGroupsError } = contestGroupIds.length
     ? await supabase
         .from("contest_groups")
         .select("id,name,description,cover_image_path,access_mode,love_vote_quota,love_vote_weight")
         .in("id", contestGroupIds)
-    : { data: [] as Array<ContestGroupCardGroup & HomepageVotingGroup> };
+    : { data: [] as Array<ContestGroupCardGroup & HomepageVotingGroup>, error: null };
+  if (contestGroupsError) {
+    throw new Error(`Failed to load homepage groups: ${contestGroupsError.message}`);
+  }
   const contestGroupById = new Map(
     (contestGroups ?? []).map((group) => [group.id, group]),
   );

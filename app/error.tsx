@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { MascotEmptyState } from "@/components/mascot";
 
 export default function ErrorPage({
@@ -14,7 +14,14 @@ export default function ErrorPage({
       <MascotEmptyState
         kind="errorState"
         title="页面暂时开小差了"
-        actions={<Button onClick={reset}>重试</Button>}
+        actions={
+          <>
+            <Button onClick={reset}>重试</Button>
+            <a href="" className={buttonVariants({ variant: "outline" })}>
+              重新加载页面
+            </a>
+          </>
+        }
       >
         请稍后再试，或返回上一页重新打开。
       </MascotEmptyState>
