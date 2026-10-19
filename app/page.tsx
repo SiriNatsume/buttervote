@@ -226,7 +226,7 @@ export default async function HomePage() {
               aria-label={`打开${activeHero.title}`}
               className="group block focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-400/70 focus-visible:ring-inset"
             >
-              <div className="flex min-h-[180px] items-center justify-center bg-[#FFF3D0] sm:min-h-[420px]">
+              <div className="bg-[#FFF3D0]">
               {heroImageUrl ? (
                 <img
                   src={heroImageUrl}
@@ -234,7 +234,7 @@ export default async function HomePage() {
                   decoding="async"
                   alt={`${activeHero.title} 首页图`}
                   data-homepage-hero-image="true"
-                  className="block h-auto max-h-[min(72vh,620px)] max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.005]"
+                  className="block h-auto w-full"
                 />
               ) : (
                 <div className="butter-placeholder flex min-h-[260px] w-full items-end justify-center px-6 pt-8 sm:min-h-[420px] sm:px-10 sm:pt-10">
