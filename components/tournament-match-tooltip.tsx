@@ -1,5 +1,6 @@
 "use client";
 
+import { VoteImage } from "@/components/vote-image";
 import Link from "next/link";
 import {
   type FocusEvent,
@@ -81,7 +82,7 @@ function ParticipantAvatar({
       )}
     >
       {participant?.imageUrl ? (
-        <img
+        <VoteImage maxWidth={128} sizes="48px"
           src={participant.imageUrl}
           alt={`${participant.name} 图片`}
           className="size-full object-cover"

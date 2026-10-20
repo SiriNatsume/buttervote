@@ -1,5 +1,6 @@
 ﻿"use server";
 
+import { invalidatePublicSiteSettings } from "@/lib/site-settings";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getActionAdmin, requireAdmin } from "@/lib/auth";
@@ -1950,6 +1951,9 @@ export async function updateHomepageHeroAction(formData: FormData) {
   }
   if (existingValue.imagePath) {
     value.imagePath = existingValue.imagePath;
+    value.imageWidth = existingValue.imageWidth;
+    value.imageHeight = existingValue.imageHeight;
+    value.imageVersion = existingValue.imageVersion;
   }
 
   const { error } = await supabase.from("site_settings").upsert({
@@ -1961,6 +1965,7 @@ export async function updateHomepageHeroAction(formData: FormData) {
     return actionFailure(error.message);
   }
 
+  invalidatePublicSiteSettings();
   revalidatePath("/");
   revalidatePath("/admin/homepage");
   return actionSuccess("首页 Hero 已保存");
@@ -2008,6 +2013,7 @@ export async function updateHomepageBracketAction(formData: FormData) {
     return actionFailure(error.message);
   }
 
+  invalidatePublicSiteSettings();
   revalidatePath("/");
   revalidatePath("/admin/homepage");
   return actionSuccess("首页对阵图已保存");
@@ -2090,6 +2096,7 @@ export async function updateSiteNavigationAction(formData: FormData) {
     return actionFailure(error.message);
   }
 
+  invalidatePublicSiteSettings();
   revalidatePath("/", "layout");
   revalidatePath("/admin/homepage");
   return actionSuccess("投票与提名入口已保存");
@@ -2120,6 +2127,9 @@ export async function updateHomepageHeroImageAction(imageMeta: unknown) {
   const value = {
     ...((existing?.value ?? {}) as HomepageHeroValue),
     imagePath: imageMetaParsed.data.imagePath,
+    imageWidth: imageMetaParsed.data.imageWidth,
+    imageHeight: imageMetaParsed.data.imageHeight,
+    imageVersion: Date.now(),
   };
 
   const { error } = await supabase.from("site_settings").upsert({
@@ -2131,6 +2141,7 @@ export async function updateHomepageHeroImageAction(imageMeta: unknown) {
     return { ok: false, error: error.message };
   }
 
+  invalidatePublicSiteSettings();
   revalidatePath("/");
   revalidatePath("/admin/homepage");
   return { ok: true };

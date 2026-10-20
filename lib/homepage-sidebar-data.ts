@@ -5,45 +5,37 @@ import { getCurrentProfile } from "@/lib/auth";
 import { canNominateByStatus } from "@/lib/contest-rules";
 import { loadGroupHomepageContests } from "@/lib/group-homepage-data";
 import {
-  buildHomepageSidebarData,
   isHomepageVotingOpen,
   type HomepageVotingContest,
   type HomepageVotingGroup,
 } from "@/lib/homepage-sidebar";
+import { buildHomepageSidebarSections } from "@/lib/homepage-sidebar-sections";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import { getSiteNavigationSettings } from "@/lib/site-navigation";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
 import type { Candidate, Database, LoveVoteAllocation, Nomination, Vote } from "@/lib/types";
 
-export async function loadHomepageSidebarData(input: {
+export type HomepageSidebarInput = {
   publicClient: SupabaseClient<Database>;
   contests: HomepageVotingContest[];
   groups: HomepageVotingGroup[];
-}) {
-  const referenceNow = Date.now();
+};
+
+async function loadHomepagePersonalInput(input: HomepageSidebarInput, referenceNow: number) {
   const activeContests = input.contests.filter((contest) =>
     isHomepageVotingOpen(contest, referenceNow),
   );
   const contestIds = activeContests.map((contest) => contest.id);
-  const groupsById = new Map(input.groups.map((group) => [group.id, group]));
-  const [profile, cards, navigation] = await Promise.all([
+  const [profile, navigation] = await Promise.all([
     getCurrentProfile(),
-    loadGroupHomepageContests({
-      publicClient: input.publicClient,
-      contests: activeContests,
-      loveVoteWeight: new Map(activeContests.map((contest) => [
-        contest.id,
-        (contest.group_id && groupsById.get(contest.group_id)?.love_vote_weight) || 1,
-      ])),
-    }),
     getSiteNavigationSettings(),
   ]);
   const nominationContestId = navigation.nominationContestId;
 
   const data = {
     ...input,
-    cards,
+    cards: [],
     activeCandidates: [] as Array<Pick<Candidate, "id" | "contest_id">>,
     navigation,
     signedIn: Boolean(profile),
@@ -57,7 +49,7 @@ export async function loadHomepageSidebarData(input: {
     nominationDataAvailable: true,
     referenceNow,
   };
-  if (!profile) return buildHomepageSidebarData(data);
+  if (!profile) return data;
 
   // QQ sessions use server-side identity checks. Every private query is scoped
   // to this authenticated profile; public candidates keep using the RLS client.
@@ -151,7 +143,7 @@ export async function loadHomepageSidebarData(input: {
   if (candidateResult.error) {
     console.error(`[homepage-sidebar] supplement candidates: ${candidateResult.error.message}`);
   }
-  return buildHomepageSidebarData({
+  return {
     ...data,
     allowedGroupIds: (allowedResult.data ?? [])
       .filter((row) => memberships.has(row.user_group_id))
@@ -164,5 +156,26 @@ export async function loadHomepageSidebarData(input: {
     loveDataAvailable: !loveResult.error,
     nominations: nominationResult.data ?? [],
     nominationDataAvailable: !nominationResult.error && !allowedResult.error && !membershipResult.error,
+  };
+}
+
+// Both sections share one identity/permission snapshot, while public card
+// loading never delays the personal overview or the start of private queries.
+export function loadHomepageSidebarSections(input: HomepageSidebarInput) {
+  const referenceNow = Date.now();
+  const activeContests = input.contests.filter((contest) =>
+    isHomepageVotingOpen(contest, referenceNow),
+  );
+  const groupsById = new Map(input.groups.map((group) => [group.id, group]));
+  const personalInput = loadHomepagePersonalInput(input, referenceNow);
+  const cards = loadGroupHomepageContests({
+    publicClient: input.publicClient,
+    contests: activeContests,
+    loveVoteWeight: new Map(activeContests.map((contest) => [
+      contest.id,
+      (contest.group_id && groupsById.get(contest.group_id)?.love_vote_weight) || 1,
+    ])),
   });
+
+  return buildHomepageSidebarSections(personalInput, cards);
 }

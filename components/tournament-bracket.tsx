@@ -1,3 +1,4 @@
+import { VoteImage } from "@/components/vote-image";
 import { Trophy, UserRound } from "lucide-react";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import type {
@@ -61,7 +62,7 @@ function ParticipantRow({
       )}
     >
       {imageUrl && participant ? (
-        <img
+        <VoteImage maxWidth={512} sizes="160px"
           src={imageUrl}
           alt=""
           className={cn(
@@ -274,7 +275,7 @@ function ChampionCard({ champion }: { champion: TournamentBracketParticipant }) 
       <div className="flex min-w-0 items-center justify-center gap-2">
         <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border-2 border-[#F0C45C] bg-white">
           {imageUrl ? (
-            <img
+            <VoteImage maxWidth={512} sizes="160px"
               src={imageUrl}
               alt={`${champion.name} 图片`}
               className="size-full object-cover"

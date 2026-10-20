@@ -1,3 +1,4 @@
+import { VoteImage } from "@/components/vote-image";
 import { ImageIcon } from "lucide-react";
 import type { Candidate } from "@/lib/types";
 import { getPublicImageUrl } from "@/lib/image/image-url";
@@ -32,7 +33,7 @@ export function CandidateCard({
         {showImage ? (
           <div className="size-24 shrink-0 overflow-hidden rounded-2xl bg-muted sm:size-28">
             {imageUrl ? (
-              <img
+              <VoteImage maxWidth={1024} sizes="(min-width: 768px) 320px, 50vw"
                 src={imageUrl}
                 alt={`${candidate.name} 图片`}
                 loading="lazy"

@@ -1,5 +1,6 @@
 "use client";
 
+import { VoteImage } from "@/components/vote-image";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Heart, ImageIcon } from "lucide-react";
@@ -53,7 +54,7 @@ function CandidateThumb({
   return (
     <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
       {imageUrl ? (
-        <img
+        <VoteImage maxWidth={256} sizes="48px"
           src={imageUrl}
           alt={`${candidate.name} 图片`}
           loading="lazy"

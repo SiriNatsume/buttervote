@@ -1,5 +1,6 @@
 "use client";
 
+import { VoteImage } from "@/components/vote-image";
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronRight, ClipboardCheck, Heart, ImageIcon } from "lucide-react";
@@ -87,7 +88,7 @@ function CandidateImage({
   return (
     <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
       {imageUrl ? (
-        <img
+        <VoteImage maxWidth={256} sizes="64px"
           src={imageUrl}
           alt={`${candidate.name} 图片`}
           loading="lazy"

@@ -1,5 +1,6 @@
 "use client";
 
+import { VoteImage } from "@/components/vote-image";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +40,7 @@ function ParticipantImage({
       )}
     >
       {participant.imageUrl ? (
-        <img
+        <VoteImage maxWidth={128} sizes="32px"
           src={participant.imageUrl}
           alt=""
           className="size-full object-cover"
@@ -59,7 +60,7 @@ function ContestThumbnail({ contest }: { contest: GroupHomepageContest }) {
   return (
     <div className="aspect-video w-24 shrink-0 self-center overflow-hidden border-r border-[#DCC69F]/70 bg-muted sm:w-28">
       {contest.imageUrl ? (
-        <img
+        <VoteImage maxWidth={512} sizes="112px"
           src={contest.imageUrl}
           alt=""
           className="size-full object-cover"
