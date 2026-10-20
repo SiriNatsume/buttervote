@@ -236,6 +236,9 @@ export type HomepageHeroValue = {
   description?: string;
   showDescription?: boolean;
   imagePath?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  imageVersion?: number;
 };
 
 export type HomepageBracketValue = {
@@ -616,7 +619,14 @@ type Tables = {
       created_at?: string;
       updated_at?: string;
     },
-    Partial<Omit<Contest, "id" | "created_at">>
+    Partial<Omit<Contest, "id" | "created_at">>,
+    [{
+      foreignKeyName: "contests_group_id_fkey";
+      columns: ["group_id"];
+      isOneToOne: false;
+      referencedRelation: "contest_groups";
+      referencedColumns: ["id"];
+    }]
   >;
   contest_groups: Table<
     ContestGroup,

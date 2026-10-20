@@ -4,6 +4,10 @@ import { HallOfFameGallery } from "@/components/hall-of-fame-gallery";
 import { getHallOfFamePosterUrl } from "@/lib/hall-of-fame";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 
+// This page already renders live entries on every request. Declare that before
+// the SDK can catch Next's no-store prerender probe as a database error.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "冠军英灵殿 | Butter Vote",
   description: "浏览 Butter Vote 历届赛事胜者海报。",

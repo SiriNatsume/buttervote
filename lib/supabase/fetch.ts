@@ -23,6 +23,9 @@ export function createSupabaseFetch({
 
     return fetch(input, {
       ...init,
+      // Database/auth reads stay live even with the shared Cloudflare cache
+      // enabled. Public settings opt into caching around the loader instead.
+      cache: "no-store",
       signal: callerSignal ? AbortSignal.any([callerSignal, timeout]) : timeout,
     });
   };

@@ -6,6 +6,7 @@ import {
   type ContestGroupCardGroup,
 } from "@/components/contest-group-card";
 import { HomepageHeroPanel } from "@/components/homepage-hero-panel";
+import { VoteImage } from "@/components/vote-image";
 import { HomepageSidebar, HomepageSidebarSkeleton } from "@/components/homepage-sidebar";
 import { MascotEmptyState, MascotFigure } from "@/components/mascot";
 import { SiteFooter } from "@/components/site-footer";
@@ -18,12 +19,13 @@ import { getPublicSiteSettings } from "@/lib/site-settings";
 import { getTournamentBracket } from "@/lib/tournament-bracket";
 import type { TournamentBracketData } from "@/lib/tournament-bracket";
 import type { HomepageBracketValue, HomepageHeroValue } from "@/lib/types";
-import type { HomepageVotingGroup } from "@/lib/homepage-sidebar";
 
 type Hero = {
   title: string;
   description: string;
   imagePath?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
   href: string;
 };
 
@@ -41,18 +43,19 @@ async function FeaturedTournamentBracket({
 }
 
 export default async function HomePage() {
-  await applyScheduledTransitions({ revalidate: false });
+  // Settings and client creation do not depend on due status transitions.
+  // Keep the transition check synchronous so activity boundaries stay exact.
   const supabase = await createClient();
-  const [{ data: contests, error: contestsError }, settings] =
-    await Promise.all([
-      supabase
-        .from("contests")
-        .select("id,title,description,status,vote_type,image_path,group_id,show_candidate_image,love_vote_enabled,max_nominations_per_user,live_results_enabled,voting_starts_at,voting_ends_at,updated_at")
-        .is("archived_at", null)
-        .neq("status", "draft")
-        .order("created_at", { ascending: false }),
-      getPublicSiteSettings(),
-    ]);
+  const contestsPromise = applyScheduledTransitions({ revalidate: false }).then(() => supabase
+    .from("contests")
+    .select("id,title,description,status,vote_type,image_path,image_width,image_height,group_id,show_candidate_image,love_vote_enabled,max_nominations_per_user,live_results_enabled,voting_starts_at,voting_ends_at,updated_at,group:contest_groups!contests_group_id_fkey(id,name,description,cover_image_path,cover_image_width,cover_image_height,access_mode,love_vote_quota,love_vote_weight)")
+    .is("archived_at", null)
+    .neq("status", "draft")
+    .order("created_at", { ascending: false }));
+  const [{ data: contests, error: contestsError }, settings] = await Promise.all([
+    contestsPromise,
+    getPublicSiteSettings(),
+  ]);
   if (contestsError) {
     throw new Error(`Failed to load homepage activities: ${contestsError.message}`);
   }
@@ -68,26 +71,11 @@ export default async function HomePage() {
   const featuredBracket = bracketTournamentId
     ? getTournamentBracket(supabase, bracketTournamentId)
     : Promise.resolve(null);
-  const publicContests = contests ?? [];
-  const contestGroupIds = Array.from(
-    new Set(
-      publicContests
-        .map((contest) => contest.group_id)
-        .filter((groupId): groupId is string => Boolean(groupId)),
-    ),
-  );
-  const { data: contestGroups, error: contestGroupsError } = contestGroupIds.length
-    ? await supabase
-        .from("contest_groups")
-        .select("id,name,description,cover_image_path,access_mode,love_vote_quota,love_vote_weight")
-        .in("id", contestGroupIds)
-    : { data: [] as Array<ContestGroupCardGroup & HomepageVotingGroup>, error: null };
-  if (contestGroupsError) {
-    throw new Error(`Failed to load homepage groups: ${contestGroupsError.message}`);
-  }
   const contestGroupById = new Map(
-    (contestGroups ?? []).map((group) => [group.id, group]),
+    (contests ?? []).flatMap((contest) => contest.group ? [[contest.group.id, contest.group] as const] : []),
   );
+  const contestGroups = [...contestGroupById.values()];
+  const publicContests = contests ?? [];
   const contestCountByGroup = new Map<string, number>();
 
   for (const contest of publicContests) {
@@ -133,7 +121,7 @@ export default async function HomePage() {
       ? { data: contestGroupById.get(heroValue.featuredId) }
       : await supabase
       .from("contest_groups")
-      .select("id,name,description,cover_image_path")
+      .select("id,name,description,cover_image_path,cover_image_width,cover_image_height")
       .eq("id", heroValue.featuredId)
       .maybeSingle();
 
@@ -143,6 +131,8 @@ export default async function HomePage() {
         description:
           heroValue.description || group.description || "参与联合投票。",
         imagePath: heroValue.imagePath || group.cover_image_path,
+        imageWidth: heroValue.imagePath ? heroValue.imageWidth : group.cover_image_width,
+        imageHeight: heroValue.imagePath ? heroValue.imageHeight : group.cover_image_height,
         href: `/groups/${group.id}`,
       };
     }
@@ -154,7 +144,7 @@ export default async function HomePage() {
       ? { data: existingContest }
       : await supabase
       .from("contests")
-      .select("id,title,description,image_path")
+      .select("id,title,description,image_path,image_width,image_height")
       .eq("id", heroValue.featuredId)
       .is("archived_at", null)
       .maybeSingle();
@@ -165,6 +155,8 @@ export default async function HomePage() {
         description:
           heroValue.description || contest.description || "为你支持的选项投票。",
         imagePath: heroValue.imagePath || contest.image_path,
+        imageWidth: heroValue.imagePath ? heroValue.imageWidth : contest.image_width,
+        imageHeight: heroValue.imagePath ? heroValue.imageHeight : contest.image_height,
         href: `/contests/${contest.id}`,
       };
     }
@@ -190,6 +182,8 @@ export default async function HomePage() {
         title: heroValue.title || tournament.name,
         description: heroValue.description || "查看正赛赛程、投票进度和公开结果。",
         imagePath: heroValue.imagePath,
+        imageWidth: heroValue.imageWidth,
+        imageHeight: heroValue.imageHeight,
         href:
           visibleMatches?.length
             ? "#featured-tournament-bracket"
@@ -198,7 +192,10 @@ export default async function HomePage() {
     }
   }
 
-  const heroImageUrl = getPublicImageUrl(hero?.imagePath);
+  const originalHeroImageUrl = getPublicImageUrl(hero?.imagePath);
+  const heroImageUrl = originalHeroImageUrl && heroValue?.imagePath && heroValue.imageVersion
+    ? `${originalHeroImageUrl}?v=${heroValue.imageVersion}`
+    : originalHeroImageUrl;
   const featuredContest = publicContests.find(
     (contest) => contest.status === "voting",
   ) ?? publicContests[0];
@@ -228,8 +225,11 @@ export default async function HomePage() {
             >
               <div className="bg-[#FFF3D0]">
               {heroImageUrl ? (
-                <img
+                <VoteImage
                   src={heroImageUrl}
+                  width={hero?.imageWidth || (hero?.imagePath === "homepage/hero.webp" ? 1280 : undefined)}
+                  height={hero?.imageHeight || (hero?.imagePath === "homepage/hero.webp" ? 720 : undefined)}
+                  sizes="(min-width: 1536px) 1132px, (min-width: 1024px) calc(100vw - 406px), calc(100vw - 32px)"
                   fetchPriority="high"
                   decoding="async"
                   alt={`${activeHero.title} 首页图`}

@@ -1,16 +1,30 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { HomepageSidebarView } from "@/components/homepage-sidebar-view";
-import { loadHomepageSidebarData } from "@/lib/homepage-sidebar-data";
-import type { HomepageVotingContest, HomepageVotingGroup } from "@/lib/homepage-sidebar";
-import type { Database } from "@/lib/types";
+import { Suspense } from "react";
+import { HomepageMatchesView } from "@/components/homepage-sidebar-view";
+import { HomepagePersonalOverview } from "@/components/homepage-personal-overview";
+import { loadHomepageSidebarSections, type HomepageSidebarInput } from "@/lib/homepage-sidebar-data";
+import type { HomepageSidebarData } from "@/lib/homepage-sidebar";
 
-export async function HomepageSidebar(props: {
-  publicClient: SupabaseClient<Database>;
-  contests: HomepageVotingContest[];
-  groups: HomepageVotingGroup[];
-}) {
-  const data = await loadHomepageSidebarData(props);
-  return <HomepageSidebarView data={data} />;
+async function PersonalOverview({ data }: { data: Promise<HomepageSidebarData> }) {
+  return <HomepagePersonalOverview data={await data} />;
+}
+
+async function OngoingMatches({ data }: { data: Promise<HomepageSidebarData> }) {
+  const { signedIn, personalDataAvailable, pendingCount, matches, referenceNow } = await data;
+  return <HomepageMatchesView data={{ signedIn, personalDataAvailable, pendingCount, matches, referenceNow }} />;
+}
+
+export function HomepageSidebar(props: HomepageSidebarInput) {
+  const data = loadHomepageSidebarSections(props);
+  return (
+    <div className="space-y-5">
+      <Suspense fallback={<div className="h-[26rem] animate-pulse rounded-3xl border border-[#EED8AA]/80 bg-[#FFF8E8] motion-reduce:animate-none" role="status" aria-label="正在加载我的投票与提名" />}>
+        <PersonalOverview data={data.personal} />
+      </Suspense>
+      <Suspense fallback={<div className="h-80 animate-pulse rounded-2xl border border-[#EED8AA]/80 bg-[#FFF8E8] motion-reduce:animate-none" role="status" aria-label="正在加载进行中的对阵" />}>
+        <OngoingMatches data={data.matches} />
+      </Suspense>
+    </div>
+  );
 }
 
 export function HomepageSidebarSkeleton() {

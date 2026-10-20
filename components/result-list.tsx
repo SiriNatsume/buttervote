@@ -1,3 +1,4 @@
+import { VoteImage } from "@/components/vote-image";
 import { Heart, ImageIcon, Trophy } from "lucide-react";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { buildResultScoreProgressModel } from "@/lib/result-score-progress";
@@ -97,7 +98,7 @@ export function ResultList({
                 {showImage ? (
                   <div className="size-14 shrink-0 overflow-hidden rounded-2xl bg-muted sm:size-16">
                     {imageUrl ? (
-                      <img
+                      <VoteImage maxWidth={256} sizes="48px"
                         src={imageUrl}
                         alt={`${result.name} 图片`}
                         loading="lazy"

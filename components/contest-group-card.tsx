@@ -1,3 +1,4 @@
+import { VoteImage } from "@/components/vote-image";
 import Link from "next/link";
 import { ArrowRight, ImageIcon } from "lucide-react";
 import type { ContestGroup } from "@/lib/types";
@@ -31,7 +32,7 @@ export function ContestGroupCard({
       <div className="p-3 pb-0">
         <div className="aspect-video overflow-hidden rounded-2xl bg-muted">
           {imageUrl ? (
-            <img
+            <VoteImage maxWidth={1024} sizes="(min-width: 1440px) 350px, (min-width: 768px) 50vw, 100vw"
               src={imageUrl}
               alt={`${group.name} 封面`}
               loading="lazy"

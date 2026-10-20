@@ -1,5 +1,6 @@
 "use client";
 
+import { VoteImage } from "@/components/vote-image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ImageIcon, Megaphone, Search, Trophy } from "lucide-react";
@@ -72,7 +73,7 @@ function CandidateThumb({ result }: { result: TallyResult }) {
   return (
     <div className="size-11 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-12">
       {imageUrl ? (
-        <img
+        <VoteImage maxWidth={256} sizes="48px"
           src={imageUrl}
           alt={`${result.name} 图片`}
           className="size-full object-cover"

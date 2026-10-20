@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "vote-site",
-  "main": ".open-next/worker.js",
+  "main": "worker.mjs",
   "compatibility_date": "2026-05-12",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
@@ -15,6 +15,24 @@
   "cache": {
     "enabled": true
   },
+  "images": {
+    "binding": "IMAGES"
+  },
+  "r2_buckets": [
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "buttervote-next-cache" }
+  ],
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "vote-site" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "NEXT_TAG_CACHE_DO_SHARDED", "class_name": "DOShardedTagCache" },
+      { "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1-public-settings-cache", "new_sqlite_classes": ["DOShardedTagCache", "DOQueueHandler"] }
+  ],
   "routes": [
     {
       "pattern": "buttervote.com",

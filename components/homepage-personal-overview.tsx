@@ -1,0 +1,100 @@
+import Link from "next/link";
+import { Heart } from "lucide-react";
+import { MascotFigure } from "@/components/mascot";
+import { homepageActionHref, type HomepageSidebarData } from "@/lib/homepage-sidebar";
+import { actionStyles } from "@/lib/action-styles";
+
+const actionClassName = "flex h-11 w-full items-center justify-center px-3 py-2 text-center text-xs font-medium lg:h-10";
+const nominationActionClassName = `${actionClassName} ${actionStyles.nomination}`;
+const secondaryActionClassName = `${actionClassName} ${actionStyles.view}`;
+
+export function HomepagePersonalOverview({ data }: {
+  data: Omit<HomepageSidebarData, "matches">;
+}) {
+  const showPersonal = data.signedIn && data.personalDataAvailable;
+  const showNominations = data.signedIn && data.nominationDataAvailable;
+  const guestActionHref = data.signedIn ? null : "/#public-contests";
+  const voteActionHref = data.actionHref ?? guestActionHref;
+  const nominationActionHref = data.nominationActionHref ?? guestActionHref;
+  const nominationHistoryHref = data.nominationHistoryHref ?? guestActionHref;
+  const showNominationAction = !data.signedIn || (data.canNominate && Boolean(nominationActionHref));
+  const voteActionLabel = data.canSupplementLoveVote ? "补投真爱票" : "前往投票";
+  const voteActionClassName = `${actionClassName} ${data.canSupplementLoveVote ? actionStyles.loveParticipation : actionStyles.participation} mt-3`;
+  const progress = data.eligibleCount ? (data.votedCount / data.eligibleCount) * 100 : 0;
+
+  return (
+    <div className="relative isolate overflow-hidden rounded-3xl border border-[#EED8AA]/80 bg-[#FFF8E8] p-4 shadow-sm">
+      <MascotFigure kind="homepageWelcome" decorative className="absolute right-3 top-3 -z-10 h-28 w-20 opacity-90" />
+      <section aria-labelledby="homepage-my-votes">
+        <h2 id="homepage-my-votes" className="relative z-10 mb-2 text-base font-semibold">我的投票</h2>
+        <p className="text-xs text-muted-foreground">当前待投</p>
+        <p className="mt-1 flex items-baseline gap-2 text-[2.5rem] font-semibold leading-none tabular-nums tracking-tight text-[#6A3E21]">
+          {showPersonal ? String(data.pendingCount).padStart(2, "0") : "—"}<span className="text-xs font-normal text-muted-foreground">场</span>
+        </p>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#EFDFC0]" role={showPersonal ? "progressbar" : undefined} aria-label="当前投票完成进度" aria-valuemin={showPersonal ? 0 : undefined} aria-valuemax={showPersonal ? data.eligibleCount || 1 : undefined} aria-valuenow={showPersonal ? data.votedCount : undefined}>
+          <div className="h-full rounded-full bg-[#D5AF4B] transition-[width] motion-reduce:transition-none" style={{ width: `${showPersonal ? progress : 0}%` }} />
+        </div>
+        <div className="mt-1.5 flex justify-between gap-2 text-[11px] text-muted-foreground">
+          <span>{!showPersonal ? data.signedIn ? "投票记录暂时无法加载" : "登录后查看投票进度" : data.eligibleCount === 0 ? "暂无可参与的投票" : data.pendingCount === 0 ? "当前投票已完成" : "当前投票进度"}</span>
+          <span className="shrink-0 tabular-nums">{showPersonal ? `${data.votedCount} / ${data.eligibleCount}` : "— / —"}</span>
+        </div>
+        <div className="mt-3 border-t border-[#EED8AA]/70 pt-2">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="flex items-center gap-1.5 text-[#A45D64]"><Heart className="size-3.5" aria-hidden="true" />我的真爱票</span>
+            {!showPersonal || data.loveBalances === null ? (
+              <span className="text-muted-foreground">— 张可用</span>
+            ) : !data.loveBalances.length ? (
+              <span className="text-muted-foreground">0 张可用</span>
+            ) : null}
+          </div>
+          {showPersonal && data.loveBalances?.map((group) => (
+            <div key={group.id} className="mt-1.5 flex items-center justify-between gap-3 text-xs">
+              <span className="truncate text-muted-foreground" title={group.name}>{group.name}</span>
+              <span className="shrink-0"><strong className="tabular-nums">{group.remaining}</strong> 张可用</span>
+            </div>
+          ))}
+          {showPersonal && data.loveBalances === null ? <p className="mt-1.5 text-xs text-muted-foreground">真爱票额度暂时无法加载</p> : null}
+        </div>
+        {voteActionHref ? (
+          <Link href={homepageActionHref(data.signedIn, voteActionHref)} className={voteActionClassName}>
+            {voteActionLabel}
+          </Link>
+        ) : (
+          <button type="button" disabled className={`${voteActionClassName} cursor-not-allowed opacity-50`}>
+            {voteActionLabel}
+          </button>
+        )}
+      </section>
+
+      <section aria-labelledby="homepage-my-nominations" className="mt-4 border-t border-[#EED8AA]/80 pt-4">
+        <h2 id="homepage-my-nominations" className="mb-3 text-base font-semibold">我的提名</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">剩余可提名数</p>
+            <p className="mt-1 flex min-h-10 items-baseline gap-1.5 text-[2rem] font-semibold leading-10 tabular-nums tracking-tight text-[#6A3E21]">
+              {!showNominations ? "—" : data.remainingNominationCount === null ? "不限" : data.remainingNominationCount}
+              {!showNominations || data.remainingNominationCount !== null ? <span className="text-xs font-normal text-muted-foreground">个</span> : null}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">已提名数</p>
+            <p className="mt-1 flex min-h-10 items-baseline gap-1.5 text-[2rem] font-semibold leading-10 tabular-nums tracking-tight text-[#6A3E21]">
+              {showNominations ? data.nominatedCount : "—"}<span className="text-xs font-normal text-muted-foreground">个</span>
+            </p>
+          </div>
+        </div>
+        <div className={`mt-2 grid gap-3 ${showNominationAction ? "grid-cols-2" : "grid-cols-1"}`}>
+          {showNominationAction && nominationActionHref ? (
+            <Link href={homepageActionHref(data.signedIn, nominationActionHref)} className={nominationActionClassName}>前往提名</Link>
+          ) : null}
+          {nominationHistoryHref ? (
+            <Link href={homepageActionHref(data.signedIn, nominationHistoryHref)} className={secondaryActionClassName}>查看提名</Link>
+          ) : (
+            <button type="button" disabled className={`${secondaryActionClassName} cursor-not-allowed opacity-50`}>查看提名</button>
+          )}
+        </div>
+        {data.signedIn && !showNominations ? <p className="mt-2 text-xs text-muted-foreground">提名记录暂时无法加载，请稍后刷新。</p> : null}
+      </section>
+    </div>
+  );
+}

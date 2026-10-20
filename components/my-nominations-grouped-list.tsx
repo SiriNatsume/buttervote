@@ -1,5 +1,6 @@
 "use client";
 
+import { VoteImage } from "@/components/vote-image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ImageIcon, Search } from "lucide-react";
@@ -161,7 +162,7 @@ function NominationSummaryImage({
   return (
     <div className="size-16 shrink-0 overflow-hidden rounded-2xl bg-muted sm:size-20">
       {imageUrl ? (
-        <img
+        <VoteImage maxWidth={256} sizes="80px"
           src={imageUrl}
           alt={`${nomination.name} 图片`}
           className="size-full object-cover"
