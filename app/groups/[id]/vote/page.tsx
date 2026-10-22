@@ -54,6 +54,7 @@ export default async function GroupVotePage({
   const canParticipate = await canParticipateContestGroup({
     contestGroupId: group.id,
     profile: user,
+    group,
   });
 
   if (!canParticipate) {

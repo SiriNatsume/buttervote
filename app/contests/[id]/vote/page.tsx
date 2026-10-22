@@ -8,6 +8,7 @@ import { MascotEmptyState } from "@/components/mascot";
 import { VoteForm } from "@/components/vote-form";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
+import { getRequestTime } from "@/lib/request-time";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transitions";
@@ -81,6 +82,7 @@ export default async function VotePage({
     const canParticipate = await canParticipateContestGroup({
       contestGroupId: group.id,
       profile: user,
+      group,
     });
 
     if (!canParticipate) {
@@ -211,9 +213,10 @@ export default async function VotePage({
       );
     }
   }
+  const referenceNow = await getRequestTime();
   const validVotingDeadline =
     contest.voting_ends_at &&
-    new Date(contest.voting_ends_at).getTime() > Date.now()
+    new Date(contest.voting_ends_at).getTime() > referenceNow
       ? contest.voting_ends_at
       : null;
 

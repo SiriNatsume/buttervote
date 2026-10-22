@@ -79,9 +79,14 @@ export async function getUserGroupMemberships(
 export async function canParticipateContestGroup(params: {
   contestGroupId: string;
   profile: Profile | null;
+  // Only supply a row already fetched from the database in this request.
+  group?: { id: string; access_mode: ContestGroupAccessMode };
 }): Promise<boolean> {
+  if (!params.profile) return false;
   const supabase = await createServerDataClient();
-  const { data: group } = await supabase
+  const { data: group } = params.group?.id === params.contestGroupId
+    ? { data: params.group }
+    : await supabase
     .from("contest_groups")
     .select("id,access_mode")
     .eq("id", params.contestGroupId)

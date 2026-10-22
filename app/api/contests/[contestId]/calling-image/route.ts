@@ -6,7 +6,7 @@ import {
 import { renderContestCallingSvg } from "@/lib/contest-calling-image";
 import { getCallingShareBackgroundDataUrl } from "@/lib/calling-share-background";
 import { getCurrentProfile } from "@/lib/auth";
-import { svgToPng } from "@/lib/bracket-image/png";
+import { cachedSvgToPng } from "@/lib/bracket-image/png";
 import { createClient } from "@/lib/supabase/server";
 import { createRequiredServiceClient } from "@/lib/supabase/service";
 
@@ -124,7 +124,7 @@ export async function GET(
     event: normalizedEvent,
     backgroundDataUrl,
   });
-  const png = await svgToPng(svg);
+  const png = await cachedSvgToPng(`calling-${contestId}`, svg);
 
   return pngResponse(png, contestId, step);
 }

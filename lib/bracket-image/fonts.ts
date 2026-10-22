@@ -1,4 +1,5 @@
 import "server-only";
+import { canonicalFontCharacters } from "./font-text";
 
 export const BRACKET_EXPORT_FONT_FAMILY = "Noto Sans SC";
 
@@ -29,17 +30,13 @@ function decodeXmlEntities(value: string) {
     );
 }
 
-function uniqueCharacters(value: string) {
-  return Array.from(new Set(Array.from(value))).join("");
-}
-
 function extractSvgText(svg: string) {
   const values: string[] = [];
   for (const match of svg.matchAll(TEXT_NODE_PATTERN)) {
     values.push(decodeXmlEntities(match[1].replace(/<[^>]+>/g, "")));
   }
 
-  return uniqueCharacters(`${values.join("")}${FALLBACK_TEXT}`);
+  return canonicalFontCharacters(`${values.join("")}${FALLBACK_TEXT}`);
 }
 
 function fontCssUrl(text: string) {
@@ -105,11 +102,16 @@ async function loadFontBuffersForText(text: string) {
 export function loadBracketExportFontBuffers(svg: string) {
   const text = extractSvgText(svg);
 
-  if (fontBuffersByText.size > 20 && !fontBuffersByText.has(text)) {
-    fontBuffersByText.clear();
+  if (fontBuffersByText.size >= 20 && !fontBuffersByText.has(text)) {
+    const oldest = fontBuffersByText.keys().next().value;
+    if (oldest !== undefined) fontBuffersByText.delete(oldest);
   }
 
   let promise = fontBuffersByText.get(text);
+  if (promise) {
+    fontBuffersByText.delete(text);
+    fontBuffersByText.set(text, promise);
+  }
   if (!promise) {
     promise = loadFontBuffersForText(text).then((buffers) => {
       if (buffers.length === 0) {

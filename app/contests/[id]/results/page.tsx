@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { loadResultCandidates } from "@/lib/result-candidates";
 import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import {
@@ -124,9 +125,10 @@ export default async function ResultsPage({
     { data: tournamentStage }, resultVisibilityByContest,
   ] = await Promise.all([
     callingSessionQuery.order("created_at", { ascending: false }).limit(1),
-    dataClient.from("candidates")
-      .select("id,name,description,image_path,nominator_display_name,is_active,created_at")
-      .eq("contest_id", id).order("created_at", { ascending: true }),
+    loadResultCandidates(dataClient, [id], {
+      includeInactive: isAdmin,
+      publishedContestIds: contest.status === "published" ? [id] : [],
+    }),
     contest.group_id
       ? supabase.from("contest_groups").select("id,name,love_vote_weight")
           .eq("id", contest.group_id).maybeSingle()
@@ -187,7 +189,10 @@ export default async function ResultsPage({
 
   const auditPageSize = 50;
   const scorePromise = canDisplayFullResults
-    ? loadVisibleContestTallies(dataClient, [id], { includeAdminOverride: isAdmin })
+    ? loadVisibleContestTallies(dataClient, [id], {
+        includeAdminOverride: isAdmin,
+        publishedContestIds: contest.status === "published" ? [id] : [],
+      })
     : Promise.resolve({ tallies: [], error: null });
   const loveCountPromise = canDisplayFullResults && group && resultVisibility.showWeightedLoveScore
     ? dataClient.rpc("get_visible_contest_love_vote_allocations", {

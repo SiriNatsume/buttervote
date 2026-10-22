@@ -7,6 +7,8 @@ import {
   type GroupHomepageContest,
 } from "@/lib/group-homepage";
 import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
+import { loadPublicResultSnapshots } from "@/lib/public-result-snapshots";
+import { loadResultCandidates } from "@/lib/result-candidates";
 import { contestVoteHref } from "@/lib/vote-entry";
 import type { Candidate, Contest, Database } from "@/lib/types";
 import {
@@ -70,20 +72,18 @@ export async function loadGroupHomepageContests(params: {
   const contestIds = contests.map((contest) => contest.id);
   if (contestIds.length === 0) return [];
 
-  const [visibilityByContest, candidateResult] = await Promise.all([
+  const snapshotsPromise = loadPublicResultSnapshots(contests.filter((contest) => contest.status === "published").map((contest) => contest.id));
+  const candidatesPromise = loadResultCandidates(publicClient, contestIds, {
+    publishedContestIds: contests.filter((contest) => contest.status === "published").map((contest) => contest.id),
+  });
+  const [visibilityByContest, candidateResult, snapshots] = await Promise.all([
     loadContestResultVisibilityByContest(publicClient, contests, {
       // SECURITY CRITICAL: the group homepage is a public presentation.
       // It must never reveal admin-only results, even to an admin viewer.
       includeAdminOverride: false,
     }),
-    publicClient
-      .from("candidates")
-      .select(
-        "id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at",
-      )
-      .in("contest_id", contestIds)
-      .eq("is_active", true)
-      .order("created_at", { ascending: true }),
+    candidatesPromise,
+    snapshotsPromise,
   ]);
 
   if (candidateResult.error) {
@@ -91,7 +91,7 @@ export async function loadGroupHomepageContests(params: {
       `[group-homepage] candidate query failed: ${candidateResult.error.message}`,
     );
   }
-  const candidates = (candidateResult.data ?? []) as HomepageCandidate[];
+  const candidates: HomepageCandidate[] = candidateResult.data ?? [];
   const candidatesByContest = new Map<string, HomepageCandidate[]>();
   for (const candidate of candidates) {
     const current = candidatesByContest.get(candidate.contest_id) ?? [];
@@ -107,7 +107,7 @@ export async function loadGroupHomepageContests(params: {
     .map((contest) => contest.id);
   const resultData = await loadVisibleContestTallies(
     publicClient,
-    scoreVisibleContestIds,
+    scoreVisibleContestIds.filter((id) => !snapshots.has(id)),
     { includeAdminOverride: false },
   );
   if (resultData.error) {
@@ -120,7 +120,8 @@ export async function loadGroupHomepageContests(params: {
     string,
     Map<string, VisibleContestTallyRow>
   >();
-  for (const tally of resultData.tallies) {
+  const tallies = [...resultData.tallies, ...scoreVisibleContestIds.flatMap((id) => snapshots.get(id)?.tallies ?? [])];
+  for (const tally of tallies) {
     const current = talliesByContest.get(tally.contest_id) ?? new Map();
     current.set(tally.candidate_id, tally);
     talliesByContest.set(tally.contest_id, current);
