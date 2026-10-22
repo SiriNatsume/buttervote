@@ -27,5 +27,5 @@ export const getPublicSiteSettings = cache(async () =>
 );
 
 export function invalidatePublicSiteSettings() {
-  revalidateTag(PUBLIC_SETTINGS_TAG);
+  revalidateTag(PUBLIC_SETTINGS_TAG, { expire: 0 });
 }

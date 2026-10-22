@@ -1,54 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { ContestCallingStatus } from "@/lib/types";
+import {
+  CALLING_REFRESH_EVENT,
+  callingRefreshTopic,
+  createCallingRefreshController,
+  isCallingRefreshable,
+  type ContestCallingRefreshWatch,
+} from "@/lib/contest-calling-refresh";
 
-export type ContestCallingRefreshWatch = {
-  contestId: string;
-  sessionId: string;
-  status: ContestCallingStatus;
-  currentStep: number;
-  totalSteps: number;
-  updatedAt: string | null;
-};
+export type { ContestCallingRefreshWatch } from "@/lib/contest-calling-refresh";
 
-type CallingSessionState = {
-  id: string;
-  contest_id: string;
-  status: ContestCallingStatus;
-  current_step: number;
-  total_steps: number;
-  updated_at: string | null;
-};
-
-const REFRESHABLE_STATUSES = new Set<ContestCallingStatus>([
-  "draft",
-  "active",
-  "paused",
-]);
-
-function numberValue(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : Number(value) || 0;
-}
-
-function shouldRefresh(
-  expected: ContestCallingRefreshWatch,
-  actual: CallingSessionState | null,
-) {
-  if (!actual) {
-    return true;
-  }
-
-  return (
-    actual.id !== expected.sessionId ||
-    actual.status !== expected.status ||
-    numberValue(actual.current_step) !== expected.currentStep ||
-    numberValue(actual.total_steps) !== expected.totalSteps ||
-    (expected.updatedAt !== null && actual.updated_at !== expected.updatedAt)
-  );
-}
+// Navigation may mount a new result-page component before the old channels have
+// finished leaving. The browser client is shared, so track its cleanup across mounts.
+const pendingChannelRemovals = new WeakMap<ReturnType<typeof createClient>, Promise<void>>();
 
 export function ContestCallingAutoRefresh({
   watches,
@@ -58,86 +25,119 @@ export function ContestCallingAutoRefresh({
   intervalMs?: number;
 }) {
   const router = useRouter();
-  const refreshCooldownRef = useRef<number | null>(null);
-  const inFlightRef = useRef(false);
+  const [isPending, startTransition] = useTransition();
+  const controllerRef = useRef<ReturnType<typeof createCallingRefreshController> | null>(null);
+  const watchesRef = useRef(watches);
+  const pendingRef = useRef(isPending);
   const refreshableWatches = useMemo(
-    () => watches.filter((watch) => REFRESHABLE_STATUSES.has(watch.status)),
+    () => watches.filter((watch) => isCallingRefreshable(watch.status)),
     [watches],
   );
+  // A new step updates the expected snapshot without reconnecting every channel.
+  const contestIdsKey = Array.from(new Set(refreshableWatches.map((watch) => watch.contestId)))
+    .sort().join(",");
 
   useEffect(() => {
-    if (refreshableWatches.length === 0) {
-      return;
-    }
+    watchesRef.current = refreshableWatches;
+  }, [refreshableWatches]);
 
+  useEffect(() => {
+    pendingRef.current = isPending;
+    controllerRef.current?.setRefreshing(isPending);
+  }, [isPending]);
+
+  useEffect(() => {
+    if (!contestIdsKey) return;
+    const contestIds = contestIdsKey.split(",");
     const supabase = createClient();
-    const contestIds = Array.from(
-      new Set(refreshableWatches.map((watch) => watch.contestId)),
-    );
-    let cancelled = false;
+    const controller = createCallingRefreshController({
+      getWatches: () => watchesRef.current,
+      readState: async (signal) => {
+        const { data, error } = await supabase
+          .from("contest_calling_sessions")
+          .select("id,contest_id,status,current_step,total_steps,updated_at")
+          .in("contest_id", contestIds)
+          .is("archived_at", null)
+          .in("status", ["draft", "active", "paused", "completed"])
+          .order("created_at", { ascending: false })
+          .abortSignal(signal);
+        return error ? null : data;
+      },
+      refresh: () => startTransition(() => router.refresh()),
+      intervalMs,
+    });
+    controllerRef.current = controller;
+    controller.setRefreshing(pendingRef.current);
+    let channels: ReturnType<typeof supabase.channel>[] = [];
+    let generation = 0;
 
-    async function checkCallingState() {
-      if (cancelled || document.visibilityState !== "visible" || inFlightRef.current || refreshCooldownRef.current !== null) {
-        return;
-      }
-
-      inFlightRef.current = true;
-      const { data, error } = await supabase
-        .from("contest_calling_sessions")
-        .select("id,contest_id,status,current_step,total_steps,updated_at")
-        .in("contest_id", contestIds)
-        .is("archived_at", null)
-        .in("status", ["draft", "active", "paused", "completed"])
-        .order("created_at", { ascending: false });
-
-      inFlightRef.current = false;
-
-      if (cancelled || error) {
-        return;
-      }
-
-      const latestByContestId = new Map<string, CallingSessionState>();
-      for (const row of (data ?? []) as CallingSessionState[]) {
-        if (!latestByContestId.has(row.contest_id)) {
-          latestByContestId.set(row.contest_id, row);
-        }
-      }
-
-      const changed = refreshableWatches.some((watch) =>
-        shouldRefresh(watch, latestByContestId.get(watch.contestId) ?? null),
-      );
-
-      if (changed) {
-        router.refresh();
-        refreshCooldownRef.current = window.setTimeout(() => {
-          refreshCooldownRef.current = null;
-        }, Math.max(800, intervalMs));
+    function unsubscribe() {
+      generation += 1;
+      const previous = channels;
+      channels = [];
+      controller.setConnected(false);
+      if (previous.length) {
+        const removal = Promise.allSettled([
+          pendingChannelRemovals.get(supabase),
+          ...previous.map((channel) => supabase.removeChannel(channel)),
+        ]).then(() => undefined);
+        pendingChannelRemovals.set(supabase, removal);
       }
     }
 
-    const interval = window.setInterval(checkCallingState, Math.max(800, intervalMs));
-    const onFocus = () => void checkCallingState();
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void checkCallingState();
-      }
-    };
+    async function subscribe() {
+      if (channels.length) return;
+      const currentGeneration = ++generation;
+      // The SDK reuses same-topic channels until removal finishes. Wait before
+      // rejoining after a quick hide/show, rather than subscribing an old channel.
+      await pendingChannelRemovals.get(supabase);
+      if (generation !== currentGeneration) return;
+      const subscribed = new Set<string>();
+      channels = contestIds.map((contestId) => supabase.channel(callingRefreshTopic(contestId), {
+        config: { private: true },
+      }));
+      channels.forEach((channel, index) => {
+        const contestId = contestIds[index];
+        channel
+          .on("broadcast", { event: CALLING_REFRESH_EVENT }, () => {
+            if (generation === currentGeneration) controller.notifyChange();
+          })
+          .subscribe((status) => {
+            if (generation !== currentGeneration) return;
+            if (status === "SUBSCRIBED") subscribed.add(contestId);
+            else subscribed.delete(contestId);
+            controller.setConnected(subscribed.size === contestIds.length);
+          });
+      });
+    }
 
+    function syncVisibility() {
+      const active = document.visibilityState === "visible" && navigator.onLine;
+      controller.setActive(active);
+      if (active) {
+        void subscribe();
+      } else {
+        unsubscribe();
+      }
+    }
+
+    const onFocus = () => controller.checkNow();
     window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    void checkCallingState();
+    window.addEventListener("online", syncVisibility);
+    window.addEventListener("offline", syncVisibility);
+    document.addEventListener("visibilitychange", syncVisibility);
+    syncVisibility();
 
     return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      if (refreshCooldownRef.current !== null) {
-        window.clearTimeout(refreshCooldownRef.current);
-        refreshCooldownRef.current = null;
-      }
+      controller.dispose();
+      controllerRef.current = null;
+      unsubscribe();
       window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", syncVisibility);
+      window.removeEventListener("offline", syncVisibility);
+      document.removeEventListener("visibilitychange", syncVisibility);
     };
-  }, [intervalMs, refreshableWatches, router]);
+  }, [contestIdsKey, intervalMs, router, startTransition]);
 
   return null;
 }
