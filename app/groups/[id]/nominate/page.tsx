@@ -58,6 +58,7 @@ export default async function GroupNominatePage({
     ? await canParticipateContestGroup({
         contestGroupId: group.id,
         profile,
+        group,
       })
     : true;
 

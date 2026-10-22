@@ -780,6 +780,11 @@ type Tables = {
     },
     Partial<Omit<LoveVoteAllocation, "id" | "created_at">>
   >;
+  public_result_cache_versions: Table<
+    { contest_id: string; revision: string },
+    { contest_id: string; revision?: string },
+    { revision?: string }
+  >;
   site_settings: Table<
     SiteSetting,
     {
@@ -976,6 +981,10 @@ export type Database = {
           p_recent_limit?: number;
         };
         Returns: Contest[];
+      };
+      get_public_result_snapshots: {
+        Args: { p_contest_ids: string[]; p_revisions: string[] };
+        Returns: Json;
       };
       get_visible_contest_tallies: {
         Args: {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBracketImageDataForGroup } from "@/lib/bracket-image/data";
 import { renderBracketImageSvg } from "@/lib/bracket-image/svg";
-import { svgToPng } from "@/lib/bracket-image/png";
+import { cachedSvgToPng } from "@/lib/bracket-image/png";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const svg = await renderBracketImageSvg(bracketData);
-    const png = await svgToPng(svg);
+    const png = await cachedSvgToPng(`bracket-${groupId}`, svg);
     const filename = `buttervote-${safeFilenamePart(
       bracketData.groupName,
     )}-bracket.png`;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getRequestTime } from "@/lib/request-time";
 import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { notFound } from "next/navigation";
 import { BarChart3, FileText, ImageIcon, Send, Settings, Trophy } from "lucide-react";
@@ -115,12 +116,12 @@ export default async function GroupDetailPage({
       ? getTournamentBracket(supabase, settings.featured_tournament_id)
       : null,
     isRestricted
-      ? canParticipateContestGroup({ contestGroupId: group.id, profile })
+      ? canParticipateContestGroup({ contestGroupId: group.id, profile, group })
       : Boolean(profile),
   ]);
   const { ongoing, upcoming, recent } =
     partitionGroupHomepageContests(homepageContests);
-  const referenceNow = Date.now();
+  const referenceNow = await getRequestTime();
 
   const hasVotingContest = ongoing.some((contest) => contest.status === "voting");
   let nominatableContests = (contests ?? []).filter((contest) =>

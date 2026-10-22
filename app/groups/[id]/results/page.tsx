@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { tallyResultsFromAggregates } from "@/lib/aggregate-tallies";
 import { loadVisibleContestTallies, type VisibleContestTallyRow } from "@/lib/visible-result-tallies";
+import { loadResultCandidates } from "@/lib/result-candidates";
 import type { Candidate, ContestCallingSession } from "@/lib/types";
 
 type ResultCandidate = Pick<
@@ -147,16 +148,15 @@ export default async function GroupResultsPage({
   const candidateClient = isAdmin ? dataClient : supabase;
   const talliesPromise = loadVisibleContestTallies(
     isAdmin ? dataClient : supabase, fullResultVisibleContestIds,
-    { includeAdminOverride: isAdmin },
+    {
+      includeAdminOverride: isAdmin,
+      publishedContestIds: visibleContests.filter((contest) => contest.status === "published").map((contest) => contest.id),
+    },
   );
-  const { data: candidateRows } =
-    fullResultVisibleContestIds.length > 0
-      ? await candidateClient
-          .from("candidates")
-          .select("id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at")
-          .in("contest_id", fullResultVisibleContestIds)
-          .order("created_at", { ascending: true })
-      : { data: [] };
+  const { data: candidateRows } = await loadResultCandidates(candidateClient, fullResultVisibleContestIds, {
+    includeInactive: isAdmin,
+    publishedContestIds: visibleContests.filter((contest) => contest.status === "published").map((contest) => contest.id),
+  });
   const candidates = isAdmin
     ? candidateRows ?? []
     : (candidateRows ?? []).filter((candidate) => candidate.is_active !== false);

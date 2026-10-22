@@ -23,6 +23,7 @@
     "test:local-tools": "node --test tests/local-supabase-tools.test.mjs",
     "test:result-visibility:local": "node --env-file=.local/supabase-app.env ./scripts/verify-result-visibility.mjs",
     "test:calling-refresh:local": "node --env-file=.local/supabase-app.env ./scripts/verify-calling-refresh.mjs",
+    "test:public-results:local": "node --import tsx --env-file=.local/supabase-app.env ./scripts/verify-public-result-cache.mjs",
     "test:site-pages-security:local": "node --env-file=.local/supabase-app.env ./scripts/verify-site-page-security.mjs",
     "test:qq-auth:local": "node --env-file=.local/supabase-app.env ./scripts/verify-qq-auth.mjs",
     "bot:sync-groups": "node ./scripts/qq-group-sync.mjs --watch",

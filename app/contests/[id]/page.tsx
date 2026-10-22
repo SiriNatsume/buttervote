@@ -21,6 +21,7 @@ import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getCurrentProfile } from "@/lib/auth";
+import { getRequestTime } from "@/lib/request-time";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
@@ -43,7 +44,7 @@ export default async function ContestDetailPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,max_choices,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,archived_at",
+        "id,title,description,status,vote_type,max_choices,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,archived_at,group:contest_groups(id,name,access_mode,love_vote_quota,love_vote_weight)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -60,41 +61,39 @@ export default async function ContestDetailPage({
     notFound();
   }
 
-  const { data: group } = contest.group_id
-    ? await supabase
-        .from("contest_groups")
-        .select("id,name,access_mode,love_vote_quota,love_vote_weight")
-        .eq("id", contest.group_id)
-        .maybeSingle()
-    : { data: null };
+  const group = contest.group;
   const imageUrl = getPublicImageUrl(contest.image_path);
   const voteHref = contestVoteHref(contest.id, contest.group_id);
   const isAdmin = profile?.role === "admin";
   const dataClient = await createServerDataClient();
-  const resultVisibilityByContest = await loadContestResultVisibilityByContest(
+  const visibilityPromise = loadContestResultVisibilityByContest(
     isAdmin ? dataClient : supabase,
     [contest],
     { includeAdminOverride: isAdmin },
   );
-  const resultVisibility = resultVisibilityByContest.get(contest.id);
-  const resultsVisible = resultVisibility?.fullResultsVisible === true;
-  const resultPageVisible = resultVisibility?.resultPageVisible === true;
-  const { data: existingVote } = profile
-    ? await dataClient
+  const existingVotePromise = profile
+    ? dataClient
         .from("votes")
         .select("id,payload")
         .eq("contest_id", contest.id)
         .eq("voter_id", profile.id)
         .maybeSingle()
     : { data: null };
-  const hasVoted = Boolean(existingVote);
   const isRestrictedGroup = group?.access_mode === "restricted";
-  const canParticipateGroup = isRestrictedGroup
-    ? await canParticipateContestGroup({
+  const participationPromise = isRestrictedGroup
+    ? canParticipateContestGroup({
         contestGroupId: group.id,
         profile,
+        group,
       })
     : true;
+  const [resultVisibilityByContest, { data: existingVote }, canParticipateGroup] = await Promise.all([
+    visibilityPromise, existingVotePromise, participationPromise,
+  ]);
+  const hasVoted = Boolean(existingVote);
+  const resultVisibility = resultVisibilityByContest.get(contest.id);
+  const resultsVisible = resultVisibility?.fullResultsVisible === true;
+  const resultPageVisible = resultVisibility?.resultPageVisible === true;
   const canUseGroupParticipation = !isRestrictedGroup || canParticipateGroup;
   const noVotingPermission =
     contest.status === "voting" && isRestrictedGroup && !canParticipateGroup;
@@ -127,10 +126,11 @@ export default async function ContestDetailPage({
       }
     }
   }
+  const referenceNow = await getRequestTime();
   const validVotingDeadline =
     contest.status === "voting" &&
     contest.voting_ends_at &&
-    new Date(contest.voting_ends_at).getTime() > Date.now()
+    new Date(contest.voting_ends_at).getTime() > referenceNow
       ? contest.voting_ends_at
       : null;
   const hasValidVotingDeadline = Boolean(validVotingDeadline);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { timingSafeEqualString } from "@/lib/security/token";
+import { scheduleArtifactMaintenance } from "@/lib/cache/server-artifacts";
 
 async function handleApply(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -21,6 +22,7 @@ async function handleApply(request: Request) {
   }
 
   const applied = await applyScheduledTransitions({ revalidate: true });
+  scheduleArtifactMaintenance();
   return NextResponse.json({ applied });
 }
 
