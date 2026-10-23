@@ -39,12 +39,27 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return jsonError("无效的对阵图参数。", 400);
     }
     if (!requestedVersion) return jsonError("对阵图状态已更新，请重试。", 409);
-    const result = await exportBracketImage({ caller: supabase, groupId, tournamentId, requestedVersion });
+    const result = await exportBracketImage({
+      caller: supabase, groupId, tournamentId, requestedVersion,
+      ifNoneMatch: request.headers.get("if-none-match"),
+      prefetch: request.headers.get("x-bracket-prefetch") === "1",
+    });
     if (result.kind === "not-found") return jsonError("没有可导出的对阵图。", 404);
     if (result.kind === "changed") return NextResponse.json(
       { error: "对阵图状态已更新，请刷新页面后重试。" },
       { status: 409, headers: { "Cache-Control": BRACKET_IMAGE_CACHE_CONTROL } },
     );
+    if (result.kind === "deferred") return new NextResponse(null, {
+      status: 204, headers: { "Cache-Control": BRACKET_IMAGE_CACHE_CONTROL },
+    });
+    if (result.kind === "not-modified") return new NextResponse(null, {
+      status: 304,
+      headers: {
+        "Cache-Control": BRACKET_IMAGE_CACHE_CONTROL,
+        ETag: result.etag,
+        "Server-Timing": `export;dur=${result.elapsedMs};desc="REVALIDATED"`,
+      },
+    });
     const png = result.png;
     const filename = `buttervote-${safeFilenamePart(result.groupName)}-bracket.png`;
 
@@ -55,6 +70,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           filename,
         )}`,
         "Content-Type": "image/png",
+        ...(result.etag ? { ETag: result.etag } : {}),
         "Server-Timing": `export;dur=${result.elapsedMs};desc="${result.cache}"`,
       },
     });

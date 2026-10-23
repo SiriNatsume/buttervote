@@ -10,9 +10,14 @@ export function safeFilenamePart(value: string, fallback: string) {
 
 export async function fetchPngBlob(url: string, fallbackErrorMessage: string) {
   const response = await fetch(url);
+  return readPngBlob(response, fallbackErrorMessage);
+}
 
+export async function readPngBlob(response: Response, fallbackErrorMessage: string) {
   if (!response.ok) {
-    const message = await response.text().catch(() => "");
+    const text = await response.text().catch(() => "");
+    let message = text;
+    try { message = JSON.parse(text).error ?? text; } catch { /* Plain-text errors are also supported. */ }
     throw new Error(message || fallbackErrorMessage);
   }
 
@@ -32,15 +37,19 @@ export function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Let the browser start consuming the Blob before releasing its URL.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export async function copyPngBlobToClipboard(blob: Blob) {
+// Call before awaiting the network: Safari requires write() in the click's
+// user activation. ClipboardItem can wait for a freshly authorized PNG Promise.
+export async function copyPngBlobToClipboard(blob: Blob | Promise<Blob>) {
   if (
     typeof navigator === "undefined" ||
-    !navigator.clipboard ||
+    typeof navigator.clipboard?.write !== "function" ||
     typeof window === "undefined" ||
-    !("ClipboardItem" in window)
+    !("ClipboardItem" in window) ||
+    (typeof ClipboardItem.supports === "function" && !ClipboardItem.supports("image/png"))
   ) {
     return false;
   }
@@ -51,4 +60,16 @@ export async function copyPngBlobToClipboard(blob: Blob) {
     }),
   ]);
   return true;
+}
+
+export async function sharePng(
+  blob: Promise<Blob>, filename: string,
+  actions = { copy: copyPngBlobToClipboard, download: downloadBlob },
+) {
+  // Start clipboard access synchronously, but never supply unvalidated bytes.
+  const copying = actions.copy(blob).catch(() => false);
+  const image = await blob;
+  if (await copying) return "copied" as const;
+  actions.download(image, filename);
+  return "downloaded" as const;
 }
