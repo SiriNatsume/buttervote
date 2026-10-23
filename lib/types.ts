@@ -937,6 +937,10 @@ export type Database = {
     Tables: Tables;
     Views: Record<string, never>;
     Functions: {
+      get_bracket_image_export_state: {
+        Args: { p_group_id: string; p_tournament_id?: string | null; p_include_snapshot?: boolean; p_expected_revision?: string | null };
+        Returns: Json;
+      };
       get_admin_user_group_member_stats: {
         Args: Record<string, never>;
         Returns: Array<{ user_group_id: string; total: number; active: number }>;

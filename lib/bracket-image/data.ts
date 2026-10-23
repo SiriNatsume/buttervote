@@ -3,23 +3,22 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadContestResultVisibilityByContest } from "@/lib/result-visibility";
 import { createServiceClient } from "@/lib/supabase/service";
-import { tallyVotes } from "@/lib/tally";
+import { loadVisibleContestTallies, type VisibleContestTallyRow } from "@/lib/visible-result-tallies";
+import { visibleTallyScore } from "@/lib/visible-tally-score";
+import { contestResultVisibilityFromRow, type ContestResultVisibility } from "@/lib/result-visibility-model";
 import {
   entryOutcomeIsHiddenInMatch,
   inheritedCandidateIsPublic,
   latestBracketVersion,
   resolveBracketResultVisibility,
 } from "@/lib/tournament-bracket-visibility";
-import { loadVisibleContestResultData } from "@/lib/visible-result-data";
 import type {
   Candidate,
   Contest,
   Database,
-  LoveVoteAllocation,
   Tournament,
   TournamentEntry,
   TournamentMatch,
-  Vote,
 } from "@/lib/types";
 import type {
   BracketImageData,
@@ -75,11 +74,26 @@ type BracketEntry = Pick<
   | "status"
 >;
 
-type PublicVoteRow = Pick<Vote, "id" | "contest_id" | "payload" | "created_at">;
-type PublicLoveVoteRow = Pick<
-  LoveVoteAllocation,
-  "vote_id" | "candidate_id" | "contest_id"
->;
+export type BracketImageSnapshot = {
+  tournament: BracketTournament;
+  matches: TournamentMatch[];
+  contests: BracketContest[];
+  entries: BracketEntry[];
+  candidates: BracketCandidate[];
+  visibility: Database["public"]["Functions"]["get_contest_result_visibility"]["Returns"];
+  tallies: VisibleContestTallyRow[];
+  loveVoteWeight: number | null;
+};
+
+function scoresFromTallies(tallies: VisibleContestTallyRow[], weight: number, weighted: ReadonlySet<string>) {
+  const scores = new Map<string, Map<string, number>>();
+  for (const tally of tallies) {
+    const current = scores.get(tally.contest_id) ?? new Map<string, number>();
+    current.set(tally.candidate_id, visibleTallyScore(tally, weighted.has(tally.contest_id), weight));
+    scores.set(tally.contest_id, current);
+  }
+  return scores;
+}
 
 const ROUND_ORDER: BracketImageRound[] = [
   "round_of_16",
@@ -242,73 +256,19 @@ async function tallyVisibleContestScores(
   const loveVoteWeightByGroup = new Map(
     (groups ?? []).map((group) => [group.id, Number(group.love_vote_weight)]),
   );
-  const [{ data: candidates, error: candidatesError }, resultData] =
-    await Promise.all([
-      structureClient
-        .from("candidates")
-        .select(
-          "id,contest_id,name,description,image_path,nominator_display_name,is_active,created_at",
-        )
-        .in("contest_id", visibleContestIds)
-        .eq("is_active", true)
-        .order("created_at", { ascending: true }),
-      loadVisibleContestResultData(supabase, visibleContestIds, {
-        includeAdminOverride: false,
-      }),
-    ]);
-
-  if (candidatesError || resultData.error) {
-    console.error(
-      "Failed to load bracket image scores.",
-      candidatesError?.message ?? resultData.error?.message,
-    );
+  const result = await loadVisibleContestTallies(supabase, visibleContestIds, {
+    includeAdminOverride: false,
+    publishedContestIds: visibleContests.filter((contest) => contest.status === "published").map((contest) => contest.id),
+  });
+  if (result.error) {
+    console.error("Failed to load bracket image scores.", result.error.message);
     return scores;
   }
-
-  const candidatesByContest = new Map<string, BracketCandidate[]>();
-  for (const candidate of (candidates ?? []) as BracketCandidate[]) {
-    const current = candidatesByContest.get(candidate.contest_id) ?? [];
-    current.push(candidate);
-    candidatesByContest.set(candidate.contest_id, current);
-  }
-
-  const votesByContest = new Map<string, PublicVoteRow[]>();
-  for (const vote of resultData.votes as PublicVoteRow[]) {
-    const current = votesByContest.get(vote.contest_id) ?? [];
-    current.push(vote);
-    votesByContest.set(vote.contest_id, current);
-  }
-
-  const loveRowsByContest = new Map<string, PublicLoveVoteRow[]>();
-  for (const loveRow of resultData.loveAllocations as PublicLoveVoteRow[]) {
-    const current = loveRowsByContest.get(loveRow.contest_id) ?? [];
-    current.push(loveRow);
-    loveRowsByContest.set(loveRow.contest_id, current);
-  }
-
   for (const contest of visibleContests) {
-    scores.set(
-      contest.id,
-      new Map(
-        tallyVotes({
-          voteType: contest.vote_type,
-          candidates: candidatesByContest.get(contest.id) ?? [],
-          votes: (votesByContest.get(contest.id) ?? []).map((vote) => ({
-            ...vote,
-            voter_id: null,
-          })),
-          loveVoteWeight: contest.group_id
-            ? loveVoteWeightByGroup.get(contest.group_id) ?? null
-            : null,
-          loveVoteScoreMode: weightedLoveScoreContestIds.has(contest.id)
-            ? "weighted"
-            : "base",
-          loveAllocations: loveRowsByContest.get(contest.id) ?? [],
-        }).map((result) => [result.candidateId, result.score]),
-      ),
-    );
+    const weight = contest.group_id ? loveVoteWeightByGroup.get(contest.group_id) ?? 1 : 1;
+    const converted = scoresFromTallies(result.tallies.filter((row) => row.contest_id === contest.id), weight, weightedLoveScoreContestIds);
+    if (converted.has(contest.id)) scores.set(contest.id, converted.get(contest.id)!);
   }
-
   return scores;
 }
 
@@ -398,9 +358,6 @@ async function loadBracketImageData(params: {
           )
           .in("id", entryIds)
       : { data: [] };
-  const entryById = new Map(
-    ((entries ?? []) as BracketEntry[]).map((entry) => [entry.id, entry]),
-  );
   const { data: matchCandidates } =
     contestIds.length > 0
       ? await structureClient
@@ -455,6 +412,26 @@ async function loadBracketImageData(params: {
     fullResultVisibleContestIds,
     weightedLoveScoreContestIds,
   );
+  return assembleBracketImageData({
+    tournament, matches: activeMatches, contests: [...contestById.values()],
+    entries: (entries ?? []) as BracketEntry[], candidates: [...candidateMap.values()],
+  }, visibilityByContest, scoreByContest, groupId, groupName);
+}
+
+function assembleBracketImageData(
+  structure: Pick<BracketImageSnapshot, "tournament" | "matches" | "contests" | "entries" | "candidates">,
+  visibilityByContest: ReadonlyMap<string, ContestResultVisibility>,
+  scoreByContest: Map<string, Map<string, number>>,
+  groupId: string,
+  groupName: string,
+): BracketImageData {
+  const { tournament } = structure;
+  const contestById = new Map(structure.contests.map((contest) => [contest.id, contest]));
+  const activeMatches = structure.matches.filter((match) => match.contest_id && contestById.has(match.contest_id));
+  const entryById = new Map(structure.entries.map((entry) => [entry.id, entry]));
+  const candidateMap = new Map(structure.candidates.map((candidate) => [candidate.id, candidate]));
+  const activeMatchCandidates = structure.candidates.filter((candidate) => contestById.has(candidate.contest_id));
+  const fullResultVisibleContestIds = new Set([...visibilityByContest].filter(([, value]) => value.fullResultsVisible).map(([id]) => id));
   const matchCandidatesByContest = new Map<string, BracketCandidate[]>();
 
   for (const candidate of activeMatchCandidates) {
@@ -609,6 +586,13 @@ async function loadBracketImageData(params: {
   };
 }
 
+export function bracketImageDataFromSnapshot(snapshot: BracketImageSnapshot, groupId: string, groupName: string) {
+  const visibility = new Map(snapshot.visibility.map((row) => [row.contest_id, contestResultVisibilityFromRow(row)]));
+  const weighted = new Set([...visibility].filter(([, value]) => value.showWeightedLoveScore).map(([id]) => id));
+  const weight = snapshot.loveVoteWeight && snapshot.loveVoteWeight > 0 ? snapshot.loveVoteWeight : 1;
+  return assembleBracketImageData(snapshot, visibility, scoresFromTallies(snapshot.tallies, weight, weighted), groupId, groupName);
+}
+
 export async function getBracketImageDataForGroup(params: {
   supabase: BracketClient;
   groupId: string;
@@ -629,6 +613,14 @@ export async function getBracketImageDataForGroup(params: {
 
   if (!group) {
     return null;
+  }
+
+  const state = await structureClient.rpc("get_bracket_image_export_state", {
+    p_group_id: groupId, p_tournament_id: tournamentId ?? null, p_include_snapshot: true,
+  });
+  const payload = state.data as unknown as { snapshot?: BracketImageSnapshot } | null;
+  if (!state.error && payload?.snapshot) {
+    return bracketImageDataFromSnapshot(payload.snapshot, groupId, group.name);
   }
 
   const { data: groupContests } = await supabase

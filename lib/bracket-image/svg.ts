@@ -4,6 +4,8 @@ import { loadButterVoteLogoDataUrl } from "@/lib/export-image/brand-signature";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { renderBracketImageLayout } from "@/lib/bracket-image/layout";
 import type { BracketImageData } from "@/lib/bracket-image/types";
+import { cachedExportAsset } from "@/lib/export-image/asset-cache";
+import { fetchExportAssetBytes } from "@/lib/export-image/asset-fetch";
 
 type CloudflareImageRequestInit = RequestInit & {
   cf?: {
@@ -28,33 +30,16 @@ function imageUrlForPath(imagePath: string) {
   return getPublicImageUrl(imagePath);
 }
 
-function supportedImageContentType(bytes: Uint8Array, contentType: string) {
-  const normalized = contentType.toLowerCase();
-  const isPng =
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47;
-  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-
-  if (isPng) {
-    return "image/png";
-  }
-  if (isJpeg) {
-    return "image/jpeg";
-  }
-  if (normalized === "image/png" || normalized === "image/jpeg") {
-    return normalized;
-  }
-
+function supportedImageContentType(bytes: Uint8Array) {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
   return null;
 }
 
-function imageFetchInit(signal: AbortSignal): CloudflareImageRequestInit {
+function imageFetchInit(): CloudflareImageRequestInit {
   return {
     cache: "force-cache",
     headers: { accept: "image/png,image/jpeg,*/*;q=0.1" },
-    signal,
     cf: {
       image: {
         width: EMBEDDED_PARTICIPANT_IMAGE_SIZE,
@@ -67,73 +52,44 @@ function imageFetchInit(signal: AbortSignal): CloudflareImageRequestInit {
   };
 }
 
-async function fetchImageDataUrl(imagePath: string | null) {
-  if (!imagePath) {
-    return null;
-  }
-
-  if (imagePath.startsWith("data:")) {
-    return imagePath;
-  }
-
-  const url = imageUrlForPath(imagePath);
-  if (!url) {
-    return null;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
-
+async function fetchImageDataUrl(imagePath: string, revision?: string | null) {
+  if (imagePath.startsWith("data:")) return imagePath;
+  const source = imageUrlForPath(imagePath);
+  if (!source) return null;
+  const url = new URL(source);
+  if (revision) url.searchParams.set("bv", revision);
   try {
-    const response = await fetch(url, imageFetchInit(controller.signal));
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const contentLength = Number(response.headers.get("content-length") ?? 0);
-    if (contentLength > MAX_EMBEDDED_IMAGE_BYTES) {
-      console.error("Bracket image asset is too large to embed.", {
-        imagePath,
-        contentLength,
-      });
-      return null;
-    }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const contentType = supportedImageContentType(
-      bytes,
-      response.headers.get("content-type")?.split(";")[0] || "",
-    );
-
-    if (!contentType) {
-      console.error("Bracket image asset type is not supported by resvg.", {
-        imagePath,
-        responseType: response.headers.get("content-type"),
-      });
-      return null;
-    }
-
-    return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`;
+    const options = { maxBytes: MAX_EMBEDDED_IMAGE_BYTES, timeoutMs: 6000, init: imageFetchInit() };
+    const bytes = revision ? await cachedExportAsset(url.href, {
+      ...options, namespace: "bracket-avatar-v1", revision: `jpeg-256-q86:${revision}`,
+      owner: source,
+      ttlMs: 7 * 86_400_000, validate: (value) => supportedImageContentType(value) !== null,
+    }) : await fetchExportAssetBytes(url.href, options);
+    const contentType = supportedImageContentType(bytes);
+    return contentType ? `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}` : null;
   } catch (error) {
-    console.error("Failed to embed bracket image asset.", error);
+    console.warn("Failed to embed bracket image asset.", error instanceof Error ? error.message : "asset unavailable");
     return null;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
-export async function renderBracketImageSvg(data: BracketImageData) {
+export async function renderBracketImageWithAssets(data: BracketImageData, revisions: Readonly<Record<string, string | null>> = {}) {
   const paths = [...new Set(data.matches
     .flatMap((match) => [match.left?.imagePath, match.right?.imagePath])
     .filter((imagePath): imagePath is string => Boolean(imagePath)))];
   const [logoDataUrl, imageEntries] = await Promise.all([
     loadButterVoteLogoDataUrl(),
     Promise.all(paths.map(async (imagePath) =>
-      [imagePath, await fetchImageDataUrl(imagePath)] as const)),
+      [imagePath, Object.prototype.hasOwnProperty.call(revisions, imagePath)
+        && revisions[imagePath] === null && !/^(https?:|data:)/i.test(imagePath)
+        ? null : await fetchImageDataUrl(imagePath, revisions[imagePath])] as const)),
   ]);
-  return renderBracketImageLayout(data, {
-    logoDataUrl,
-    participantImages: new Map(imageEntries),
-  });
+  return {
+    svg: renderBracketImageLayout(data, { logoDataUrl, participantImages: new Map(imageEntries) }),
+    complete: imageEntries.every(([, value]) => Boolean(value)),
+  };
+}
+
+export async function renderBracketImageSvg(data: BracketImageData) {
+  return (await renderBracketImageWithAssets(data)).svg;
 }

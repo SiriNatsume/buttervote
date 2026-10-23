@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBracketImageDataForGroup } from "@/lib/bracket-image/data";
-import { renderBracketImageSvg } from "@/lib/bracket-image/svg";
-import { cachedSvgToPng } from "@/lib/bracket-image/png";
+import { exportBracketImage } from "@/lib/bracket-image/export";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -16,7 +15,7 @@ type RouteContext = {
 };
 
 function jsonError(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status });
+  return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": BRACKET_IMAGE_CACHE_CONTROL } });
 }
 
 function safeFilenamePart(value: string) {
@@ -36,34 +35,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const supabase = await createClient();
 
   try {
-    const bracketData = await getBracketImageDataForGroup({
-      supabase,
-      groupId,
-      tournamentId,
-    });
-
-    if (!bracketData || bracketData.matches.length === 0) {
-      return jsonError("没有可导出的对阵图。", 404);
+    if (!z.string().uuid().safeParse(groupId).success || (tournamentId && !z.string().uuid().safeParse(tournamentId).success)) {
+      return jsonError("无效的对阵图参数。", 400);
     }
-
-    if (
-      !requestedVersion ||
-      requestedVersion !== bracketData.visibilityVersion
-    ) {
-      return NextResponse.json(
-        { error: "对阵图状态已更新，请重试。" },
-        {
-          status: 409,
-          headers: { "Cache-Control": BRACKET_IMAGE_CACHE_CONTROL },
-        },
-      );
-    }
-
-    const svg = await renderBracketImageSvg(bracketData);
-    const png = await cachedSvgToPng(`bracket-${groupId}`, svg);
-    const filename = `buttervote-${safeFilenamePart(
-      bracketData.groupName,
-    )}-bracket.png`;
+    if (!requestedVersion) return jsonError("对阵图状态已更新，请重试。", 409);
+    const result = await exportBracketImage({ caller: supabase, groupId, tournamentId, requestedVersion });
+    if (result.kind === "not-found") return jsonError("没有可导出的对阵图。", 404);
+    if (result.kind === "changed") return NextResponse.json(
+      { error: "对阵图状态已更新，请刷新页面后重试。" },
+      { status: 409, headers: { "Cache-Control": BRACKET_IMAGE_CACHE_CONTROL } },
+    );
+    const png = result.png;
+    const filename = `buttervote-${safeFilenamePart(result.groupName)}-bracket.png`;
 
     return new NextResponse(new Uint8Array(png), {
       headers: {
@@ -72,6 +55,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           filename,
         )}`,
         "Content-Type": "image/png",
+        "Server-Timing": `export;dur=${result.elapsedMs};desc="${result.cache}"`,
       },
     });
   } catch (error) {

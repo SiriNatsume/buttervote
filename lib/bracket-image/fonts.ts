@@ -1,5 +1,6 @@
 import "server-only";
 import { canonicalFontCharacters, svgFontWeights } from "./font-text";
+import { cachedExportAsset } from "@/lib/export-image/asset-cache";
 
 export const BRACKET_EXPORT_FONT_FAMILY = "Noto Sans SC";
 
@@ -7,12 +8,26 @@ const GOOGLE_FONTS_CSS_URL = "https://fonts.googleapis.com/css2";
 const FALLBACK_TEXT =
   "Butter Vote @SuperCUT Butter Group BV 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz -_.=/()[]:;,+ " +
   "\u5f85\u5b9a\u5f85\u751f\u6210\u672a\u5f00\u59cb\u7b49\u5f85\u5f00\u59cb\u6295\u7968\u4e2d\u7ed3\u679c\u53ef\u89c1\u7ed3\u679c\u5f85\u516c\u5f00\u5df2\u516c\u5f00 " +
-  "\u7ec4\u9884\u8d5b\u7b2c\u6d77\u9009\u8d5b\u7a0b\u5e2d\u4f4d\u5f3a\u534a\u51b3\u8d5b\u51a0\u519b\u8d5b\u5b63\u519b\u8d5b\u51a0\u519b\u573a\u7eff\u8272\u83b7\u80dc\u6570\u5b57\u5f97\u7968";
+  "\u7ec4\u9884\u8d5b\u7b2c\u6d77\u9009\u8d5b\u7a0b\u5e2d\u4f4d\u5f3a\u534a\u51b3\u8d5b\u51a0\u519b\u8d5b\u5b63\u519b\u8d5b\u51a0\u519b\u573a\u7eff\u8272\u83b7\u80dc\u6570\u5b57\u5f97\u7968" +
+  "赛事对阵全程赛果当前赛程位参赛角色场对决已公开角色已生成对阵正赛已结束投票中等待结果公开" +
+  "赛程进行中等待赛程生成等待晋级确认等待开始赛程待定截止待揭晓冠军待定同分判定预赛同组排名更高者获胜" +
+  "海选排名更高者获胜按赛事规则决定胜者本场获胜冠军晋级路线季军赛路线分享对阵图数据更新以活动当前公开赛果为准";
 
 const FONT_URL_PATTERN = /url\((?:"|')?([^"')]+)(?:"|')?\)/g;
 const TEXT_NODE_PATTERN = /<text\b[^>]*>([\s\S]*?)<\/text>/g;
 
 const fontBuffersByText = new Map<string, Promise<Uint8Array[]>>();
+
+function fontUrlsFromCss(bytes: Uint8Array) {
+  const urls = [...new Set(Array.from(new TextDecoder().decode(bytes).matchAll(FONT_URL_PATTERN), (match) => match[1]))];
+  if (!urls.length) return null;
+  try {
+    return urls.every((value) => {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.hostname === "fonts.gstatic.com";
+    }) ? urls : null;
+  } catch { return null; }
+}
 
 function decodeXmlEntities(value: string) {
   return value
@@ -49,49 +64,21 @@ function fontCssUrl(text: string, weights: number[]) {
   return url.toString();
 }
 
-async function fetchWithTimeout(url: string, timeoutMs = 6000) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, {
-      cache: "force-cache",
-      headers: { accept: "*/*" },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 async function loadFontBuffersForText(text: string, weights: number[]) {
   try {
-    const cssResponse = await fetchWithTimeout(fontCssUrl(text, weights));
-    if (!cssResponse.ok) {
-      throw new Error(`Font CSS request failed with ${cssResponse.status}`);
-    }
-
-    const css = await cssResponse.text();
-    const fontUrls = [
-      ...new Set(
-        Array.from(css.matchAll(FONT_URL_PATTERN), (match) => match[1]),
-      ),
-    ];
-
-    const responses = await Promise.all(
-      fontUrls.map((fontUrl) => fetchWithTimeout(fontUrl, 8000)),
-    );
-    const buffers = await Promise.all(
-      responses
-        .filter((response) => response.ok)
-        .map(async (response) => new Uint8Array(await response.arrayBuffer())),
-    );
-
-    if (buffers.length === 0) {
-      throw new Error("Font CSS did not yield any downloadable font files");
-    }
-
-    return buffers;
+    const cssBytes = await cachedExportAsset(fontCssUrl(text, weights), {
+      namespace: "export-font-css-v1", revision: "noto-sc-v1", ttlMs: 30 * 86_400_000,
+      maxBytes: 256 * 1024,
+      validate: (bytes) => fontUrlsFromCss(bytes) !== null,
+    });
+    const fontUrls = fontUrlsFromCss(cssBytes);
+    if (!fontUrls) throw new Error("Font CSS did not yield supported font files");
+    return await Promise.all(fontUrls.map((url) => cachedExportAsset(url, {
+      namespace: "export-font-file-v1", revision: "noto-sc-v1", ttlMs: 30 * 86_400_000,
+      maxBytes: 2 * 1024 * 1024,
+      validate: (bytes) => bytes.length > 256 && ((bytes[0] === 0 && bytes[1] === 1 && bytes[2] === 0 && bytes[3] === 0)
+        || ["OTTO", "ttcf"].includes(new TextDecoder().decode(bytes.subarray(0, 4)))),
+    })));
   } catch (error) {
     console.error("Failed to load bracket export font.", error);
     return [];
