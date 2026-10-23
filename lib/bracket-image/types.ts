@@ -1,5 +1,5 @@
-export const BRACKET_IMAGE_WIDTH = 2400;
-export const BRACKET_IMAGE_HEIGHT = 1350;
+export const BRACKET_IMAGE_WIDTH = 2880;
+export const BRACKET_IMAGE_HEIGHT = 1620;
 
 export type BracketImageRound =
   | "round_of_16"
@@ -34,6 +34,7 @@ export type BracketImageMatch = {
   left: BracketImageParticipant | null;
   right: BracketImageParticipant | null;
   resultVisible: boolean;
+  scheduledEndsAt: string | null;
   winnerEntryId: string | null;
   loserEntryId: string | null;
 };

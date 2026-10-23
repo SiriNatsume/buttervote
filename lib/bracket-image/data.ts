@@ -586,6 +586,7 @@ async function loadBracketImageData(params: {
         left: participant(match.left_entry_id, match, resultVisible),
         right: participant(match.right_entry_id, match, resultVisible),
         resultVisible,
+        scheduledEndsAt: contest?.voting_ends_at ?? null,
         winnerEntryId: resultVisible ? match.winner_entry_id : null,
         loserEntryId: resultVisible ? match.loser_entry_id : null,
       } satisfies BracketImageMatch;
