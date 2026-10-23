@@ -29,9 +29,9 @@ const sql = (query) => execFileSync('docker', ['exec', '-i', 'supabase_db_butter
 const data = async (query) => { const result = await query; if (result.error) throw new Error(result.error.message); return result.data; };
 const state = () => loadBracketExportState(group, tournament);
 const load = (client = anon) => getBracketImageDataForGroup({ supabase: client, groupId: group, tournamentId: tournament });
-const render = async () => {
+const render = async (request = {}) => {
   const started = performance.now();
-  const result = await exportBracketImage({ caller: anon, groupId: group, tournamentId: tournament });
+  const result = await exportBracketImage({ caller: anon, groupId: group, tournamentId: tournament, ...request });
   assert.equal(result.kind, 'ready');
   const meta = await sharp(result.png).metadata();
   assert.deepEqual([meta.width, meta.height], [2880, 1620]);
@@ -70,6 +70,9 @@ try {
   const cold = await render();
   const hot = await render();
   assert.equal(cold.cache, 'MISS'); assert.equal(hot.cache, 'HIT'); assert.equal(cold.hash, hot.hash);
+  assert.ok(hot.etag);
+  const validate = (etag, requestedVersion) => exportBracketImage({ caller: anon, groupId: group, tournamentId: tournament, ifNoneMatch: etag, requestedVersion });
+  assert.equal((await validate(hot.etag)).kind, 'not-modified', 'prepared bytes can be revalidated without returning the PNG');
   await data(db.from('contest_groups').update({ name: '预生成验证' }).eq('id', group));
   await warmBracketImage(group, tournament);
   assert.equal((await render()).cache, 'HIT', 'anonymous background warmup prepares the image before a user requests it');
@@ -81,10 +84,13 @@ try {
     ['published vote edit', () => db.from('votes').update({ payload: { candidateId: candidates[3] } }).eq('id', votes[3])],
     ['entry ranking', () => db.from('tournament_entries').update({ screening_rank: 5 }).eq('id', entries[0])],
   ]) {
+    const prepared = await render();
     const before = (await state()).revision;
     await data(query());
     assert.notEqual((await state()).revision, before, name);
-    assert.equal((await render()).cache, 'MISS', name);
+    const changed = await render({ ifNoneMatch: prepared.etag });
+    assert.equal(changed.cache, 'MISS', name);
+    assert.notEqual(changed.etag, prepared.etag, `${name} cannot validate old browser bytes`);
   }
 
   const red = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#ff0000' } }).jpeg().toBuffer();
@@ -97,8 +103,9 @@ try {
   const afterImage = await state();
   assert.notEqual(afterImage.assets[imagePath], beforeImage.assets[imagePath], 'same-path replacement changes the asset version');
   assert.notEqual(afterImage.revision, beforeImage.revision);
-  const blueImage = await render();
+  const blueImage = await render({ ifNoneMatch: redImage.etag });
   assert.equal(blueImage.cache, 'MISS'); assert.notEqual(blueImage.hash, redImage.hash);
+  assert.notEqual(blueImage.etag, redImage.etag);
   await data(db.storage.from('vote-images').remove([imagePath]));
   const deletedImage = await state();
   assert.equal(deletedImage.assets[imagePath], null);
@@ -114,6 +121,8 @@ try {
 
   await data(db.from('contest_calling_sessions').insert({ id: session, contest_id: contests[0], seed: 'bracket-cache-test', status: 'draft', total_steps: 1 }));
   assert.equal((await state()).cacheable, false);
+  assert.equal((await exportBracketImage({ caller: anon, groupId: group, tournamentId: tournament, prefetch: true })).kind, 'deferred');
+  assert.equal((await validate(blueImage.etag, old.visibilityVersion)).kind, 'changed', 'upstream calling invalidates a prepared image');
   const masked = await load();
   const maskedFinal = masked.matches.find(m => m.round === 'final');
   assert.equal(maskedFinal.resultVisible, false); assert.equal(maskedFinal.left, null); assert.equal(maskedFinal.winnerEntryId, null);
@@ -129,21 +138,23 @@ try {
   await data(db.from('contests').update({ status: 'voting', live_results_enabled: true }).eq('id', contests[1]));
   assert.equal((await state()).cacheable, false);
   assert.notEqual((await state()).revision, liveVersion);
+  assert.equal((await render({ ifNoneMatch: blueImage.etag })).etag, null, 'live vote totals cannot authorize browser reuse');
   await data(db.from('votes').insert({ contest_id: contests[1], voter_id: null, payload: { candidateId: candidates[2] } }));
   const live = await load();
   assert.equal(live.matches.find(m => m.round === 'final').left.score, 2, 'live base points exclude the love-vote multiplier');
   await data(db.from('contests').update({ status: 'published' }).eq('id', contests[1]));
-  await render();
+  const beforeRevoke = await render();
 
   sql(`create policy "${policy}" on public.contest_groups as restrictive for select to anon using (id <> '${group}'::uuid);`);
   assert.deepEqual(await exportBracketImage({ caller: anon, groupId: group, tournamentId: tournament }), { kind: 'not-found' }, 'a warmed PNG cannot bypass current group RLS');
+  assert.deepEqual(await validate(beforeRevoke.etag), { kind: 'not-found' }, 'prepared browser bytes cannot bypass current group RLS');
   sql(`drop policy "${policy}" on public.contest_groups;`);
   await data(db.from('contests').update({ archived_at: new Date().toISOString() }).eq('id', contests[0]));
   assert.equal((await state()).cacheable, false);
   assert.equal((await load()).matches.find(m => m.round === 'final').resultVisible, false);
 
   await mkdir('.local/share-bracket-perf', { recursive: true });
-  const report = { passed: true, coldMs: cold.ms, hotMs: hot.ms, cases: ['aggregate scores', 'early cache', 'anonymous pregeneration', 'candidate rename', 'weight', 'vote edit', 'ranking', 'same-path storage overwrite', 'storage deletion', 'MVCC race', 'upstream calling', 'admin isolation', 'live base scores', 'group RLS revocation', 'source archive'] };
+  const report = { passed: true, coldMs: cold.ms, hotMs: hot.ms, cases: ['aggregate scores', 'early cache', 'anonymous pregeneration', 'candidate rename', 'weight', 'vote edit', 'ranking', 'same-path storage overwrite', 'storage deletion', 'MVCC race', 'upstream calling', 'admin isolation', 'live base scores', 'group RLS revocation', 'source archive', 'bodyless revalidation', 'browser score invalidation', 'browser asset invalidation', 'browser permission revocation', 'speculation skips live results'] };
   await writeFile('.local/share-bracket-perf/integration.json', JSON.stringify(report, null, 2));
   if (keepFixture) {
     await data(db.from('contests').update({ archived_at: null }).eq('id', contests[0]));

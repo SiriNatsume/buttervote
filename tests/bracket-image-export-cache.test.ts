@@ -19,6 +19,7 @@ function harness(store?: Map<string, Artifact>) {
   let onBuild: (() => Promise<void>) | undefined;
   let onRead: (() => Promise<void>) | undefined;
   let onWrite: (() => Promise<void>) | undefined;
+  let onState: (() => void) | undefined;
   let complete = true;
   const cache = createVersionedArtifactCache(store ? { store: {
     get: async (key) => store.get(key) ?? null, put: async (key, value) => { store.set(key, value); },
@@ -29,7 +30,7 @@ function harness(store?: Map<string, Artifact>) {
       async write(...args) { await cache.write(...args); await onWrite?.(); },
     },
     authorize: async () => { checks++; return allowed; },
-    loadState: async () => { guards++; if (unavailable) throw new Error("guard unavailable"); return structuredClone(state); },
+    loadState: async () => { guards++; if (unavailable) throw new Error("guard unavailable"); const snapshot = structuredClone(state); onState?.(); return snapshot; },
     build: async (snapshot) => {
       builds++; const value = builds;
       await onBuild?.();
@@ -37,7 +38,7 @@ function harness(store?: Map<string, Artifact>) {
     },
   });
   return {
-    run: (version: string | undefined = "123") => run({ caller: "visitor", groupId: "group", requestedVersion: version }),
+    run: (version: string | undefined = "123", ifNoneMatch?: string | null, prefetch = false) => run({ caller: "visitor", groupId: "group", requestedVersion: version, ifNoneMatch, prefetch }),
     stats: () => ({ builds, guards, checks }),
     state: (value: Partial<BracketExportState>) => { state = { ...state, ...value }; },
     allowed: (value: boolean) => { allowed = value; },
@@ -45,6 +46,7 @@ function harness(store?: Map<string, Artifact>) {
     onBuild: (callback: () => Promise<void>) => { onBuild = callback; },
     onRead: (callback: () => Promise<void>) => { onRead = callback; },
     onWrite: (callback: () => Promise<void>) => { onWrite = callback; },
+    onState: (callback: () => void) => { onState = callback; },
     incomplete: () => { complete = false; },
   };
 }
@@ -141,4 +143,63 @@ test("missing assets are not persisted in the early cache and a stale page versi
   assert.equal(h.stats().builds, 2);
   assert.deepEqual(await h.run("old-version"), { kind: "changed" });
   assert.equal(h.stats().builds, 2);
+  assert.equal(next.kind === "ready" && next.etag, null);
+});
+
+test("a matching in-page image is freshly authorized without an R2 read or PNG render", async () => {
+  const h = harness();
+  const first = await h.run();
+  assert.ok(first.kind === "ready" && first.etag);
+  const before = h.stats();
+  h.onRead(async () => { throw new Error("must not read R2 for a matching browser image"); });
+  const validated = await h.run("123", first.etag);
+  assert.equal(validated.kind, "not-modified");
+  assert.deepEqual(h.stats(), { builds: before.builds, guards: before.guards + 2, checks: before.checks + 2 });
+});
+
+test("an unchanged page URL cannot validate an image after scores or same-path assets change", async () => {
+  const h = harness();
+  const first = await h.run();
+  assert.ok(first.kind === "ready" && first.etag);
+  for (const revision of ["changed-score", "changed-avatar"]) {
+    h.state({ revision });
+    const next = await h.run("123", first.etag);
+    assert.ok(next.kind === "ready" && next.etag);
+    assert.notEqual(next.etag, first.etag);
+  }
+  assert.deepEqual(await h.run("stale-page", first.etag), { kind: "changed" });
+});
+
+test("a validator cannot bypass revoked access, failed guards or a concurrent state change", async () => {
+  for (const change of ["revoked", "score"] as const) {
+    const h = harness();
+    const first = await h.run();
+    assert.ok(first.kind === "ready" && first.etag);
+    h.onState(() => {
+      if (change === "revoked") h.allowed(false);
+      else h.state({ revision: "edited-during-validation" });
+    });
+    assert.deepEqual(await h.run("123", first.etag), { kind: change === "revoked" ? "not-found" : "changed" });
+  }
+  const h = harness();
+  const first = await h.run();
+  assert.ok(first.kind === "ready" && first.etag);
+  h.allowed(false);
+  assert.deepEqual(await h.run("123", first.etag), { kind: "not-found" });
+  h.allowed(true); h.unavailable();
+  await assert.rejects(h.run("123", first.etag), /guard unavailable/);
+});
+
+test("live images have no reusable validator, and speculative requests skip live rendering", async () => {
+  const h = harness();
+  const first = await h.run();
+  assert.ok(first.kind === "ready" && first.etag);
+  h.state({ cacheable: false });
+  const live = await h.run("123", first.etag);
+  assert.ok(live.kind === "ready");
+  assert.equal(live.etag, null);
+  assert.deepEqual(await h.run("123", null, true), { kind: "deferred" });
+  assert.equal(h.stats().builds, 2);
+  h.state({ cacheable: true });
+  assert.equal((await h.run("123", 'W/"old-render-contract"')).kind, "ready");
 });

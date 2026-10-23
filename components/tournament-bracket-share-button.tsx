@@ -1,15 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  copyPngBlobToClipboard,
-  downloadBlob,
-  fetchPngBlob,
+  sharePng,
   safeFilenamePart,
 } from "@/lib/generated-image-share";
+import { createRevalidatedPng } from "@/lib/revalidated-png";
 
 type ShareBracket = {
   groupId: string | null;
@@ -32,20 +31,48 @@ function bracketImageUrl(bracket: ShareBracket) {
   return `/api/contest-groups/${groupId}/bracket-image?tournamentId=${tournamentId}&v=${visibilityVersion}`;
 }
 
-async function fetchBracketPng(url: string) {
-  return fetchPngBlob(url, "\u5bf9\u9635\u56fe\u751f\u6210\u5931\u8d25\u3002");
-}
-
 export function TournamentBracketShareButton({
   bracket,
 }: {
   bracket: ShareBracket;
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const imageUrl = bracketImageUrl(bracket);
+  const image = useMemo(() => imageUrl ? createRevalidatedPng(imageUrl, "对阵图生成失败。") : null, [imageUrl]);
+
+  useEffect(() => {
+    if (!image) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let visible = false;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    const conserveData = connection?.saveData || ["slow-2g", "2g"].includes(connection?.effectiveType ?? "");
+    const schedule = () => {
+      clearTimeout(timer);
+      if (visible && document.visibilityState === "visible" && !conserveData) {
+        timer = setTimeout(() => image.prefetch(), 1_000);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") { clearTimeout(timer); image.clear(); }
+      else schedule();
+    };
+    const observer = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      schedule();
+    });
+    if (buttonRef.current) observer?.observe(buttonRef.current);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearTimeout(timer);
+      observer?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
+      image.clear();
+    };
+  }, [image]);
 
   async function handleShare() {
-    if (!imageUrl) {
+    if (!image) {
       toast.error(
         "\u5f53\u524d\u5bf9\u9635\u56fe\u7f3a\u5c11\u6d3b\u52a8\u7ec4\uff0c\u6682\u65f6\u65e0\u6cd5\u5bfc\u51fa\u56fe\u7247\u3002",
       );
@@ -54,21 +81,16 @@ export function TournamentBracketShareButton({
 
     setIsGenerating(true);
     try {
-      const blob = await fetchBracketPng(imageUrl);
-      const copied = await copyPngBlobToClipboard(blob).catch(() => false);
+      const result = await sharePng(
+        image.get(),
+        `buttervote-${safeFilenamePart(bracket.tournament.name, "tournament")}-bracket.png`,
+      );
 
-      if (copied) {
+      if (result === "copied") {
         toast.success(
           "\u5bf9\u9635\u56fe\u56fe\u7247\u5df2\u590d\u5236\uff0c\u53ef\u4ee5\u76f4\u63a5\u7c98\u8d34\u5206\u4eab\u3002",
         );
       } else {
-        downloadBlob(
-          blob,
-          `buttervote-${safeFilenamePart(
-            bracket.tournament.name,
-            "tournament",
-          )}-bracket.png`,
-        );
         toast.success(
           "\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u76f4\u63a5\u590d\u5236\uff0c\u5df2\u4e0b\u8f7d\u5bf9\u9635\u56fe\u56fe\u7247\u3002",
         );
@@ -86,10 +108,13 @@ export function TournamentBracketShareButton({
 
   return (
     <Button
+      ref={buttonRef}
       type="button"
       variant="outline"
       size="sm"
       onClick={handleShare}
+      onPointerEnter={() => image?.prefetch()}
+      onFocus={() => image?.prefetch()}
       disabled={isGenerating || !imageUrl}
       title={
         imageUrl
