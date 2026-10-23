@@ -2,6 +2,7 @@
 
 import { invalidatePublicSiteSettings } from "@/lib/site-settings";
 import { revalidatePath } from "next/cache";
+import { scheduleBracketImageWarmup } from "@/lib/bracket-image/warmup";
 import { z } from "zod";
 import { getActionAdmin, requireAdmin } from "@/lib/auth";
 import { toUserFacingError } from "@/lib/action-error";
@@ -621,6 +622,7 @@ export async function updateContestAction(formData: FormData) {
   }
   if (updates.group_id) {
     revalidateGroup(updates.group_id);
+    if (updates.status === "published") scheduleBracketImageWarmup(updates.group_id);
   }
   return actionSuccess("保存成功");
 }
@@ -666,6 +668,7 @@ export async function updateContestStatusAction(
   revalidateContest(parsed.data.contestId);
   if (data?.group_id) {
     revalidateGroup(data.group_id);
+    if (parsed.data.status === "published") scheduleBracketImageWarmup(data.group_id);
   }
   return actionSuccess("状态已更新");
 }

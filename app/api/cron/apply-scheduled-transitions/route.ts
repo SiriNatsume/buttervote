@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { timingSafeEqualString } from "@/lib/security/token";
 import { scheduleArtifactMaintenance } from "@/lib/cache/server-artifacts";
+import { scheduleFeaturedBracketWarmup } from "@/lib/bracket-image/warmup";
 
 async function handleApply(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -23,6 +24,7 @@ async function handleApply(request: Request) {
 
   const applied = await applyScheduledTransitions({ revalidate: true });
   scheduleArtifactMaintenance();
+  scheduleFeaturedBracketWarmup();
   return NextResponse.json({ applied });
 }
 

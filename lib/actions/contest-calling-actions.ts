@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { scheduleBracketImageWarmup } from "@/lib/bracket-image/warmup";
 import { z } from "zod";
 import { getActionAdmin } from "@/lib/auth";
 import { toUserFacingError } from "@/lib/action-error";
@@ -432,5 +433,6 @@ export async function controlContestCallingSessionAction(
   }
 
   revalidateCallingPaths(contest);
+  if (completeAndPublish && contest.group_id) scheduleBracketImageWarmup(contest.group_id);
   return actionSuccess(message);
 }
