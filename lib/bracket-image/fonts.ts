@@ -1,9 +1,8 @@
 import "server-only";
-import { canonicalFontCharacters } from "./font-text";
+import { canonicalFontCharacters, svgFontWeights } from "./font-text";
 
 export const BRACKET_EXPORT_FONT_FAMILY = "Noto Sans SC";
 
-const FONT_WEIGHTS = ["700", "800", "900"] as const;
 const GOOGLE_FONTS_CSS_URL = "https://fonts.googleapis.com/css2";
 const FALLBACK_TEXT =
   "Butter Vote @SuperCUT Butter Group BV 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz -_.=/()[]:;,+ " +
@@ -39,11 +38,11 @@ function extractSvgText(svg: string) {
   return canonicalFontCharacters(`${values.join("")}${FALLBACK_TEXT}`);
 }
 
-function fontCssUrl(text: string) {
+function fontCssUrl(text: string, weights: number[]) {
   const url = new URL(GOOGLE_FONTS_CSS_URL);
   url.searchParams.set(
     "family",
-    `${BRACKET_EXPORT_FONT_FAMILY}:wght@${FONT_WEIGHTS.join(";")}`,
+    `${BRACKET_EXPORT_FONT_FAMILY}:wght@${weights.join(";")}`,
   );
   url.searchParams.set("display", "swap");
   url.searchParams.set("text", text);
@@ -65,9 +64,9 @@ async function fetchWithTimeout(url: string, timeoutMs = 6000) {
   }
 }
 
-async function loadFontBuffersForText(text: string) {
+async function loadFontBuffersForText(text: string, weights: number[]) {
   try {
-    const cssResponse = await fetchWithTimeout(fontCssUrl(text));
+    const cssResponse = await fetchWithTimeout(fontCssUrl(text, weights));
     if (!cssResponse.ok) {
       throw new Error(`Font CSS request failed with ${cssResponse.status}`);
     }
@@ -101,25 +100,27 @@ async function loadFontBuffersForText(text: string) {
 
 export function loadBracketExportFontBuffers(svg: string) {
   const text = extractSvgText(svg);
+  const weights = svgFontWeights(svg);
+  const cacheKey = `${weights.join(",")}:${text}`;
 
-  if (fontBuffersByText.size >= 20 && !fontBuffersByText.has(text)) {
+  if (fontBuffersByText.size >= 20 && !fontBuffersByText.has(cacheKey)) {
     const oldest = fontBuffersByText.keys().next().value;
     if (oldest !== undefined) fontBuffersByText.delete(oldest);
   }
 
-  let promise = fontBuffersByText.get(text);
+  let promise = fontBuffersByText.get(cacheKey);
   if (promise) {
-    fontBuffersByText.delete(text);
-    fontBuffersByText.set(text, promise);
+    fontBuffersByText.delete(cacheKey);
+    fontBuffersByText.set(cacheKey, promise);
   }
   if (!promise) {
-    promise = loadFontBuffersForText(text).then((buffers) => {
+    promise = loadFontBuffersForText(text, weights).then((buffers) => {
       if (buffers.length === 0) {
-        fontBuffersByText.delete(text);
+        fontBuffersByText.delete(cacheKey);
       }
       return buffers;
     });
-    fontBuffersByText.set(text, promise);
+    fontBuffersByText.set(cacheKey, promise);
   }
 
   return promise;
