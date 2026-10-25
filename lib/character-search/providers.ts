@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isCharacterImageUrl } from "./image";
 import {
   CHARACTER_SOURCES,
+  interleaveCharacterItems,
   type CharacterSearchItem,
   type CharacterSearchResponse,
   type CharacterSearchSource,
@@ -191,10 +192,5 @@ export async function searchCharacters(
   });
   // Keep each provider visible in combined searches; names are not unique
   // across franchises, so do not merge different sources by name alone.
-  const order = new Map<string, number>();
-  for (const provider of sources) {
-    response.items.filter((item) => item.source === provider).forEach((item, index) => order.set(`${item.source}:${item.id}`, index));
-  }
-  response.items.sort((a, b) => (order.get(`${a.source}:${a.id}`) ?? 0) - (order.get(`${b.source}:${b.id}`) ?? 0));
-  return response;
+  return { ...response, items: interleaveCharacterItems(response.items) };
 }

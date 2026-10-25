@@ -45,6 +45,8 @@ export async function fetchCharacterImage(
   try {
     const response = await fetcher(url, {
       redirect: "error",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
       signal: controller.signal,
       headers: { Accept: "image/jpeg,image/png,image/webp" },
     });

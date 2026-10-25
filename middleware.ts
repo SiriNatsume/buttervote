@@ -43,7 +43,7 @@ function applySecurityHeaders(response: NextResponse) {
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https: ${supabaseImageSource}`.trim(),
     "font-src 'self' data:",
-    `connect-src 'self' ${supabaseConnectSources}`,
+    `connect-src 'self' ${supabaseConnectSources} https://graphql.anilist.co https://s4.anilist.co`,
     "media-src 'self' https:",
     "object-src 'none'",
     "base-uri 'self'",

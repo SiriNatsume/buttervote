@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { characterSearchSchema, searchCharacters } from "../lib/character-search/providers";
 import { fetchCharacterImage, isCharacterImageUrl, MAX_CHARACTER_IMAGE_BYTES } from "../lib/character-search/image";
+import { retryAniListSearchInBrowser } from "../lib/character-search/browser";
+import type { CharacterSearchResponse } from "../lib/character-search/types";
 
 const bangumiImage = "https://lain.bgm.tv/pic/crt/l/0c/ac/50406_crt_ZX1jZ.jpg";
 const anilistImage = "https://s4.anilist.co/file/anilistcdn/character/large/b63351-0WmsDENpiscp.png";
@@ -134,9 +136,59 @@ test("validated image bytes retain their MIME type and redirects are disabled", 
   const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
   const image = await fetchCharacterImage("bangumi", bangumiImage, async (_url, init) => {
     assert.equal(init?.redirect, "error");
+    assert.equal(init?.credentials, "omit");
+    assert.equal(init?.referrerPolicy, "no-referrer");
     assert.ok(init?.signal);
     return new Response(bytes, { headers: { "Content-Type": "image/jpeg; charset=binary" } });
   });
   assert.deepEqual(image.bytes, bytes);
   assert.equal(image.contentType, "image/jpeg");
+});
+
+test("browser retry recovers only AniList, preserves other providers and errors, and never sends site credentials", async () => {
+  const result: CharacterSearchResponse = {
+    items: [{ id: "c1", source: "vndb", name: "Murasame", originalName: "Murasame", imageUrl: vndbImage,
+      thumbnailUrl: vndbImage, sourceUrl: "https://vndb.org/c1", works: [] }],
+    hasMore: false,
+    errors: [{ source: "anilist", message: "upstream blocked" }, { source: "bangumi", message: "unavailable" }],
+  };
+  const recovered = await retryAniListSearchInBrowser("Murasame", 2, result, new AbortController().signal, async (url, init) => {
+    assert.equal(String(url), "https://graphql.anilist.co");
+    assert.equal(init?.credentials, "omit");
+    assert.equal(init?.referrerPolicy, "no-referrer");
+    assert.equal(new Headers(init?.headers).has("Authorization"), false);
+    assert.equal(new Headers(init?.headers).has("Cookie"), false);
+    assert.deepEqual(JSON.parse(String(init?.body)).variables, { search: "Murasame", page: 2, perPage: 12 });
+    return json({ data: { Page: { pageInfo: { hasNextPage: true }, characters: [
+      { id: 1, name: { full: "Murasame", native: "ムラサメ" }, image: { large: anilistImage } },
+    ] } } });
+  });
+  assert.deepEqual(recovered.items.map((item) => item.source), ["anilist", "vndb"]);
+  assert.deepEqual(recovered.errors, [{ source: "bangumi", message: "unavailable" }]);
+  assert.equal(recovered.hasMore, true);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.errors.length, 2);
+});
+
+test("browser retry is skipped for successful sources and preserves results when direct access also fails", async () => {
+  const result: CharacterSearchResponse = { items: [], errors: [], hasMore: false };
+  const unexpectedFetch: typeof fetch = async () => { throw new Error("unexpected fetch"); };
+  assert.equal(await retryAniListSearchInBrowser("test", 1, result, new AbortController().signal, unexpectedFetch), result);
+  const failed: CharacterSearchResponse = { ...result, errors: [{ source: "anilist", message: "unavailable" }] };
+  assert.equal(await retryAniListSearchInBrowser("test", 1, failed, new AbortController().signal, async () => new Response(null, { status: 503 })), failed);
+  const aborted = new AbortController();
+  aborted.abort();
+  assert.equal(await retryAniListSearchInBrowser("test", 1, failed, aborted.signal, unexpectedFetch), failed);
+});
+
+test("cancelling a browser search cancels the direct AniList request and cannot replace newer results", async () => {
+  const result: CharacterSearchResponse = { items: [], errors: [{ source: "anilist", message: "unavailable" }], hasMore: false };
+  const controller = new AbortController();
+  const recovered = await retryAniListSearchInBrowser("test", 1, result, controller.signal, async (_url, init) => {
+    assert.equal(init?.signal?.aborted, false);
+    controller.abort();
+    assert.equal(init?.signal?.aborted, true);
+    throw new DOMException("Aborted", "AbortError");
+  });
+  assert.equal(recovered, result);
 });
