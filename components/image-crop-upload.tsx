@@ -13,6 +13,7 @@ import { toUserFacingError } from "@/lib/action-error";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { cn } from "@/lib/utils";
 import type { CharacterSearchItem } from "@/lib/character-search/types";
+import { fetchCharacterImage } from "@/lib/character-search/image";
 import { CharacterSearchDialog } from "@/components/character-search-dialog";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
@@ -140,6 +141,17 @@ export function ImageCropUpload({
 
   async function handleCharacterSelect(character: CharacterSearchItem) {
     setError(null);
+    if (character.source === "anilist") {
+      // The CDN permits browser CORS reads, but can reject Worker IPs.
+      // Validate its bytes before passing the image to the existing cropper.
+      try {
+        const direct = await fetchCharacterImage(character.source, character.imageUrl);
+        await prepareCrop(new File([direct.bytes], "character-image", { type: direct.contentType }), character);
+        return;
+      } catch {
+        // Keep the authenticated proxy available when browser CORS is denied.
+      }
+    }
     const params = new URLSearchParams({ source: character.source, url: character.imageUrl });
     const response = await fetch(`/api/characters/image?${params}`, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) {

@@ -24,3 +24,13 @@ export type CharacterSearchResponse = {
   hasMore: boolean;
   errors: { source: CharacterSource; message: string }[];
 };
+
+export function interleaveCharacterItems(items: CharacterSearchItem[]): CharacterSearchItem[] {
+  const groups = CHARACTER_SOURCES.map((source) => items.filter((item) => item.source === source));
+  const result: CharacterSearchItem[] = [];
+  const length = Math.max(0, ...groups.map((group) => group.length));
+  for (let index = 0; index < length; index++) {
+    for (const group of groups) if (group[index]) result.push(group[index]);
+  }
+  return result;
+}

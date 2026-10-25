@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ExternalLink, Loader2, Search, UserRound } from "lucide-react";
 import { toUserFacingError } from "@/lib/action-error";
+import { retryAniListSearchInBrowser } from "@/lib/character-search/browser";
 import {
   CHARACTER_SOURCES,
   CHARACTER_SOURCE_LABELS,
@@ -50,8 +51,9 @@ export function CharacterSearchDialog({
     try {
       const params = new URLSearchParams({ q: keyword, source: nextSource, page: String(nextPage) });
       const response = await fetch(`/api/characters/search?${params}`, { signal: controller.signal });
-      const data = await response.json() as CharacterSearchResponse & { error?: string };
+      let data = await response.json() as CharacterSearchResponse & { error?: string };
       if (!response.ok) throw new Error(data.error || "搜索失败，请稍后重试。");
+      data = await retryAniListSearchInBrowser(keyword, nextPage, data, controller.signal);
       if (controller.signal.aborted) return;
       setResult((previous) => {
         if (nextPage === 1 || !previous) return data;

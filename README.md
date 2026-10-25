@@ -53,6 +53,8 @@ npm run build:local
 
 三个来源默认不需要 API 密钥。可选配置 `BANGUMI_USER_AGENT`（建议带站点地址或联系方式）和服务端 `BANGUMI_ACCESS_TOKEN`。接口需要登录，上游搜索缓存 5 分钟；来源失败时保留其他来源的结果，可翻页继续查找。结果中的来源链接可打开原始条目。
 
+AniList 在服务器连接失败时会通过浏览器直连公开 API 重试，图片优先通过 CDN 的 CORS 接口读取。直连不携带网站 Cookie、登录凭据或来源页面地址，图片仍经过大小、格式、文件签名校验和现有裁剪上传流程。
+
 选择图片后进入现有裁剪流程，确认后上传到 `vote-images`，保存原有图片路径和元数据。新提名在确认裁剪后同时填入角色名；已有提名或候选项换图只更新图片。封面上传和本地选图继续沿用原流程，不需要数据库迁移。
 
 接入资料库时请遵守 [Bangumi API 使用建议](https://github.com/bangumi/api)、[AniList 使用条款](https://docs.anilist.co/guide/terms-of-use)和 [VNDB API 使用条款](https://api.vndb.org/kana#usage-terms)。搜索仅按用户输入查询，不批量采集资料库；AniList 与 VNDB 对商业使用有各自限制。
