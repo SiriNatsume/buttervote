@@ -5,7 +5,10 @@ import type { CharacterSource } from "./types";
 export function isCharacterImageUrl(source: CharacterSource, value: string): boolean {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return false;
+    if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) return false;
+    // Bangumi appends a numeric cache revision to some official portraits.
+    // No other query parameters or providers may add a query string.
+    if (url.search && !(source === "bangumi" && /^\?r=\d{1,16}$/.test(url.search))) return false;
     if (!/\.(?:jpe?g|png|webp)$/i.test(url.pathname)) return false;
 
     switch (source) {

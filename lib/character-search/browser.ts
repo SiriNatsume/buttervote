@@ -1,5 +1,5 @@
 import { searchCharacters } from "./providers";
-import { interleaveCharacterItems, type CharacterSearchResponse } from "./types";
+import { deduplicateCharacterItems, interleaveCharacterItems, type CharacterSearchResponse } from "./types";
 
 // AniList can reject Cloudflare's outbound IPs while accepting the user's
 // browser. Retry its public API without forwarding any site credentials.
@@ -13,6 +13,10 @@ export async function retryAniListSearchInBrowser(
   if (!result.errors.some((error) => error.source === "anilist") || signal.aborted) return result;
 
   const direct = await searchCharacters(query, "anilist", page, {
+    // The authenticated API already expanded these names. Reusing them avoids
+    // downloading and initializing OpenCC dictionaries in modern clients.
+    queryVariants: result.queryVariants,
+    signal,
     fetcher: (input, init) => fetcher(input, {
       ...init,
       credentials: "omit",
@@ -20,10 +24,11 @@ export async function retryAniListSearchInBrowser(
       signal: AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])]),
     }),
   });
-  if (signal.aborted || direct.errors.length) return result;
+  if (signal.aborted || (direct.errors.length && !direct.items.length)) return result;
   return {
-    items: interleaveCharacterItems([...result.items.filter((item) => item.source !== "anilist"), ...direct.items]),
+    items: interleaveCharacterItems(deduplicateCharacterItems([...result.items, ...direct.items])),
     hasMore: result.hasMore || direct.hasMore,
-    errors: result.errors.filter((error) => error.source !== "anilist"),
+    errors: [...result.errors.filter((error) => error.source !== "anilist"), ...direct.errors],
+    queryVariants: direct.queryVariants,
   };
 }

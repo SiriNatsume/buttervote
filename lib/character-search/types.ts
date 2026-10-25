@@ -23,6 +23,7 @@ export type CharacterSearchResponse = {
   items: CharacterSearchItem[];
   hasMore: boolean;
   errors: { source: CharacterSource; message: string }[];
+  queryVariants?: string[];
 };
 
 export function interleaveCharacterItems(items: CharacterSearchItem[]): CharacterSearchItem[] {
@@ -33,4 +34,14 @@ export function interleaveCharacterItems(items: CharacterSearchItem[]): Characte
     for (const group of groups) if (group[index]) result.push(group[index]);
   }
   return result;
+}
+
+export function deduplicateCharacterItems(items: CharacterSearchItem[]): CharacterSearchItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.source}:${item.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

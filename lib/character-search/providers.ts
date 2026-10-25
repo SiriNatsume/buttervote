@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { isCharacterImageUrl } from "./image";
+import { getCharacterQueryVariants } from "./query-variants";
 import {
   CHARACTER_SOURCES,
+  deduplicateCharacterItems,
   interleaveCharacterItems,
   type CharacterSearchItem,
   type CharacterSearchResponse,
@@ -67,11 +69,14 @@ type SearchOptions = {
   fetcher?: typeof fetch;
   bangumiUserAgent?: string;
   bangumiAccessToken?: string;
+  queryVariants?: readonly string[];
+  signal?: AbortSignal;
 };
 
 class ProviderError extends Error {}
 
 async function requestJson(url: string, body: unknown, options: SearchOptions, headers?: Record<string, string>): Promise<unknown> {
+  if (options.signal?.aborted) throw new DOMException("Search cancelled", "AbortError");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
@@ -79,7 +84,7 @@ async function requestJson(url: string, body: unknown, options: SearchOptions, h
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json", ...headers },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal: options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
       next: { revalidate: 300 },
     });
     if (!response.ok) {
@@ -177,19 +182,37 @@ export async function searchCharacters(
   options: SearchOptions = {},
 ): Promise<CharacterSearchResponse> {
   const sources = source === "all" ? CHARACTER_SOURCES : [source];
-  const results = await Promise.allSettled(sources.map((provider) => searchCharacterSource(provider, query, page, options)));
-  const response: CharacterSearchResponse = { items: [], hasMore: false, errors: [] };
-  results.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      response.items.push(...result.value.items);
-      response.hasMore ||= result.value.hasMore;
-    } else {
+  const queries = options.queryVariants
+    ? [...new Set(options.queryVariants)].slice(0, 3)
+    : await getCharacterQueryVariants(query);
+  const results = await Promise.all(sources.map(async (provider) => ({
+    source: provider,
+    variants: await Promise.allSettled(queries.map((keyword) => searchCharacterSource(provider, keyword, page, options))),
+  })));
+  const response: CharacterSearchResponse = { items: [], hasMore: false, errors: [], queryVariants: queries };
+  const exactNames = new Set(queries.map(normalizeName));
+  const exactMatch = (item: CharacterSearchItem) => [item.name, item.originalName].some((name) => exactNames.has(normalizeName(name)));
+  for (const result of results) {
+    const items: CharacterSearchItem[] = [];
+    const failures: unknown[] = [];
+    let succeeded = false;
+    for (const variant of result.variants) {
+      if (variant.status === "fulfilled") {
+        succeeded = true;
+        items.push(...variant.value.items);
+        response.hasMore ||= variant.value.hasMore;
+      } else failures.push(variant.reason);
+    }
+    response.items.push(...deduplicateCharacterItems(items).sort((a, b) => Number(exactMatch(b)) - Number(exactMatch(a))));
+    if (failures.length) {
+      const failure = failures.find((error) => error instanceof ProviderError);
+      const message = failure instanceof ProviderError ? failure.message : "资料库暂时不可用，请稍后重试。";
       response.errors.push({
-        source: sources[index],
-        message: result.reason instanceof ProviderError ? result.reason.message : "资料库暂时不可用，请稍后重试。",
+        source: result.source,
+        message: succeeded ? `部分结果未能加载：${message}` : message,
       });
     }
-  });
+  }
   // Keep each provider visible in combined searches; names are not unique
   // across franchises, so do not merge different sources by name alone.
   return { ...response, items: interleaveCharacterItems(response.items) };

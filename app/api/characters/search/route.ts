@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   const result = await searchCharacters(parsed.data.query, parsed.data.source, parsed.data.page, {
     bangumiUserAgent: process.env.BANGUMI_USER_AGENT,
     bangumiAccessToken: process.env.BANGUMI_ACCESS_TOKEN,
+    signal: request.signal,
   });
   return NextResponse.json(result, { headers });
 }
