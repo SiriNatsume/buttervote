@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Cropper, { type Area, type Point } from "react-easy-crop";
 import { ImagePlus, Search, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
@@ -13,8 +14,6 @@ import { toUserFacingError } from "@/lib/action-error";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { cn } from "@/lib/utils";
 import type { CharacterSearchItem } from "@/lib/character-search/types";
-import { fetchCharacterImage } from "@/lib/character-search/image";
-import { CharacterSearchDialog } from "@/components/character-search-dialog";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +24,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
+
+const CharacterSearchDialog = dynamic(
+  () => import("@/components/character-search-dialog").then((module) => module.CharacterSearchDialog),
+  { ssr: false, loading: () => <p role="status" className="text-xs text-muted-foreground">正在打开角色搜索…</p> },
+);
 
 export type ImageCropMode = "contest-cover" | "candidate-image";
 const MIN_CROP_ZOOM = 0.5;
@@ -145,6 +149,7 @@ export function ImageCropUpload({
       // The CDN permits browser CORS reads, but can reject Worker IPs.
       // Validate its bytes before passing the image to the existing cropper.
       try {
+        const { fetchCharacterImage } = await import("@/lib/character-search/image");
         const direct = await fetchCharacterImage(character.source, character.imageUrl);
         await prepareCrop(new File([direct.bytes], "character-image", { type: direct.contentType }), character);
         return;

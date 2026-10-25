@@ -4,6 +4,7 @@ import { characterSearchSchema, searchCharacters } from "../lib/character-search
 import { fetchCharacterImage, isCharacterImageUrl, MAX_CHARACTER_IMAGE_BYTES } from "../lib/character-search/image";
 import { retryAniListSearchInBrowser } from "../lib/character-search/browser";
 import type { CharacterSearchResponse } from "../lib/character-search/types";
+import { getCharacterQueryVariants } from "../lib/character-search/query-variants";
 
 const bangumiImage = "https://lain.bgm.tv/pic/crt/l/0c/ac/50406_crt_ZX1jZ.jpg";
 const anilistImage = "https://s4.anilist.co/file/anilistcdn/character/large/b63351-0WmsDENpiscp.png";
@@ -60,13 +61,117 @@ test("one failed source does not discard other providers and upstream errors do 
 
 test("single-source search requests only that provider and distinguishes no results from failures", async () => {
   let requests = 0;
-  const result = await searchCharacters("不存在的角色", "vndb", 1, { fetcher: async (input) => {
+  const result = await searchCharacters("NonexistentCharacter", "vndb", 1, { fetcher: async (input) => {
     requests++;
     assert.equal(String(input), "https://api.vndb.org/kana/character");
     return json({ results: [], more: false });
   } });
   assert.equal(requests, 1);
-  assert.deepEqual(result, { items: [], hasMore: false, errors: [] });
+  assert.deepEqual(result, { items: [], hasMore: false, errors: [], queryVariants: ["NonexistentCharacter"] });
+});
+
+test("Chinese names expand in both directions, preserve mixed input and do not duplicate unchanged queries", async () => {
+  assert.deepEqual(await getCharacterQueryVariants("  佐仓濑津美  "), ["佐仓濑津美", "佐倉瀨津美"]);
+  assert.deepEqual(await getCharacterQueryVariants("佐倉瀨津美"), ["佐倉瀨津美", "佐仓濑津美"]);
+  assert.deepEqual(await getCharacterQueryVariants("佐仓瀨津美"), ["佐仓瀨津美", "佐仓濑津美", "佐倉瀨津美"]);
+  assert.deepEqual(await getCharacterQueryVariants("木之本"), ["木之本"]);
+  assert.deepEqual(await getCharacterQueryVariants("Murasame"), ["Murasame"]);
+  assert.deepEqual(await getCharacterQueryVariants("ムラサメ"), ["ムラサメ"]);
+  assert.deepEqual(await getCharacterQueryVariants("  "), []);
+});
+
+test("simplified search merges both spellings, removes repeated IDs and preserves distinct same-name entries", async () => {
+  const queries: string[] = [];
+  const result = await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async (_url, init) => {
+    const keyword = JSON.parse(String(init?.body)).keyword;
+    queries.push(keyword);
+    const data = keyword === "佐仓濑津美" ? [
+      { id: 1, name: "佐仓濑津美", images: { large: bangumiImage } },
+      { id: 2, name: "佐仓濑津美", images: { large: bangumiImage } },
+      { id: 9, name: "其他角色", images: { large: bangumiImage } },
+    ] : [
+      { id: 3, name: "佐倉瀨津美", images: { large: bangumiImage } },
+      { id: 1, name: "佐仓濑津美", images: { large: bangumiImage } },
+    ];
+    return json({ data, total: data.length });
+  } });
+  assert.deepEqual(queries, ["佐仓濑津美", "佐倉瀨津美"]);
+  assert.deepEqual(result.items.map((item) => [item.id, item.name]), [
+    ["1", "佐仓濑津美"], ["2", "佐仓濑津美"], ["3", "佐倉瀨津美"], ["9", "其他角色"],
+  ]);
+  assert.equal(result.hasMore, false);
+  assert.deepEqual(result.errors, []);
+});
+
+test("every spelling is requested on the same page and later traditional results keep pagination available", async () => {
+  const requests: { keyword: string; offset: string | null }[] = [];
+  const result = await searchCharacters("佐倉瀨津美", "bangumi", 2, { fetcher: async (url, init) => {
+    const keyword = JSON.parse(String(init?.body)).keyword;
+    requests.push({ keyword, offset: new URL(String(url)).searchParams.get("offset") });
+    return keyword === "佐倉瀨津美"
+      ? json({ total: 25, data: [{ id: 20, name: keyword, images: { large: bangumiImage } }] })
+      : json({ total: 12, data: [] });
+  } });
+  assert.deepEqual(requests, [{ keyword: "佐倉瀨津美", offset: "12" }, { keyword: "佐仓濑津美", offset: "12" }]);
+  assert.deepEqual(result.items.map((item) => item.id), ["20"]);
+  assert.equal(result.hasMore, true);
+});
+
+test("one failed spelling preserves the other spelling's results and reports one partial provider error", async () => {
+  const result = await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async (_url, init) => {
+    const keyword = JSON.parse(String(init?.body)).keyword;
+    return keyword === "佐仓濑津美" ? new Response(null, { status: 429 })
+      : json({ total: 1, data: [{ id: 3, name: keyword, images: { large: bangumiImage } }] });
+  } });
+  assert.equal(result.items[0].name, "佐倉瀨津美");
+  assert.equal(result.errors.length, 1);
+  assert.equal(result.errors[0].source, "bangumi");
+  assert.match(result.errors[0].message, /部分结果.*频繁/);
+});
+
+test("all sources receive both Chinese spellings without collapsing IDs from different sources", async () => {
+  const requests: Record<string, string[]> = { bangumi: [], anilist: [], vndb: [] };
+  const result = await searchCharacters("佐仓濑津美", "all", 1, { fetcher: async (url, init) => {
+    const body = JSON.parse(String(init?.body));
+    if (String(url).includes("api.bgm.tv")) {
+      requests.bangumi.push(body.keyword);
+      return json({ total: 1, data: [{ id: 1, name: "佐仓濑津美", images: { large: bangumiImage } }] });
+    }
+    if (String(url).includes("graphql.anilist.co")) {
+      requests.anilist.push(body.variables.search);
+      return json({ data: { Page: { pageInfo: { hasNextPage: false }, characters: [
+        { id: 1, name: { native: "佐倉瀨津美", alternative: ["佐仓濑津美"] }, image: { large: anilistImage } },
+      ] } } });
+    }
+    requests.vndb.push(body.filters[2]);
+    return json({ more: false, results: [{ id: "c1", name: "Setsumi", original: "佐倉瀨津美", image: { url: vndbImage } }] });
+  } });
+  for (const source of ["bangumi", "anilist", "vndb"]) assert.deepEqual(requests[source], ["佐仓濑津美", "佐倉瀨津美"]);
+  assert.deepEqual(result.items.map((item) => `${item.source}:${item.id}`), ["bangumi:1", "anilist:1", "vndb:c1"]);
+});
+
+test("browser retry also searches both spellings and keeps usable partial results", async () => {
+  const queries: string[] = [];
+  const result: CharacterSearchResponse = {
+    items: [{ id: "1", source: "anilist", name: "佐仓濑津美", originalName: "Setsumi", imageUrl: anilistImage,
+      thumbnailUrl: anilistImage, sourceUrl: "https://anilist.co/character/1", works: [] }],
+    hasMore: false,
+    errors: [{ source: "anilist", message: "server unavailable" }],
+  };
+  const recovered = await retryAniListSearchInBrowser("佐仓濑津美", 2, result, new AbortController().signal, async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.variables.page, 2);
+    queries.push(body.variables.search);
+    if (body.variables.search === "佐仓濑津美") return new Response(null, { status: 503 });
+    return json({ data: { Page: { pageInfo: { hasNextPage: true }, characters: [
+      { id: 2, name: { native: "佐倉瀨津美" }, image: { large: anilistImage } },
+    ] } } });
+  });
+  assert.deepEqual(queries, ["佐仓濑津美", "佐倉瀨津美"]);
+  assert.deepEqual(recovered.items.map((item) => item.id), ["1", "2"]);
+  assert.equal(recovered.hasMore, true);
+  assert.equal(recovered.errors.length, 1);
+  assert.match(recovered.errors[0].message, /部分结果/);
 });
 
 test("non-Latin AniList searches discard unrelated popular fallbacks but retain native names and aliases", async () => {
@@ -85,7 +190,63 @@ test("non-Latin AniList searches discard unrelated popular fallbacks but retain 
       { id: 1, name: { full: "Satoru Gojou", native: "五条悟" }, image: { large: anilistImage } },
     ],
   } } }) });
-  assert.deepEqual(fallback, { items: [], hasMore: false, errors: [] });
+  assert.deepEqual(fallback, { items: [], hasMore: false, errors: [], queryVariants: ["不支持的关键词", "不支持的關鍵詞"] });
+});
+
+test("script variants start in parallel rather than waiting for the previous spelling", { timeout: 5000 }, async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let bothStarted!: () => void;
+  const started = new Promise<void>((resolve) => { bothStarted = resolve; });
+  const queries: string[] = [];
+  const pending = searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async (_url, init) => {
+    queries.push(JSON.parse(String(init?.body)).keyword);
+    if (queries.length === 2) bothStarted();
+    await gate;
+    return json({ total: 0, data: [] });
+  } });
+  await started;
+  assert.deepEqual(queries, ["佐仓濑津美", "佐倉瀨津美"]);
+  release();
+  await pending;
+});
+
+test("browser fallback reuses server spellings without recomputing or changing them", async () => {
+  const queries: string[] = [];
+  const spellings = ["服务端拼写", "服務端拼寫"];
+  const result: CharacterSearchResponse = {
+    items: [], hasMore: false, errors: [{ source: "anilist", message: "unavailable" }], queryVariants: spellings,
+  };
+  const recovered = await retryAniListSearchInBrowser("Alias", 1, result, new AbortController().signal, async (_url, init) => {
+    const query = JSON.parse(String(init?.body)).variables.search;
+    queries.push(query);
+    return json({ data: { Page: { pageInfo: { hasNextPage: false }, characters: [
+      { id: query === spellings[0] ? 1 : 2, name: { native: query }, image: { large: anilistImage } },
+    ] } } });
+  });
+  assert.deepEqual(queries, spellings);
+  assert.deepEqual(recovered.queryVariants, spellings);
+  assert.equal(recovered.items.length, 2);
+});
+
+test("cancelling a proxied search aborts upstream requests", { timeout: 5000 }, async () => {
+  const controller = new AbortController();
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  let upstreamSignal: AbortSignal | null = null;
+  const pending = searchCharacters("Murasame", "vndb", 1, { signal: controller.signal, fetcher: async (_url, init) => {
+    upstreamSignal = init!.signal!;
+    markStarted();
+    return new Promise<Response>((_resolve, reject) => {
+      init!.signal!.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+  } });
+  await started;
+  controller.abort();
+  const result = await pending;
+  assert.equal((upstreamSignal as AbortSignal | null)?.aborted, true);
+  assert.equal(result.items.length, 0);
+  assert.equal(result.errors.length, 1);
 });
 
 test("query validation bounds text, source and pagination before any upstream request", () => {
@@ -98,6 +259,7 @@ test("query validation bounds text, source and pagination before any upstream re
 
 test("image proxy allowlist blocks URL credential tricks, alternate hosts, ports and unrelated paths", () => {
   assert.equal(isCharacterImageUrl("bangumi", bangumiImage), true);
+  assert.equal(isCharacterImageUrl("bangumi", `${bangumiImage}?r=1728761723`), true);
   assert.equal(isCharacterImageUrl("bangumi", bangumiImage.replace("/pic/", "/r/100/pic/")), true);
   assert.equal(isCharacterImageUrl("anilist", anilistImage), true);
   assert.equal(isCharacterImageUrl("vndb", vndbImage), true);
@@ -107,10 +269,25 @@ test("image proxy allowlist blocks URL credential tricks, alternate hosts, ports
     "https://lain.bgm.tv.evil.test/pic/crt/l/a.jpg", "https://lain.bgm.tv@evil.test/pic/crt/l/a.jpg",
     "https://evil.test@lain.bgm.tv/pic/crt/l/a.jpg", "https://lain.bgm.tv:8443/pic/crt/l/a.jpg",
     "https://lain.bgm.tv/pic/crt/l/a.jpg?redirect=http://localhost", "https://lain.bgm.tv/pic/crt/l/a.jpg#fragment",
+    `${bangumiImage}?r=1&r=2`, `${bangumiImage}?r=1&redirect=http://localhost`, `${bangumiImage}?r=http://localhost`,
+    `${bangumiImage}?r=1%26redirect%3Dhttp%3A%2F%2Flocalhost`,
     "https://lain.bgm.tv/pic/crt/l/../../../secret.jpg", "https://lain.bgm.tv/pic/crt/l/a.svg",
     "https://lain.bgm.tv/pic/crt/l/a.gif", "https://lain.bgm.tv/private.jpg", vndbImage,
   ]) assert.equal(isCharacterImageUrl("bangumi", url), false, url);
   assert.equal(isCharacterImageUrl("anilist", "https://s4.anilist.co/file/anilistcdn/user/avatar/large/a.png"), false);
+  assert.equal(isCharacterImageUrl("anilist", `${anilistImage}?r=1728761723`), false);
+  assert.equal(isCharacterImageUrl("vndb", `${vndbImage}?r=1728761723`), false);
+});
+
+test("Bangumi cache revision portraits remain searchable and keep their revision when scripts are merged", async () => {
+  const result = await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async () => json({ total: 1, data: [{
+    id: 12258, name: "佐倉瀬津美", infobox: [{ key: "简体中文名", value: "佐仓濑津美" }],
+    images: { large: `${bangumiImage}?r=1728761723`, small: `${bangumiImage}?r=1728761723` },
+  }] }) });
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].name, "佐仓濑津美");
+  assert.equal(result.items[0].imageUrl, `${bangumiImage}?r=1728761723`);
+  assert.equal(result.items[0].thumbnailUrl, `${bangumiImage}?r=1728761723`);
 });
 
 test("image download rejects non-images, forged MIME types, oversized bodies and HTTP errors", async () => {

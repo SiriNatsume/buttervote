@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ExternalLink, Loader2, Search, UserRound } from "lucide-react";
 import { toUserFacingError } from "@/lib/action-error";
-import { retryAniListSearchInBrowser } from "@/lib/character-search/browser";
+import { searchCharacterImages } from "@/lib/character-search/client-search";
 import {
   CHARACTER_SOURCES,
   CHARACTER_SOURCE_LABELS,
@@ -33,27 +33,28 @@ export function CharacterSearchDialog({
   const [selecting, setSelecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
+  const requestKeyRef = useRef<string | null>(null);
   useEffect(() => () => {
     requestRef.current?.abort();
     requestRef.current = null;
+    requestKeyRef.current = null;
   }, []);
 
   async function search(nextPage = 1, nextSource = source) {
     const keyword = (nextPage > 1 ? lastQuery : query).trim();
     if (!keyword) { setError("请输入角色名。"); return; }
+    const key = JSON.stringify([keyword, nextSource, nextPage]);
+    if (requestKeyRef.current === key && requestRef.current && !requestRef.current.signal.aborted) return;
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
+    requestKeyRef.current = key;
     const timeout = setTimeout(() => controller.abort(), 20000);
     setLoading(true);
     setError(null);
     if (nextPage === 1) setResult(null);
     try {
-      const params = new URLSearchParams({ q: keyword, source: nextSource, page: String(nextPage) });
-      const response = await fetch(`/api/characters/search?${params}`, { signal: controller.signal });
-      let data = await response.json() as CharacterSearchResponse & { error?: string };
-      if (!response.ok) throw new Error(data.error || "搜索失败，请稍后重试。");
-      data = await retryAniListSearchInBrowser(keyword, nextPage, data, controller.signal);
+      const data = await searchCharacterImages(keyword, nextSource, nextPage, controller.signal);
       if (controller.signal.aborted) return;
       setResult((previous) => {
         if (nextPage === 1 || !previous) return data;
@@ -68,7 +69,11 @@ export function CharacterSearchDialog({
         : toUserFacingError(cause instanceof Error ? cause.message : undefined));
     } finally {
       clearTimeout(timeout);
-      if (requestRef.current === controller) setLoading(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        requestKeyRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
@@ -117,13 +122,13 @@ export function CharacterSearchDialog({
                 onClick={() => {
                   setSource(value);
                   if (query.trim()) void search(1, value);
-                  else { requestRef.current?.abort(); requestRef.current = null; setResult(null); setLoading(false); }
+                  else { requestRef.current?.abort(); requestRef.current = null; requestKeyRef.current = null; setResult(null); setLoading(false); }
                 }}>
                 {value === "all" ? "全部来源" : CHARACTER_SOURCE_LABELS[value]}
               </Button>
             ))}
           </div>
-          <p className="text-xs leading-5 text-muted-foreground">Bangumi 支持中文名；AniList、VNDB 也可尝试日文名或罗马音。</p>
+          <p className="text-xs leading-5 text-muted-foreground">中文名自动同时搜索简体和繁体；AniList、VNDB 也可尝试日文名或罗马音。</p>
         </div>
 
         <div aria-live="polite" aria-busy={loading || Boolean(selecting)} className="space-y-3">
