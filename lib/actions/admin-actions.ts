@@ -236,8 +236,11 @@ function revalidateContest(contestId: string) {
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath(`/admin/contests/${contestId}/edit`);
+  revalidatePath(`/admin/contests/${contestId}/candidates`);
   revalidatePath(`/contests/${contestId}`);
+  revalidatePath(`/contests/${contestId}/nominate`);
   revalidatePath(`/contests/${contestId}/my-nominations`);
+  revalidatePath("/me/nominations");
   revalidatePath(`/contests/${contestId}/vote`);
   revalidatePath(`/contests/${contestId}/results`);
 }

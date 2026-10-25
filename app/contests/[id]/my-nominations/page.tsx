@@ -55,7 +55,7 @@ export default async function ContestMyNominationsPage({
     dataClient
       .from("nominations")
       .select(
-        "id,contest_id,name,description,status,rejection_reason,rejected_at,created_at,image_path,image_width,image_height,image_size,nominator_display_name",
+        "id,contest_id,name,description,status,rejection_reason,rejected_at,created_at,updated_at,image_path,image_width,image_height,image_size,nominator_display_name",
       )
       .eq("contest_id", contest.id)
       .eq("submitter_id", user.id)
