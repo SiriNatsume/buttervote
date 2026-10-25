@@ -1,8 +1,8 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import Cropper, { type Area, type Point } from "react-easy-crop";
-import { ImagePlus, UploadCloud } from "lucide-react";
+import { ImagePlus, Search, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import {
   getCroppedImageBlob,
@@ -12,6 +12,8 @@ import {
 import { toUserFacingError } from "@/lib/action-error";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { cn } from "@/lib/utils";
+import type { CharacterSearchItem } from "@/lib/character-search/types";
+import { CharacterSearchDialog } from "@/components/character-search-dialog";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +48,8 @@ export type ImageCropUploadProps = {
   }) => void | Promise<void>;
   disabled?: boolean;
   onBusyChange?: (busy: boolean) => void;
+  characterSearchQuery?: string;
+  onCharacterSelected?: (item: CharacterSearchItem) => void;
 };
 
 const modeConfig: Record<
@@ -88,6 +92,8 @@ export function ImageCropUpload({
   onUploaded,
   disabled = false,
   onBusyChange,
+  characterSearchQuery,
+  onCharacterSelected,
 }: ImageCropUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const config = modeConfig[mode];
@@ -102,12 +108,14 @@ export function ImageCropUpload({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const selectedCharacterRef = useRef<CharacterSearchItem | null>(null);
   const busyCallbackRef = useRef(onBusyChange);
   useEffect(() => { busyCallbackRef.current = onBusyChange; }, [onBusyChange]);
   useEffect(() => {
-    busyCallbackRef.current?.(dialogOpen || isUploading);
+    busyCallbackRef.current?.(searchOpen || dialogOpen || isUploading);
     return () => busyCallbackRef.current?.(false);
-  }, [dialogOpen, isUploading]);
+  }, [searchOpen, dialogOpen, isUploading]);
 
   const outputMimeType = /\.jpe?g$/i.test(storagePath)
     ? "image/jpeg"
@@ -115,15 +123,32 @@ export function ImageCropUpload({
   const outputFileName =
     outputMimeType === "image/jpeg" ? "image.jpg" : "image.webp";
 
-  const metaText = useMemo(() => {
-    if (!value?.imageWidth || !value?.imageHeight || !value?.imageSize) {
-      return null;
-    }
+  const metaText = value?.imageWidth && value?.imageHeight && value?.imageSize
+    ? `${value.imageWidth} x ${value.imageHeight} · ${Math.round(value.imageSize / 1024)}KB`
+    : null;
 
-    return `${value.imageWidth} x ${value.imageHeight} · ${Math.round(
-      value.imageSize / 1024,
-    )}KB`;
-  }, [value?.imageHeight, value?.imageSize, value?.imageWidth]);
+  async function prepareCrop(file: File, character: CharacterSearchItem | null = null) {
+    validateImageFile(file);
+    const dataUrl = await readFileAsDataURL(file);
+    selectedCharacterRef.current = character;
+    setImageSrc(dataUrl);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setDialogOpen(true);
+  }
+
+  async function handleCharacterSelect(character: CharacterSearchItem) {
+    setError(null);
+    const params = new URLSearchParams({ source: character.source, url: character.imageUrl });
+    const response = await fetch(`/api/characters/image?${params}`, { signal: AbortSignal.timeout(15000) });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+      throw new Error(data?.error || "角色图片加载失败，请稍后重试。");
+    }
+    const blob = await response.blob();
+    await prepareCrop(new File([blob], "character-image", { type: blob.type }), character);
+  }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -135,13 +160,7 @@ export function ImageCropUpload({
 
     try {
       setError(null);
-      validateImageFile(file);
-      const dataUrl = await readFileAsDataURL(file);
-      setImageSrc(dataUrl);
-      setCrop({ x: 0, y: 0 });
-      setZoom(1);
-      setCroppedAreaPixels(null);
-      setDialogOpen(true);
+      await prepareCrop(file);
     } catch (nextError) {
       const message = toUserFacingError(
         nextError instanceof Error ? nextError.message : "图片文件无效。",
@@ -195,6 +214,9 @@ export function ImageCropUpload({
         imageSize: result.size,
         publicUrl: uploadResult.publicUrl,
       });
+
+      if (selectedCharacterRef.current) onCharacterSelected?.(selectedCharacterRef.current);
+      selectedCharacterRef.current = null;
 
       setPreviewUrl(uploadResult.publicUrl);
       setDialogOpen(false);
@@ -250,17 +272,29 @@ export function ImageCropUpload({
         disabled={disabled || isUploading}
         onChange={handleFileChange}
       />
-      <LoadingButton
-        type="button"
-        variant="outline"
-        disabled={disabled || isUploading}
-        loading={isUploading}
-        loadingText="上传中..."
-        onClick={() => inputRef.current?.click()}
-      >
-        <UploadCloud className="size-4" />
-        {previewUrl ? "替换图片" : config.label}
-      </LoadingButton>
+      <div className={mode === "candidate-image" ? "grid grid-cols-2 gap-2" : undefined}>
+        <LoadingButton
+          type="button"
+          variant="outline"
+          size={mode === "candidate-image" ? "sm" : "default"}
+          className={mode === "candidate-image" ? "w-full min-w-0 gap-1 px-1" : undefined}
+          disabled={disabled || isUploading}
+          loading={isUploading}
+          loadingText="上传中..."
+          onClick={() => inputRef.current?.click()}
+        >
+          <UploadCloud className="size-4" />
+          {previewUrl ? "替换图片" : config.label}
+        </LoadingButton>
+        {mode === "candidate-image" ? (
+          <Button type="button" variant="outline" size="sm" className="w-full min-w-0 gap-1 px-1" disabled={disabled || isUploading}
+            onClick={() => setSearchOpen(true)}>
+            <Search className="size-4" />搜索角色
+          </Button>
+        ) : null}
+      </div>
+      {mode === "candidate-image" && searchOpen ? <CharacterSearchDialog onClose={() => setSearchOpen(false)}
+        initialQuery={characterSearchQuery} onSelect={handleCharacterSelect} /> : null}
 
       <Dialog
         open={dialogOpen}

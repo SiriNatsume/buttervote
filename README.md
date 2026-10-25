@@ -43,6 +43,20 @@ npm run build:local
 
 完整命令、测试账号和数据库变更流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。原有 `npm run dev`、`npm run build` 和部署命令保持不变，供已配置托管环境的维护者使用。
 
+## 角色图片搜索
+
+提名表单、提名换图和管理员候选项图片处提供「搜索角色」。支持全部来源一起搜索，或单独选择：
+
+- **Bangumi**：中文名和日文名搜索，收录动画、漫画、游戏等作品中的角色。
+- **AniList**：补充动画、漫画角色，可使用日文名或罗马音。
+- **VNDB**：补充视觉小说 / Galgame 角色，可使用原名、别名或罗马音。
+
+三个来源默认不需要 API 密钥。可选配置 `BANGUMI_USER_AGENT`（建议带站点地址或联系方式）和服务端 `BANGUMI_ACCESS_TOKEN`。接口需要登录，上游搜索缓存 5 分钟；来源失败时保留其他来源的结果，可翻页继续查找。结果中的来源链接可打开原始条目。
+
+选择图片后进入现有裁剪流程，确认后上传到 `vote-images`，保存原有图片路径和元数据。新提名在确认裁剪后同时填入角色名；已有提名或候选项换图只更新图片。封面上传和本地选图继续沿用原流程，不需要数据库迁移。
+
+接入资料库时请遵守 [Bangumi API 使用建议](https://github.com/bangumi/api)、[AniList 使用条款](https://docs.anilist.co/guide/terms-of-use)和 [VNDB API 使用条款](https://api.vndb.org/kana#usage-terms)。搜索仅按用户输入查询，不批量采集资料库；AniList 与 VNDB 对商业使用有各自限制。
+
 ## 环境变量
 
 ```bash

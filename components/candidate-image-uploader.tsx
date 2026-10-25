@@ -13,9 +13,11 @@ type ImageValue = {
 
 export function CandidateImageUploader({
   candidateId,
+  candidateName,
   value,
 }: {
   candidateId: string;
+  candidateName?: string;
   value?: ImageValue;
 }) {
   const [currentValue, setCurrentValue] = useState<ImageValue | undefined>(
@@ -25,6 +27,7 @@ export function CandidateImageUploader({
   return (
     <ImageCropUpload
       mode="candidate-image"
+      characterSearchQuery={candidateName}
       storagePath={`candidates/${candidateId}/image.jpg`}
       value={currentValue}
       onUploaded={async (result) => {

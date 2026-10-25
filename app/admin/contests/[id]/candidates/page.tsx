@@ -84,6 +84,7 @@ function CandidateEditCard({
         <div className="space-y-4">
           <CandidateImageUploader
             candidateId={candidate.id}
+            candidateName={candidate.name}
             value={{
               imagePath: candidate.image_path,
               imageWidth: candidate.image_width,
