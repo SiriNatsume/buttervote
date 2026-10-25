@@ -325,6 +325,7 @@ function NominationCard({
               <NominationImageUploader
                 contestId={nomination.contest_id}
                 nominationId={nomination.id}
+                candidateName={nomination.name}
                 showActions={false}
                 disabled={!editable}
                 value={{

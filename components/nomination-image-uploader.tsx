@@ -17,12 +17,14 @@ type ImageValue = {
 export function NominationImageUploader({
   contestId,
   nominationId,
+  candidateName,
   value,
   showActions = true,
   disabled = false,
 }: {
   contestId: string;
   nominationId: string;
+  candidateName?: string;
   value?: ImageValue;
   showActions?: boolean;
   disabled?: boolean;
@@ -37,6 +39,7 @@ export function NominationImageUploader({
     <div className="space-y-4">
       <ImageCropUpload
         mode="candidate-image"
+        characterSearchQuery={candidateName}
         storagePath={`nominations/${nominationId}/image.jpg`}
         value={currentValue}
         disabled={disabled}

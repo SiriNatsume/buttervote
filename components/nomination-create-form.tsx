@@ -382,11 +382,13 @@ export function NominationCreateForm({
               </div>
               {!submitted ? (
                 <div id={`nomination-fields-${entry.id}`} hidden={!entry.expanded} className="border-t border-[#EED8AA]/70 p-4">
-                  <div className="grid gap-5 sm:grid-cols-[148px_minmax(0,1fr)]">
+                  <div className="grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)]">
                     <div className="w-full max-w-[180px] space-y-2">
                       <Label className="inline-flex items-center gap-2"><ImagePlus className="size-4" />图片{requiresImage ? "（必填）" : "（选填）"}</Label>
                       <ImageCropUpload mode="candidate-image" storagePath={nominationDraftImagePath(userId, entry.id)}
                         value={entry.image ?? undefined} disabled={isSubmitting}
+                        characterSearchQuery={entry.name}
+                        onCharacterSelected={(character) => updateEntry(entry.id, { name: character.name.slice(0, 120), state: "editing", error: null })}
                         onBusyChange={(busy) => setImageBusy(entry.id, busy)}
                         onUploaded={(result) => updateEntry(entry.id, { image: {
                           imagePath: result.imagePath, imageWidth: result.imageWidth,
