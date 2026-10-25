@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ExternalLink, Loader2, Search, UserRound } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
+import { CharacterSearchResultCard } from "@/components/character-search-result-card";
 import { toUserFacingError } from "@/lib/action-error";
 import { searchCharacterImages } from "@/lib/character-search/client-search";
 import {
@@ -142,33 +143,9 @@ export function CharacterSearchDialog({
           ) : null}
           {result?.items.length ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {result.items.map((item) => {
-                const key = `${item.source}:${item.id}`;
-                return (
-                  <div key={key} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#EED8AA]/80 bg-white/70">
-                    <button type="button" className="flex w-full flex-1 flex-col text-left transition hover:bg-[#FFF3D0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-50"
-                      aria-label={`选择 ${item.name}（${CHARACTER_SOURCE_LABELS[item.source]}）`} disabled={Boolean(selecting) || loading}
-                      onClick={() => void select(item)}>
-                      <div className="relative flex aspect-square w-full shrink-0 items-center justify-center overflow-hidden bg-[#FFF8E8]">
-                        <UserRound className="absolute size-8 text-muted-foreground/40" aria-hidden="true" />
-                        {/* Provider thumbnails are displayed directly; selected images are
-                            downloaded through the authenticated image proxy for cropping. */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={item.thumbnailUrl} alt={item.name} loading="lazy" referrerPolicy="no-referrer"
-                          className="relative size-full object-contain" onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} />
-                      </div>
-                      <div className="space-y-1 p-3">
-                        <p className="break-words text-sm font-medium">{item.name}</p>
-                        {item.originalName !== item.name ? <p className="line-clamp-1 break-words text-xs text-muted-foreground">{item.originalName}</p> : null}
-                        {item.works.length ? <p className="line-clamp-2 break-words text-xs leading-5 text-muted-foreground">{item.works.join(" / ")}</p> : null}
-                      </div>
-                    </button>
-                    <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 border-t border-[#EED8AA]/50 px-3 py-2 text-xs text-muted-foreground hover:text-foreground" aria-label={`在 ${CHARACTER_SOURCE_LABELS[item.source]} 查看 ${item.name}`}>
-                      {CHARACTER_SOURCE_LABELS[item.source]}<ExternalLink className="size-3" />
-                    </a>
-                  </div>
-                );
-              })}
+              {result.items.map((item) => <CharacterSearchResultCard
+                key={`${item.source}:${item.id}:${item.thumbnailUrl}:${item.imageUrl}`}
+                item={item} disabled={Boolean(selecting) || loading} onSelect={(item) => void select(item)} />)}
             </div>
           ) : null}
           {result?.hasMore && page < 20 ? <Button type="button" variant="outline" className="w-full"

@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     bangumiUserAgent: process.env.BANGUMI_USER_AGENT,
     bangumiAccessToken: process.env.BANGUMI_ACCESS_TOKEN,
     signal: request.signal,
+    onProviderFailure: (failure) => console.warn("Character search upstream failure", failure),
   });
   return NextResponse.json(result, { headers });
 }

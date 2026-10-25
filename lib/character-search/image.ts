@@ -1,7 +1,7 @@
 import type { CharacterSource } from "./types";
 
 // Only the providers' static character image directories are fetchable. Never
-// accept arbitrary URLs or follow redirects from this authenticated proxy.
+// accept arbitrary URLs or follow redirects from either image proxy.
 export function isCharacterImageUrl(source: CharacterSource, value: string): boolean {
   try {
     const url = new URL(value);
@@ -41,10 +41,13 @@ export async function fetchCharacterImage(
   source: CharacterSource,
   url: string,
   fetcher: typeof fetch = fetch,
+  options: { maxBytes?: number; timeoutMs?: number } = {},
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; contentType: string }> {
   if (!isCharacterImageUrl(source, url)) throw new Error("角色图片地址无效。");
+  const maxBytes = Math.min(options.maxBytes ?? MAX_CHARACTER_IMAGE_BYTES, MAX_CHARACTER_IMAGE_BYTES);
+  const sizeError = maxBytes === MAX_CHARACTER_IMAGE_BYTES ? "角色原图不能超过 10MB。" : "预览图片超过大小限制。";
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 12000);
   try {
     const response = await fetcher(url, {
       // workerd does not implement "error"; return redirects without following
@@ -64,9 +67,9 @@ export async function fetchCharacterImage(
       await response.body?.cancel();
       throw new Error("仅支持 JPG、PNG 或 WebP 角色图片。");
     }
-    if (Number(response.headers.get("content-length")) > MAX_CHARACTER_IMAGE_BYTES) {
+    if (Number(response.headers.get("content-length")) > maxBytes) {
       await response.body?.cancel();
-      throw new Error("角色原图不能超过 10MB。");
+      throw new Error(sizeError);
     }
     const reader = response.body?.getReader();
     if (!reader) throw new Error("角色图片内容为空。");
@@ -76,9 +79,9 @@ export async function fetchCharacterImage(
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_CHARACTER_IMAGE_BYTES) {
+      if (size > maxBytes) {
         await reader.cancel();
-        throw new Error("角色原图不能超过 10MB。");
+        throw new Error(sizeError);
       }
       chunks.push(value);
     }

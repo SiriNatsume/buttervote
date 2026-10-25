@@ -5,6 +5,7 @@ import { fetchCharacterImage, isCharacterImageUrl, MAX_CHARACTER_IMAGE_BYTES } f
 import { retryAniListSearchInBrowser } from "../lib/character-search/browser";
 import type { CharacterSearchResponse } from "../lib/character-search/types";
 import { getCharacterQueryVariants } from "../lib/character-search/query-variants";
+import { createBangumiSearchCache } from "../lib/character-search/bangumi-search-cache";
 
 const bangumiImage = "https://lain.bgm.tv/pic/crt/l/0c/ac/50406_crt_ZX1jZ.jpg";
 const anilistImage = "https://s4.anilist.co/file/anilistcdn/character/large/b63351-0WmsDENpiscp.png";
@@ -57,6 +58,49 @@ test("one failed source does not discard other providers and upstream errors do 
   assert.equal(result.errors.length, 2);
   assert.match(result.errors[0].message, /频繁/);
   assert.equal(JSON.stringify(result).includes("private upstream"), false);
+});
+
+test("Bangumi accepts missing or sparse optional metadata without discarding valid characters", async () => {
+  const result = await searchCharacters("Setsumi", "bangumi", 1, { fetcher: async (_url, init) => {
+    assert.match(new Headers(init?.headers).get("User-Agent")!, /SiriNatsume\/buttervote.*github.com/);
+    return json({ total: 2, data: [
+      { id: 1, name: "Setsumi", images: { large: bangumiImage }, infobox: null },
+      { id: 2, name: "Other", images: { large: bangumiImage }, infobox: [null, { unknown: true }] },
+    ] });
+  } });
+  assert.equal(result.items.length, 2);
+  assert.deepEqual(result.errors, []);
+});
+
+test("transient upstream failures retry once, while rate limits and Retry-After are respected", async () => {
+  let calls = 0;
+  const recovered = await searchCharacters("Setsumi", "bangumi", 1, { fetcher: async (_url, init) => {
+    calls++;
+    if (calls === 1) return new Response(null, { status: 503 });
+    assert.equal(init?.cache, "no-store");
+    return json({ total: 0, data: [] });
+  } });
+  assert.equal(calls, 2);
+  assert.deepEqual(recovered.errors, []);
+  for (const status of [429, 503]) {
+    let attempts = 0;
+    const result = await searchCharacters("Setsumi", "bangumi", 1, { fetcher: async () => {
+      attempts++; return new Response(null, { status, headers: { "Retry-After": "60" } });
+    } });
+    assert.equal(attempts, 1);
+    assert.equal(result.errors.length, 1);
+  }
+});
+
+test("operator diagnostics classify invalid upstream data without exposing its contents in user errors", async () => {
+  const diagnostics: unknown[] = [];
+  const result = await searchCharacters("Setsumi", "bangumi", 1, {
+    onProviderFailure: (failure) => diagnostics.push(failure),
+    fetcher: async () => json({ total: 1, data: [{ id: "invalid-private-body", name: "private text" }] }),
+  });
+  assert.equal(diagnostics.length, 1);
+  assert.match(JSON.stringify(diagnostics), /schema/);
+  assert.equal(JSON.stringify(result).includes("private"), false);
 });
 
 test("single-source search requests only that provider and distinguishes no results from failures", async () => {
@@ -120,13 +164,13 @@ test("every spelling is requested on the same page and later traditional results
 test("one failed spelling preserves the other spelling's results and reports one partial provider error", async () => {
   const result = await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async (_url, init) => {
     const keyword = JSON.parse(String(init?.body)).keyword;
-    return keyword === "佐仓濑津美" ? new Response(null, { status: 429 })
+    return keyword === "佐仓濑津美" ? new Response(null, { status: 400 })
       : json({ total: 1, data: [{ id: 3, name: keyword, images: { large: bangumiImage } }] });
   } });
   assert.equal(result.items[0].name, "佐倉瀨津美");
   assert.equal(result.errors.length, 1);
   assert.equal(result.errors[0].source, "bangumi");
-  assert.match(result.errors[0].message, /部分结果.*频繁/);
+  assert.match(result.errors[0].message, /部分结果/);
 });
 
 test("all sources receive both Chinese spellings without collapsing IDs from different sources", async () => {
@@ -167,7 +211,7 @@ test("browser retry also searches both spellings and keeps usable partial result
       { id: 2, name: { native: "佐倉瀨津美" }, image: { large: anilistImage } },
     ] } } });
   });
-  assert.deepEqual(queries, ["佐仓濑津美", "佐倉瀨津美"]);
+  assert.deepEqual(queries, ["佐仓濑津美", "佐倉瀨津美", "佐仓濑津美"]);
   assert.deepEqual(recovered.items.map((item) => item.id), ["1", "2"]);
   assert.equal(recovered.hasMore, true);
   assert.equal(recovered.errors.length, 1);
@@ -193,22 +237,80 @@ test("non-Latin AniList searches discard unrelated popular fallbacks but retain 
   assert.deepEqual(fallback, { items: [], hasMore: false, errors: [], queryVariants: ["不支持的关键词", "不支持的關鍵詞"] });
 });
 
-test("script variants start in parallel rather than waiting for the previous spelling", { timeout: 5000 }, async () => {
+test("other providers keep script variants parallel", { timeout: 5000 }, async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let bothStarted!: () => void;
   const started = new Promise<void>((resolve) => { bothStarted = resolve; });
   const queries: string[] = [];
-  const pending = searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async (_url, init) => {
-    queries.push(JSON.parse(String(init?.body)).keyword);
+  const pending = searchCharacters("佐仓濑津美", "vndb", 1, { fetcher: async (_url, init) => {
+    queries.push(JSON.parse(String(init?.body)).filters[2]);
     if (queries.length === 2) bothStarted();
     await gate;
-    return json({ total: 0, data: [] });
+    return json({ more: false, results: [] });
   } });
   await started;
   assert.deepEqual(queries, ["佐仓濑津美", "佐倉瀨津美"]);
   release();
   await pending;
+});
+
+test("Bangumi script variants are sequential rather than a simultaneous burst", { timeout: 5000 }, async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  const queries: string[] = [];
+  const pending = searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async (_url, init) => {
+    queries.push(JSON.parse(String(init?.body)).keyword);
+    markStarted();
+    await gate;
+    return json({ total: 0, data: [] });
+  } });
+  await started;
+  assert.deepEqual(queries, ["佐仓濑津美"]);
+  release();
+  await pending;
+  assert.deepEqual(queries, ["佐仓濑津美", "佐倉瀨津美"]);
+});
+
+test("Bangumi stops subsequent spellings after rate limits, access denials or Retry-After", async () => {
+  for (const status of [429, 403, 503]) {
+    let calls = 0;
+    const result = await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async () => {
+      calls++;
+      return new Response(null, { status, headers: status === 503 ? { "Retry-After": "60" } : {} });
+    } });
+    assert.equal(calls, 1);
+    assert.equal(result.errors.length, 1);
+  }
+});
+
+test("Bangumi shares one retry budget across the complete spelling set", async () => {
+  const queries: string[] = [];
+  const result = await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher: async (_url, init) => {
+    queries.push(JSON.parse(String(init?.body)).keyword);
+    return new Response(null, { status: 503 });
+  } });
+  assert.deepEqual(queries, ["佐仓濑津美", "佐仓濑津美", "佐倉瀨津美"]);
+  assert.equal(result.errors.length, 1);
+});
+
+test("completed Bangumi script combinations share a short cache across scripts and isolate credentials", async () => {
+  let now = 1000;
+  const cache = createBangumiSearchCache(() => now);
+  let calls = 0;
+  const fetcher: typeof fetch = async () => { calls++; return json({ total: 0, data: [] }); };
+  await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher, bangumiCache: cache, bangumiAccessToken: "scope-a" });
+  const reversed = await searchCharacters("佐倉瀨津美", "bangumi", 1, { fetcher, bangumiCache: cache, bangumiAccessToken: "scope-a" });
+  assert.equal(calls, 2);
+  assert.deepEqual(reversed.queryVariants, ["佐倉瀨津美", "佐仓濑津美"]);
+  await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher, bangumiCache: cache, bangumiAccessToken: "scope-b" });
+  assert.equal(calls, 4);
+  now += 60001;
+  await searchCharacters("佐仓濑津美", "bangumi", 1, { fetcher, bangumiCache: cache, bangumiAccessToken: "scope-a" });
+  assert.equal(calls, 6);
+  assert.equal(JSON.stringify(reversed).includes("scope-a"), false);
 });
 
 test("browser fallback reuses server spellings without recomputing or changing them", async () => {

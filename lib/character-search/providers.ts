@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isCharacterImageUrl } from "./image";
 import { getCharacterQueryVariants } from "./query-variants";
+import { bangumiSearchCache, type BangumiQueryResult, type createBangumiSearchCache } from "./bangumi-search-cache";
 import {
   CHARACTER_SOURCES,
   deduplicateCharacterItems,
@@ -12,6 +13,7 @@ import {
 } from "./types";
 
 const PAGE_SIZE = 12;
+const BANGUMI_USER_AGENT = "SiriNatsume/buttervote (https://github.com/SiriNatsume/buttervote)";
 export const characterSearchSchema = z.object({
   query: z.string().trim().min(1, "请输入角色名。").max(100, "搜索关键词不能超过 100 字。"),
   source: z.enum(["all", ...CHARACTER_SOURCES]).default("all"),
@@ -23,12 +25,13 @@ const imageSchema = z.object({
   medium: z.string().nullish(),
   small: z.string().nullish(),
 }).nullish();
+const bangumiInfoFieldSchema = z.object({ key: z.string(), value: z.unknown() });
 
 const bangumiSchema = z.object({
   total: z.number(),
   data: z.array(z.object({
     id: z.number(), name: z.string(), images: imageSchema,
-    infobox: z.array(z.object({ key: z.string(), value: z.unknown() })).optional(),
+    infobox: z.array(z.unknown()).nullish(),
   })),
 });
 
@@ -71,29 +74,52 @@ type SearchOptions = {
   bangumiAccessToken?: string;
   queryVariants?: readonly string[];
   signal?: AbortSignal;
+  retryBudget?: { remaining: number };
+  bangumiCache?: ReturnType<typeof createBangumiSearchCache> | false;
+  onProviderFailure?: (failure: { source: CharacterSource; kind: string; status?: number; fields?: string[] }) => void;
 };
 
-class ProviderError extends Error {}
+class ProviderError extends Error {
+  constructor(message: string, readonly kind: string, readonly status?: number, readonly retryable = false, readonly stopVariants = false) { super(message); }
+}
 
 async function requestJson(url: string, body: unknown, options: SearchOptions, headers?: Record<string, string>): Promise<unknown> {
   if (options.signal?.aborted) throw new DOMException("Search cancelled", "AbortError");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
+  const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json", ...headers },
-      body: JSON.stringify(body),
-      signal: options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
-      next: { revalidate: 300 },
-    });
-    if (!response.ok) {
-      await response.body?.cancel();
-      if (response.status === 429) throw new ProviderError("搜索较频繁，请稍后重试。");
-      if (response.status === 401) throw new ProviderError("资料库认证失败，请联系管理员检查配置。");
-      throw new ProviderError("资料库暂时无法连接，请稍后重试。");
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await (options.fetcher ?? fetch)(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json", ...headers },
+          body: JSON.stringify(body), signal,
+          ...(attempt === 0 ? { next: { revalidate: 300 } } : { cache: "no-store" as const }),
+        });
+        if (!response.ok) {
+          await response.body?.cancel();
+          if (response.status === 429) throw new ProviderError("资料库访问较频繁，请稍后重试。", "http", 429, false, true);
+          if (response.status === 401) throw new ProviderError("资料库认证失败，请联系管理员检查配置。", "http", 401, false, true);
+          throw new ProviderError("资料库暂时无法连接，请稍后重试。", "http", response.status,
+            [408, 500, 502, 503, 504].includes(response.status) && !response.headers.has("Retry-After"),
+            [403, 404].includes(response.status) || response.headers.has("Retry-After"));
+        }
+        return await response.json();
+      } catch (error) {
+        if (options.signal?.aborted) throw error;
+        if (controller.signal.aborted) throw new ProviderError("资料库响应超时，请稍后重试。", "timeout");
+        const retryable = error instanceof TypeError || error instanceof SyntaxError || (error instanceof ProviderError && error.retryable);
+        if (attempt !== 0 || !retryable || signal.aborted || (options.retryBudget && options.retryBudget.remaining <= 0)) throw error;
+        if (options.retryBudget) options.retryBudget.remaining--;
+        await new Promise<void>((resolve, reject) => {
+          const abort = () => { clearTimeout(timer); reject(new DOMException("Search cancelled", "AbortError")); };
+          const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, 150);
+          signal.addEventListener("abort", abort, { once: true });
+        });
+      }
     }
-    return await response.json();
+    throw new ProviderError("资料库暂时不可用，请稍后重试。", "network");
   } finally {
     clearTimeout(timeout);
   }
@@ -119,14 +145,16 @@ export async function searchCharacterSource(source: CharacterSource, query: stri
   if (source === "bangumi") {
     const raw = await requestJson(`https://api.bgm.tv/v0/search/characters?limit=${PAGE_SIZE}&offset=${(page - 1) * PAGE_SIZE}`,
       { keyword: query }, options, {
-        "User-Agent": options.bangumiUserAgent || "ButterVote/0.1 (character search)",
+        "User-Agent": options.bangumiUserAgent || BANGUMI_USER_AGENT,
         ...(options.bangumiAccessToken ? { Authorization: `Bearer ${options.bangumiAccessToken}` } : {}),
       });
     const data = bangumiSchema.parse(raw);
     items = data.data.map((item) => {
-      const chineseName = item.infobox?.find((field) => ["简体中文名", "中文名"].includes(field.key))?.value;
+      const chineseName = item.infobox?.map((field) => bangumiInfoFieldSchema.safeParse(field))
+        .find((field) => field.success && ["简体中文名", "中文名"].includes(field.data.key));
+      const name = chineseName?.success ? chineseName.data.value : undefined;
       return {
-        id: String(item.id), source, name: typeof chineseName === "string" && chineseName.trim() ? chineseName.trim() : item.name,
+        id: String(item.id), source, name: typeof name === "string" && name.trim() ? name.trim() : item.name,
         originalName: item.name,
         imageUrl: item.images?.large || item.images?.medium || "",
         thumbnailUrl: item.images?.small || item.images?.medium || item.images?.large || "",
@@ -185,10 +213,41 @@ export async function searchCharacters(
   const queries = options.queryVariants
     ? [...new Set(options.queryVariants)].slice(0, 3)
     : await getCharacterQueryVariants(query);
-  const results = await Promise.all(sources.map(async (provider) => ({
-    source: provider,
-    variants: await Promise.allSettled(queries.map((keyword) => searchCharacterSource(provider, keyword, page, options))),
-  })));
+  const results = await Promise.all(sources.map(async (provider) => {
+    const providerOptions = { ...options, retryBudget: { remaining: 1 } };
+    if (provider !== "bangumi") return {
+      source: provider,
+      variants: await Promise.allSettled(queries.map((keyword) => searchCharacterSource(provider, keyword, page, providerOptions))),
+    };
+
+    // Keep both spellings, without creating a simultaneous burst at Bangumi.
+    // Only complete, validated metadata is memoized; credentials partition it.
+    const cache = options.bangumiCache === false ? undefined : options.bangumiCache ?? (options.fetcher ? undefined : bangumiSearchCache);
+    const key = JSON.stringify([[...queries].sort(), page, options.bangumiAccessToken ?? "", options.bangumiUserAgent ?? BANGUMI_USER_AGENT]);
+    const cached = cache?.get(key);
+    if (cached) return { source: provider, variants: cached.map((value) => ({ status: "fulfilled" as const, value })) };
+
+    const deadline = new AbortController();
+    const timer = setTimeout(() => deadline.abort(), 8000);
+    const signal = options.signal ? AbortSignal.any([options.signal, deadline.signal]) : deadline.signal;
+    const variants: PromiseSettledResult<BangumiQueryResult>[] = [];
+    try {
+      for (const keyword of queries) {
+        try {
+          variants.push({ status: "fulfilled", value: await searchCharacterSource(provider, keyword, page, { ...providerOptions, signal }) });
+        } catch (error) {
+          const reason = deadline.signal.aborted && !options.signal?.aborted
+            ? new ProviderError("资料库响应超时，请稍后重试。", "timeout") : error;
+          variants.push({ status: "rejected", reason });
+          if (signal.aborted || (error instanceof ProviderError && error.stopVariants)) break;
+        }
+      }
+    } finally { clearTimeout(timer); }
+    if (variants.length === queries.length && variants.every((variant) => variant.status === "fulfilled")) {
+      cache?.set(key, variants.map((variant) => (variant as PromiseFulfilledResult<BangumiQueryResult>).value));
+    }
+    return { source: provider, variants };
+  }));
   const response: CharacterSearchResponse = { items: [], hasMore: false, errors: [], queryVariants: queries };
   const exactNames = new Set(queries.map(normalizeName));
   const exactMatch = (item: CharacterSearchItem) => [item.name, item.originalName].some((name) => exactNames.has(normalizeName(name)));
@@ -207,6 +266,13 @@ export async function searchCharacters(
     if (failures.length) {
       const failure = failures.find((error) => error instanceof ProviderError);
       const message = failure instanceof ProviderError ? failure.message : "资料库暂时不可用，请稍后重试。";
+      const diagnostic = failure ?? failures[0];
+      if (!options.signal?.aborted) options.onProviderFailure?.({
+        source: result.source,
+        kind: diagnostic instanceof ProviderError ? diagnostic.kind : diagnostic instanceof z.ZodError ? "schema" : diagnostic instanceof SyntaxError ? "invalid-json" : "network",
+        status: diagnostic instanceof ProviderError ? diagnostic.status : undefined,
+        fields: diagnostic instanceof z.ZodError ? diagnostic.issues.slice(0, 3).map((issue) => issue.path.join(".")) : undefined,
+      });
       response.errors.push({
         source: result.source,
         message: succeeded ? `部分结果未能加载：${message}` : message,
