@@ -44,13 +44,18 @@ export async function fetchCharacterImage(
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
     const response = await fetcher(url, {
-      redirect: "error",
+      // workerd does not implement "error"; return redirects without following
+      // them, then reject every non-success response below.
+      redirect: "manual",
       credentials: "omit",
       referrerPolicy: "no-referrer",
       signal: controller.signal,
       headers: { Accept: "image/jpeg,image/png,image/webp" },
     });
-    if (!response.ok) throw new Error("角色图片暂时无法下载，请换一张图片或稍后重试。");
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error("角色图片暂时无法下载，请换一张图片或稍后重试。");
+    }
     const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
     if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
       await response.body?.cancel();

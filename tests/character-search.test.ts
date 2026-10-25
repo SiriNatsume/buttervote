@@ -135,7 +135,7 @@ test("image download rejects non-images, forged MIME types, oversized bodies and
 test("validated image bytes retain their MIME type and redirects are disabled", async () => {
   const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
   const image = await fetchCharacterImage("bangumi", bangumiImage, async (_url, init) => {
-    assert.equal(init?.redirect, "error");
+    assert.equal(init?.redirect, "manual");
     assert.equal(init?.credentials, "omit");
     assert.equal(init?.referrerPolicy, "no-referrer");
     assert.ok(init?.signal);
@@ -143,6 +143,16 @@ test("validated image bytes retain their MIME type and redirects are disabled", 
   });
   assert.deepEqual(image.bytes, bytes);
   assert.equal(image.contentType, "image/jpeg");
+});
+
+test("image redirects are rejected without requesting the redirected destination", async () => {
+  let requests = 0;
+  await assert.rejects(fetchCharacterImage("vndb", vndbImage, async (_url, init) => {
+    requests++;
+    assert.equal(init?.redirect, "manual");
+    return new Response(null, { status: 302, headers: { Location: "http://127.0.0.1/private.jpg" } });
+  }));
+  assert.equal(requests, 1);
 });
 
 test("browser retry recovers only AniList, preserves other providers and errors, and never sends site credentials", async () => {
