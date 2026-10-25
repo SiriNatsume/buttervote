@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, ImageIcon, Search } from "lucide-react";
 import { updateMyNomination } from "@/lib/actions/nomination-actions";
 import { formatDateTime } from "@/lib/time";
 import { getPublicImageUrl } from "@/lib/image/image-url";
+import { nominationImageVersion } from "@/lib/submitted-nomination";
 import type { ContestStatus, NominationStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ApprovedNominationImageUploader } from "@/components/approved-nomination-image-uploader";
@@ -35,6 +36,7 @@ export type MyNominationItem = {
   rejection_reason?: string | null;
   rejected_at?: string | null;
   created_at: string;
+  updated_at?: string;
   image_path?: string | null;
   image_width?: number | null;
   image_height?: number | null;
@@ -157,7 +159,9 @@ function NominationSummaryImage({
 }: {
   nomination: MyNominationItem;
 }) {
-  const imageUrl = getPublicImageUrl(nomination.image_path);
+  const publicImageUrl = getPublicImageUrl(nomination.image_path);
+  const version = nominationImageVersion(nomination.updated_at);
+  const imageUrl = publicImageUrl && version ? `${publicImageUrl}?v=${version}` : publicImageUrl;
 
   return (
     <div className="size-16 shrink-0 overflow-hidden rounded-2xl bg-muted sm:size-20">

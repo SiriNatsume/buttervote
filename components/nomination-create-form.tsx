@@ -20,6 +20,7 @@ import {
 import { formatDateTime } from "@/lib/time";
 import type { NominationStatus } from "@/lib/types";
 import type { ExistingNomination } from "@/components/existing-nominations-list";
+import { nominationDisplay, type SubmittedNomination } from "@/lib/submitted-nomination";
 import { DescriptionTextarea } from "@/components/description-textarea";
 import { LoadingButton } from "@/components/loading-button";
 import { ImageCropUpload } from "@/components/image-crop-upload";
@@ -147,6 +148,7 @@ export function NominationCreateForm({
   maxNominations = null,
   initialNominationCount = 0,
   submittedNominationIds = [],
+  submittedNominations = [],
   nominationCountError,
 }: {
   contestId: string;
@@ -158,6 +160,7 @@ export function NominationCreateForm({
   maxNominations?: number | null;
   initialNominationCount?: number;
   submittedNominationIds?: string[];
+  submittedNominations?: SubmittedNomination[];
   nominationCountError?: string | null;
 }) {
   const router = useRouter();
@@ -239,7 +242,8 @@ export function NominationCreateForm({
   }
 
   const successes = entries.filter((entry) => entry.state === "success");
-  const knownIds = new Set(submittedNominationIds);
+  const knownIds = useMemo(() => new Set(submittedNominationIds), [submittedNominationIds]);
+  const submittedById = useMemo(() => new Map(submittedNominations.map((nomination) => [nomination.id, nomination])), [submittedNominations]);
   const usedCount = initialNominationCount + successes.filter(
     (entry) => !knownIds.has(entry.id) && entry.submittedStatus !== "rejected",
   ).length;
@@ -358,9 +362,10 @@ export function NominationCreateForm({
       <div className="space-y-4">
         {entries.map((entry, index) => {
           const submitted = entry.state === "success";
-          const publicImageUrl = getPublicImageUrl(entry.image?.imagePath);
-          const imageUrl = publicImageUrl && entry.image?.imageVersion
-            ? `${publicImageUrl}?v=${entry.image.imageVersion}` : publicImageUrl;
+          const display = nominationDisplay(entry, submittedById.get(entry.id));
+          const publicImageUrl = getPublicImageUrl(display.imagePath);
+          const imageUrl = publicImageUrl && display.imageVersion
+            ? `${publicImageUrl}?v=${display.imageVersion}` : publicImageUrl;
           const duplicateInBatch = entry.name.trim() && entries.some((other) => other.id !== entry.id && normalizeSearch(other.name) === normalizeSearch(entry.name));
           return (
             <section key={entry.id} className="overflow-hidden rounded-2xl border border-[#EED8AA]/80 bg-[#FFFCF4]/90" aria-label={`提名 ${index + 1}`}>
@@ -371,8 +376,8 @@ export function NominationCreateForm({
                   onClick={() => updateEntry(entry.id, { expanded: !entry.expanded })}>
                   {submitted ? <CheckCircle2 className="size-5 shrink-0 text-green-700" /> : entry.expanded ? <ChevronDown className="size-5 shrink-0" /> : <ChevronRight className="size-5 shrink-0" />}
                   {imageUrl && !entry.expanded ? <Image src={imageUrl} alt="" width={40} height={40} unoptimized className="size-10 shrink-0 rounded-lg object-cover" /> : null}
-                  <span className="min-w-0 flex-1 break-words font-medium">{entry.name || `提名 ${index + 1}`}</span>
-                  <Badge variant="secondary" className="shrink-0">{submitted ? nominationStatusLabel[entry.submittedStatus ?? "pending"] : entry.state === "submitting" ? "提交中" : entry.state === "error" ? "待处理" : hasNominationDraftContent(entry) && !getNominationDraftError(entry, requiresImage, descriptionMaxLength) ? "已填完整" : "草稿"}</Badge>
+                  <span className="min-w-0 flex-1 break-words font-medium">{display.name || `提名 ${index + 1}`}</span>
+                  <Badge variant="secondary" className="shrink-0">{submitted ? nominationStatusLabel[display.status] : entry.state === "submitting" ? "提交中" : entry.state === "error" ? "待处理" : hasNominationDraftContent(entry) && !getNominationDraftError(entry, requiresImage, descriptionMaxLength) ? "已填完整" : "草稿"}</Badge>
                 </button>
                 {!submitted ? <Button type="button" variant="ghost" size="icon" aria-label={`移除提名 ${index + 1}`}
                   disabled={isSubmitting || busyImages.has(entry.id)}
