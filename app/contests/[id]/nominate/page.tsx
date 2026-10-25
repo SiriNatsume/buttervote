@@ -5,6 +5,7 @@ import { ArrowLeft, ClipboardList } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
 import { createServerDataClient } from "@/lib/supabase/server-data";
+import { fetchAllRows } from "@/lib/supabase-pagination";
 import { ExistingNominationsList } from "@/components/existing-nominations-list";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
 import { NominationCreateForm } from "@/components/nomination-create-form";
@@ -69,21 +70,23 @@ export default async function NominatePage({
 
   const canViewExistingNominations =
     isAdmin || contest.show_existing_nominations === true;
-  const { data: existingNominations } = canViewExistingNominations
-    ? await supabase
+  const [{ data: existingNominations }, { data: ownNominations, error: ownNominationError }] = await Promise.all([
+    canViewExistingNominations
+      ? supabase
         .from("nominations")
         .select("id,name,description,status,nominator_display_name,created_at")
         .eq("contest_id", contest.id)
         .neq("status", "draft")
         .order("created_at", { ascending: true })
-    : { data: [] };
-
-  const { data: ownNominations, count: ownNominationCount, error: ownNominationError } = await supabase
-    .from("nominations")
-    .select("id,status", { count: "exact" })
-    .eq("contest_id", contest.id)
-    .eq("submitter_id", user.id)
-    .neq("status", "rejected");
+      : Promise.resolve({ data: [] }),
+    fetchAllRows(() => supabase
+      .from("nominations")
+      .select("id,name,description,status,image_path,updated_at", { count: "exact" })
+      .eq("contest_id", contest.id)
+      .eq("submitter_id", user.id)
+      .order("id")),
+  ]);
+  const ownNominationCount = (ownNominations ?? []).filter((item) => item.status !== "rejected").length;
 
   let nomination:
     | {
@@ -171,6 +174,7 @@ export default async function NominatePage({
               maxNominations={isAdmin ? null : contest.max_nominations_per_user}
               initialNominationCount={ownNominationCount ?? 0}
               submittedNominationIds={(ownNominations ?? []).filter((item) => item.status !== "draft").map((item) => item.id)}
+              submittedNominations={ownNominations ?? []}
               nominationCountError={ownNominationError ? "暂时无法读取提名名额，请刷新后重试。" : null}
               descriptionMaxLength={contest.candidate_description_max_length}
               imageRequired={contest.nomination_image_required === true}
