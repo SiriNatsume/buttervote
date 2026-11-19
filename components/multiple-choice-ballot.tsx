@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeftRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Heart, Plus, X,
+  ArrowLeftRight, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronUp, Heart, Plus, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { CandidateCardCandidate } from "@/components/candidate-card";
@@ -108,6 +108,7 @@ export function MultipleChoiceBallot({ contest, candidates, selectedIds, onChang
   const currentPage = Math.min(page, Math.max(0, pageCount - 1));
   const start = currentPage * PAGE_SIZE;
   const pageItems = candidates.slice(start, start + PAGE_SIZE);
+  const remaining = candidates.length - start - pageItems.length;
   const full = selectedIds.length >= contest.max_choices;
   const rule = `${contest.require_exact_choices ? "必须" : "最多"}选 ${contest.max_choices} 项`;
   if (!candidates.length) return null;
@@ -146,7 +147,7 @@ export function MultipleChoiceBallot({ contest, candidates, selectedIds, onChang
       >
         <span className="font-medium">{rule}</span>
         <span aria-live="polite" aria-atomic="true" className="text-xs tabular-nums text-muted-foreground">
-          {pageCount > 1 ? `第 ${start + 1}–${start + pageItems.length} 项 · ` : ""}共 {candidates.length} 项
+          名单共 {candidates.length} 项{pageCount > 1 && ` · 第 ${currentPage + 1} / ${pageCount} 页`}
         </span>
       </p>
       <ul aria-label={`${contest.title}候选项`} className="space-y-1.5">
@@ -166,12 +167,12 @@ export function MultipleChoiceBallot({ contest, candidates, selectedIds, onChang
       {scores && pageItems.some((item) => typeof scores[item.id] === "number") ? (
         <p className="text-xs text-muted-foreground">实时总分不含真爱票</p>
       ) : null}
-      <div className="sticky bottom-[calc(var(--site-bottom-nav-height)+env(safe-area-inset-bottom,0px)+0.5rem)] z-10 flex items-center justify-between gap-1 rounded-xl border border-[#E5CDA3] bg-[#FFF8E9] px-2 py-1 shadow-sm max-lg:mr-9 lg:bottom-3">
+      <div className="sticky bottom-[calc(var(--site-bottom-nav-height)+env(safe-area-inset-bottom,0px)+0.5rem)] z-10 flex flex-wrap items-center justify-between gap-1 rounded-xl border border-[#E5CDA3] bg-[#FFF8E9] px-2 py-1 shadow-sm max-[374px]:px-1.5 max-lg:mr-9 lg:bottom-3">
         <button
           type="button"
           disabled={disabled || !selected.length}
           aria-haspopup="dialog"
-          aria-label={`查看已选，已选 ${selected.length} 项，${rule}`}
+          aria-label={`查看已选，已选 ${selected.length} 项，${rule}${love ? "，可分配真爱票" : ""}`}
           className="min-h-11 min-w-0 rounded-lg px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={(event) => {
             trigger.current = event.currentTarget;
@@ -179,31 +180,43 @@ export function MultipleChoiceBallot({ contest, candidates, selectedIds, onChang
           }}
         >
           <span aria-live="polite" aria-atomic="true" className="block whitespace-nowrap text-sm font-semibold tabular-nums">
-            已选 {selected.length} / {contest.max_choices} 项
+            已选 {selected.length}/{contest.max_choices} 项
           </span>
           {selected.length > 0 ? (
             <span className="flex items-center gap-0.5 text-xs text-[#925331]">
-              查看已选{love ? " · 真爱票" : ""}<ChevronUp aria-hidden="true" className="size-3" />
+              查看已选
+              {love ? (
+                <>
+                  <span className="max-[374px]:hidden">· 真爱票</span>
+                  <Heart aria-hidden="true" className="hidden size-3 text-[#C73555] max-[374px]:block" />
+                </>
+              ) : null}
+              <ChevronUp aria-hidden="true" className={cn("size-3", love && "max-[374px]:hidden")} />
             </span>
           ) : null}
         </button>
         {pageCount > 1 ? (
-          <nav aria-label={`${contest.title}候选项翻页`} className="flex shrink-0 items-center">
-            <Button
-              type="button" variant="ghost" size="icon" className="size-11"
-              disabled={disabled || currentPage === 0}
-              aria-label="上一批候选项" onClick={() => browse(currentPage - 1)}
-            >
-              <ChevronLeft aria-hidden="true" />
-            </Button>
-            <span className="text-xs tabular-nums text-muted-foreground">{currentPage + 1}/{pageCount}</span>
-            <Button
-              type="button" variant="ghost" size="icon" className="size-11"
-              disabled={disabled || currentPage + 1 >= pageCount}
-              aria-label="下一批候选项" onClick={() => browse(currentPage + 1)}
-            >
-              <ChevronRight aria-hidden="true" />
-            </Button>
+          <nav aria-label={`${contest.title}候选项翻页`} className="ml-auto flex items-center gap-1">
+            {currentPage > 0 ? (
+              <Button
+                type="button" variant="ghost" size="sm" className="min-h-11 min-w-11 gap-1 px-1.5 text-[#744329] max-[374px]:px-1 max-[374px]:text-xs sm:px-3"
+                disabled={disabled} onClick={() => browse(currentPage - 1)}
+              >
+                <ChevronLeft aria-hidden="true" className="hidden sm:block" />上一页
+              </Button>
+            ) : null}
+            {remaining > 0 ? (
+              <Button
+                type="button" size="sm"
+                className="min-h-11 flex-col gap-0 rounded-lg bg-[#984522] px-3 py-1 text-white hover:bg-[#78351C] max-[374px]:px-2"
+                disabled={disabled} onClick={() => browse(currentPage + 1)}
+              >
+                <span className="flex items-center gap-1 font-semibold">下一页<ArrowRight aria-hidden="true" /></span>
+                <span className="text-xs font-normal tabular-nums"><span className="max-[374px]:sr-only">后面</span>还有 {remaining} 项</span>
+              </Button>
+            ) : (
+              <span className="px-1.5 text-xs text-muted-foreground">已到最后一页</span>
+            )}
           </nav>
         ) : null}
       </div>

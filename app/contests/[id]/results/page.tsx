@@ -299,6 +299,15 @@ export default async function ResultsPage({
         )
       : [];
 
+  const callingStage = callingSession ? (
+    <ContestCallingStage
+      contestId={contest.id}
+      contestTitle={contest.title}
+      session={callingSession}
+      event={currentCallingEvent}
+    />
+  ) : null;
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
       <ActivityBreadcrumb group={group} contest={contest} current="投票结果" />
@@ -334,12 +343,7 @@ export default async function ResultsPage({
 
       {callingIsPublicProgress && callingSession ? (
         <div className="space-y-6">
-          <ContestCallingStage
-            contestId={contest.id}
-            contestTitle={contest.title}
-            session={callingSession}
-            event={currentCallingEvent}
-          />
+          {callingStage}
         </div>
       ) : !canDisplayFullResults ? (
         <MascotEmptyState kind="restrictedAccess" title="当前活动结果暂未公开">
@@ -347,45 +351,7 @@ export default async function ResultsPage({
         </MascotEmptyState>
       ) : (
         <div className="space-y-6">
-          {callingSession ? (
-            <ContestCallingStage
-              contestId={contest.id}
-              contestTitle={contest.title}
-              session={callingSession}
-              event={currentCallingEvent}
-            />
-          ) : null}
-          <TournamentDrawSummaryCard summaries={publicDrawSummaries} />
-
-          {showLoveBreakdown && contest.group_id && totalLoveVotes > 0 ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>真爱票统计</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-sm text-muted-foreground">
-                  总真爱票使用数量：{totalLoveVotes}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {results
-                    .filter((result) => result.loveVoteCount > 0)
-                    .map((result) => (
-                      <div
-                        key={result.candidateId}
-                        className="rounded-2xl border border-[#FFB3C1] bg-[#FFE4EA]/70 p-3 text-sm"
-                      >
-                        <div className="font-medium">{result.name}</div>
-                        <div className="mt-1 text-muted-foreground">
-                          真爱票 {result.loveVoteCount} 张，真爱票得分{" "}
-                          {result.loveScore}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
+          {callingSession?.status !== "completed" ? callingStage : null}
           {isAdmin && preliminaryResolution?.needsTiebreaker ? (
             <Card className="border-[#F0D08A] bg-[#FFF8E8]">
               <CardHeader>
@@ -419,6 +385,7 @@ export default async function ResultsPage({
 
           {results.length > 0 ? (
             <ResultList
+              key={contest.id}
               results={results}
               showImage={contest.show_candidate_image}
               showDescription={contest.show_candidate_description}
@@ -431,6 +398,38 @@ export default async function ResultsPage({
               候选项和有效投票产生后会显示结果。
             </MascotEmptyState>
           )}
+
+          {callingSession?.status === "completed" ? callingStage : null}
+          <TournamentDrawSummaryCard summaries={publicDrawSummaries} />
+
+          {showLoveBreakdown && contest.group_id && totalLoveVotes > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>真爱票统计</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-sm text-muted-foreground">
+                  总真爱票使用数量：{totalLoveVotes}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {results
+                    .filter((result) => result.loveVoteCount > 0)
+                    .map((result) => (
+                      <div
+                        key={result.candidateId}
+                        className="rounded-2xl border border-[#FFB3C1] bg-[#FFE4EA]/70 p-3 text-sm"
+                      >
+                        <div className="font-medium">{result.name}</div>
+                        <div className="mt-1 text-muted-foreground">
+                          真爱票 {result.loveVoteCount} 张，真爱票得分{" "}
+                          {result.loveScore}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           {isAdmin && adminVoteRows.length > 0 ? (
             <Card id="audit-votes" className="scroll-mt-24">
