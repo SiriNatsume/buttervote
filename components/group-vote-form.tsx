@@ -1,13 +1,13 @@
 "use client";
 
-import { VoteImage } from "@/components/vote-image";
+import { MultipleChoiceBallot } from "@/components/multiple-choice-ballot";
+import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, ChevronRight, ClipboardCheck, Heart, ImageIcon } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, ClipboardCheck, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { submitGroupVotes } from "@/lib/actions/group-actions";
 import { toUserFacingError } from "@/lib/action-error";
-import { getPublicImageUrl } from "@/lib/image/image-url";
 import {
   emptySelection,
   groupVoteContests,
@@ -71,38 +71,6 @@ const STEP_BUTTON_CLASS_NAME =
   "step inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm";
 const STEP_DOT_CLASS_NAME =
   "step-dot flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] leading-none tabular-nums";
-
-function CandidateImage({
-  candidate,
-  show,
-}: {
-  candidate: GroupVoteCandidate;
-  show: boolean;
-}) {
-  const imageUrl = getPublicImageUrl(candidate.image_path);
-
-  if (!show) {
-    return null;
-  }
-
-  return (
-    <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
-      {imageUrl ? (
-        <VoteImage maxWidth={256} sizes="64px"
-          src={imageUrl}
-          alt={`${candidate.name} 图片`}
-          loading="lazy"
-          decoding="async"
-          className="size-full object-cover"
-        />
-      ) : (
-        <span className="butter-placeholder flex size-full items-center justify-center">
-          <ImageIcon className="size-5" aria-hidden="true" />
-        </span>
-      )}
-    </span>
-  );
-}
 
 function CandidateInfo({
   contest,
@@ -517,7 +485,7 @@ export function GroupVoteForm({
           </div>
           <CardTitle id={`group-vote-title-${contest.id}`}>{contest.title}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className={contest.vote_type === "multiple" ? "px-3 sm:px-6" : undefined}>
           {contest.existingVoteId ? (
             <div className="space-y-2 rounded-2xl border bg-[#F0F5EB]/60 p-4 text-sm">
               <p className="text-muted-foreground">你已经在这个活动中投过票。</p>
@@ -568,7 +536,7 @@ export function GroupVoteForm({
                   >
                   <div className="flex items-start gap-3">
                     <RadioGroupItem value={candidate.id} className="mt-5" />
-                    <CandidateImage
+                    <VoteCandidateThumb
                       candidate={candidate}
                       show={contest.show_candidate_image}
                     />
@@ -584,58 +552,19 @@ export function GroupVoteForm({
               ))}
             </RadioGroup>
           ) : contest.vote_type === "multiple" ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {contest.require_exact_choices === true
-                  ? `必须选择 ${contest.max_choices} 项。`
-                  : `最多选择 ${contest.max_choices} 项。`}
-              </p>
-              {contest.candidates.map((candidate) => {
-                const checked = selection.candidateIds.includes(candidate.id);
-                const disabled =
-                  !checked && selection.candidateIds.length >= contest.max_choices;
-
-                return (
-                  <Label
-                    key={candidate.id}
-                    className={cn(
-                      "butter-option block cursor-pointer rounded-2xl border p-4",
-                      checked && "butter-option-selected scale-[1.01]",
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        checked={checked}
-                        disabled={disabled}
-                        onCheckedChange={(value) =>
-                          updateSelection(contest, (current) => ({
-                            ...current,
-                            candidateIds:
-                              value === true
-                                ? [...current.candidateIds, candidate.id]
-                                : current.candidateIds.filter(
-                                    (id) => id !== candidate.id,
-                                  ),
-                          }))
-                        }
-                        className="mt-5"
-                      />
-                      <CandidateImage
-                        candidate={candidate}
-                        show={contest.show_candidate_image}
-                      />
-                      <CandidateInfo
-                        contest={contest}
-                        candidate={candidate}
-                      />
-                      <RealtimeScoreBlock score={realtimeScores?.[candidate.id]} />
-                    </div>
-                    {renderLoveCheckbox(contest, candidate.id)}
-                    <RealtimeScoreNote score={realtimeScores?.[candidate.id]} />
-                  </Label>
-                );
-              })}
-            </div>
+            <MultipleChoiceBallot
+              contest={contest}
+              candidates={contest.candidates}
+              selectedIds={selection.candidateIds}
+              onChange={(ids) => updateSelection(contest, (current) => ({ ...current, candidateIds: ids }))}
+              love={loveVoteEnabledForGroup && contest.love_vote_enabled !== false ? {
+                ids: selection.loveCandidateIds,
+                remaining: availableLoveVotes,
+                onToggle: (id, checked) => toggleLove(contest, id, checked),
+              } : undefined}
+              scores={realtimeScores}
+              disabled={isSubmitting}
+            />
           ) : (
             <div className="space-y-5">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -649,7 +578,7 @@ export function GroupVoteForm({
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <CandidateImage
+                      <VoteCandidateThumb
                         candidate={candidate}
                         show={contest.show_candidate_image}
                       />
@@ -709,7 +638,7 @@ export function GroupVoteForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 [--vote-scroll-offset:9rem]">
       <fieldset disabled={isSubmitting} className="min-w-0 space-y-6 disabled:opacity-70">
         {unvotedContests.length > 0 ? (
           <div className="sticky top-[calc(var(--site-header-height)+0.5rem)] z-20 rounded-2xl border bg-[#FFFCF4]/95 p-3 shadow-sm backdrop-blur-sm sm:p-4">
