@@ -1,7 +1,8 @@
-import { VoteImage } from "@/components/vote-image";
-import { Heart, ImageIcon, Trophy } from "lucide-react";
-import { getPublicImageUrl } from "@/lib/image/image-url";
+import { ChevronDown } from "lucide-react";
+import { ResultCandidateFinder } from "@/components/result-candidate-finder";
+import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { buildResultScoreProgressModel } from "@/lib/result-score-progress";
+import { buildResultSearchItems } from "@/lib/result-search";
 import type { TallyResult } from "@/lib/tally";
 import { formatDateTime } from "@/lib/time";
 import { Badge } from "@/components/ui/badge";
@@ -81,105 +82,66 @@ export function ResultList({
   showLoveBreakdown?: boolean;
   scoreLabel?: string;
 }) {
-  const topScore = Math.max(...results.map((item) => item.score), 1);
+  const topScore = results.reduce((highest, result) => Math.max(highest, result.score), 1);
+  const items = buildResultSearchItems(results, showImage);
 
   return (
-    <div className="space-y-4">
-      {results.map((result) => {
-        const imageUrl = getPublicImageUrl(result.imagePath);
-
-        return (
-          <div
-            key={result.candidateId}
-            className="rounded-3xl border border-[#EED8AA]/70 bg-[#FFFCF4]/90 p-5 shadow-sm"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 gap-3">
-                {showImage ? (
-                  <div className="size-14 shrink-0 overflow-hidden rounded-2xl bg-muted sm:size-16">
-                    {imageUrl ? (
-                      <VoteImage maxWidth={256} sizes="48px"
-                        src={imageUrl}
-                        alt={`${result.name} 图片`}
-                        loading="lazy"
-                        decoding="async"
-                        className="size-full object-cover"
-                      />
-                    ) : (
-                      <div className="butter-placeholder flex size-full items-center justify-center">
-                        <ImageIcon className="size-5" aria-hidden="true" />
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className={
-                        result.position === 1
-                          ? "border-yellow-300 bg-yellow-100 text-yellow-800"
-                          : "border-[#EED8AA] bg-[#FFF3D0] text-[#6A3E21]"
-                      }
-                    >
-                      <Trophy className="mr-1 size-3" />
-                      排序第 {result.position} 位
-                    </Badge>
-                    {result.rank !== result.position ? (
-                      <Badge variant="outline">票数并列第 {result.rank} 名</Badge>
-                    ) : null}
-                    {result.isActive === false ? (
-                      <Badge variant="outline">已删除</Badge>
-                    ) : null}
-                    <h3 className="font-semibold">{result.name}</h3>
-                  </div>
-                  {showDescription && result.description ? (
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {result.description}
-                    </p>
-                  ) : null}
-                  {showNominatorInfo && result.nominatorDisplayName ? (
-                    <div className="mt-2 space-y-1 text-xs leading-5 text-muted-foreground">
-                      <div>提名者：{result.nominatorDisplayName}</div>
+    <section aria-label="本场完整排名" className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-xl font-semibold">完整排名</h2>
+        <span className="text-sm text-muted-foreground">{scoreLabel}</span>
+      </div>
+      <ResultCandidateFinder items={items} showImage={showImage} scoreLabel={scoreLabel} />
+      <ol className="divide-y divide-[#ECDEC6] rounded-2xl border bg-[#FFFCF4]">
+        {results.map((result, index) => {
+          const item = items[index];
+          return (
+            <li key={result.candidateId}>
+              <details className="group/row">
+                <summary
+                  id={item.rowId}
+                  className="group/item flex min-h-[3.75rem] cursor-pointer list-none items-center gap-2 rounded-xl px-2.5 py-1.5 hover:bg-[#FFF6E4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-[current=true]:bg-[#FFF0CF] aria-[current=true]:shadow-[inset_3px_0_0_#B55627] sm:gap-3 sm:px-4 [&::-webkit-details-marker]:hidden"
+                >
+                  <span className="min-w-8 shrink-0 text-center font-semibold tabular-nums">
+                    <span className="sr-only">{item.tied ? "并列第" : "第"}</span>{result.rank}<span className="sr-only">名</span>
+                    {item.tied && <span aria-hidden="true" className="block text-xs font-normal text-muted-foreground">并列</span>}
+                  </span>
+                  <VoteCandidateThumb candidate={item} show={showImage} compact />
+                  <span className="min-w-0 flex-1 break-words font-medium">
+                    {result.name}
+                    {result.isActive === false && <Badge variant="outline" className="ml-1.5">已删除</Badge>}
+                    <span className="ml-1.5 hidden text-xs text-[#894824] group-aria-[current=true]/item:inline">已定位</span>
+                  </span>
+                  <span className="shrink-0 font-semibold tabular-nums">
+                    <span className="sr-only">{scoreLabel} </span>{result.score} <span className="text-xs font-normal text-muted-foreground">分</span>
+                  </span>
+                  <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-open/row:rotate-180" />
+                </summary>
+                <div className="space-y-2 border-t border-dashed px-3 py-3 text-sm text-muted-foreground sm:px-4">
+                  <p>榜单排序第 {result.position} 位</p>
+                  {showLoveBreakdown && (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      <span>普通得分 {result.normalScore}</span>
+                      <span className="text-[#B33753]">真爱票得分 {result.loveScore}（{result.loveVoteCount} 张）</span>
                     </div>
-                  ) : null}
-                  {showLoveBreakdown ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#C73555]">
-                      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[#FFB3C1] bg-[#FFE4EA] px-2.5 py-1">
-                        <Heart className="size-3 fill-current" />
-                        普通得分 {result.normalScore}
-                      </span>
-                      <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#FFB3C1] bg-[#FFE4EA] px-2.5 py-1">
-                        真爱票得分 {result.loveScore}
-                      </span>
-                      <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#FFB3C1] bg-[#FFE4EA] px-2.5 py-1">
-                        真爱票 {result.loveVoteCount} 张
-                      </span>
-                    </div>
-                  ) : null}
-                  {result.lastVoteAt ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      最后得票时间：{formatDateTime(result.lastVoteAt)}
-                    </p>
-                  ) : null}
+                  )}
+                  {showDescription && result.description && <p className="whitespace-pre-line break-words">{result.description}</p>}
+                  {showNominatorInfo && result.nominatorDisplayName && <p>提名者：{result.nominatorDisplayName}</p>}
+                  {result.lastVoteAt && <p>最后得票时间：{formatDateTime(result.lastVoteAt)}</p>}
+                  <ScoreBreakdownProgress
+                    score={result.score}
+                    normalScore={result.normalScore}
+                    loveScore={result.loveScore}
+                    topScore={topScore}
+                    scoreLabel={scoreLabel}
+                    showLoveBreakdown={showLoveBreakdown}
+                  />
                 </div>
-              </div>
-              <div className="text-right text-sm">
-                <div className="text-2xl font-semibold">{result.score}</div>
-                <div className="text-muted-foreground">{scoreLabel}</div>
-              </div>
-            </div>
-            <ScoreBreakdownProgress
-              score={result.score}
-              normalScore={result.normalScore}
-              loveScore={result.loveScore}
-              topScore={topScore}
-              scoreLabel={scoreLabel}
-              showLoveBreakdown={showLoveBreakdown}
-            />
-          </div>
-        );
-      })}
-    </div>
+              </details>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
