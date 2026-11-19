@@ -284,6 +284,8 @@ function MultiParticipantSummary({
   );
 }
 
+const tooltipActionClassName = "mx-4 mb-3 block px-3 py-2 text-center text-xs font-medium";
+
 function TooltipPanel({
   data,
   tooltipId,
@@ -303,7 +305,7 @@ function TooltipPanel({
       id={tooltipId}
       role="dialog"
       aria-label={`${data.contestTitle}比赛信息`}
-      className="overflow-hidden rounded-lg border border-[#D8BF8B] bg-[#FFFCF4] shadow-[0_12px_35px_rgba(74,43,27,0.22)]"
+      className="max-h-[calc(100dvh-24px)] overflow-x-hidden overflow-y-auto rounded-lg border border-[#D8BF8B] bg-[#FFFCF4] shadow-[0_12px_35px_rgba(74,43,27,0.22)]"
     >
       <div className="border-b border-[#E8DCC3] px-4 py-3 text-center">
         <div className="text-[11px] font-medium text-[#8A6A45]">
@@ -356,9 +358,18 @@ function TooltipPanel({
       {displayState === "voting" ? (
         <Link
           href={data.voteHref}
-          className={cn(actionStyles.participation, "mx-4 mb-3 block px-3 py-2 text-center text-xs font-medium")}
+          className={cn(actionStyles.participation, tooltipActionClassName)}
         >
           进入投票
+        </Link>
+      ) : null}
+
+      {showResults ? (
+        <Link
+          href={`/contests/${data.contestId}/results`}
+          className={cn(actionStyles.view, tooltipActionClassName)}
+        >
+          查看完整结果
         </Link>
       ) : null}
 

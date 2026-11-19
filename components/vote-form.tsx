@@ -1,13 +1,13 @@
 "use client";
 
-import { VoteImage } from "@/components/vote-image";
+import { MultipleChoiceBallot } from "@/components/multiple-choice-ballot";
+import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Heart, ImageIcon, Send } from "lucide-react";
+import { Heart, Send } from "lucide-react";
 import { toast } from "sonner";
 import { submitVoteAction } from "@/lib/actions/vote-actions";
 import { toUserFacingError } from "@/lib/action-error";
-import { getPublicImageUrl } from "@/lib/image/image-url";
 import type { Candidate, Contest } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { LoveVoteConfirmDialog } from "@/components/love-vote-confirm-dialog";
@@ -23,38 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-function CandidateThumb({
-  candidate,
-  show,
-}: {
-  candidate: VoteFormCandidate;
-  show: boolean;
-}) {
-  const imageUrl = getPublicImageUrl(candidate.image_path);
-
-  if (!show) {
-    return null;
-  }
-
-  return (
-    <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
-      {imageUrl ? (
-        <VoteImage maxWidth={256} sizes="64px"
-          src={imageUrl}
-          alt={`${candidate.name} 图片`}
-          loading="lazy"
-          decoding="async"
-          className="size-full object-cover"
-        />
-      ) : (
-        <span className="butter-placeholder flex size-full items-center justify-center">
-          <ImageIcon className="size-5" aria-hidden="true" />
-        </span>
-      )}
-    </span>
-  );
-}
 
 type VoteFormContest = Pick<
   Contest,
@@ -201,19 +169,10 @@ export function VoteForm({
     return null;
   }
 
-  function toggleCandidate(candidateId: string, checked: boolean) {
-    setSelectedIds((current) => {
-      if (checked) {
-        return current.length >= contest.max_choices
-          ? current
-          : [...current, candidateId];
-      }
-
-      setLoveCandidateIds((loveIds) =>
-        loveIds.filter((id) => id !== candidateId),
-      );
-      return current.filter((id) => id !== candidateId);
-    });
+  function changeMultipleSelection(ids: string[]) {
+    setLocalError(null);
+    setSelectedIds(ids);
+    setLoveCandidateIds((loveIds) => loveIds.filter((id) => ids.includes(id)));
   }
 
   function toggleLove(candidateId: string, checked: boolean) {
@@ -285,6 +244,9 @@ export function VoteForm({
     setLocalError(null);
     setIsSubmitting(true);
     const formData = new FormData(form);
+    for (const id of selectedIds) {
+      formData.append("candidateIds", id);
+    }
     for (const loveCandidateId of loveCandidateIds) {
       formData.append("loveCandidateIds", loveCandidateId);
     }
@@ -339,13 +301,13 @@ export function VoteForm({
   return (
     <form
       ref={formRef}
-      className="butter-panel space-y-6 p-6"
+      className={cn("butter-panel space-y-6 p-6", contest.vote_type === "multiple" && "px-3 sm:px-6")}
       onSubmit={handleSubmit}
     >
       <input type="hidden" name="contestId" value={contest.id} />
       <input type="hidden" name="voteType" value={contest.vote_type} />
 
-      <fieldset disabled={isSubmitting} className="space-y-6 disabled:opacity-70">
+      <fieldset disabled={isSubmitting} className="min-w-0 space-y-6 disabled:opacity-70">
         {error || localError ? (
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {localError ?? error}
@@ -396,7 +358,7 @@ export function VoteForm({
               >
                 <div className="flex items-start gap-3">
                   <RadioGroupItem value={candidate.id} className="mt-5" />
-                  <CandidateThumb candidate={candidate} show={showImage} />
+                  <VoteCandidateThumb candidate={candidate} show={showImage} />
                   <CandidateText
                     candidate={candidate}
                     showDescription={showDescription}
@@ -412,50 +374,15 @@ export function VoteForm({
         ) : null}
 
         {contest.vote_type === "multiple" ? (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              {contest.require_exact_choices === true
-                ? `必须选择 ${contest.max_choices} 项。`
-                : `最多选择 ${contest.max_choices} 项。`}
-            </p>
-            {candidates.map((candidate) => {
-              const checked = selectedIds.includes(candidate.id);
-              const disabled =
-                !checked && selectedIds.length >= contest.max_choices;
-
-              return (
-                <Label
-                  key={candidate.id}
-                  className={cn(
-                    "butter-option block cursor-pointer rounded-2xl border p-4",
-                    checked && "butter-option-selected scale-[1.01]",
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      name="candidateIds"
-                      value={candidate.id}
-                      checked={checked}
-                      disabled={disabled || isSubmitting}
-                      onCheckedChange={(value) =>
-                        toggleCandidate(candidate.id, value === true)
-                      }
-                      className="mt-5"
-                    />
-                    <CandidateThumb candidate={candidate} show={showImage} />
-                    <CandidateText
-                      candidate={candidate}
-                      showDescription={showDescription}
-                      showNominatorInfo={showNominatorInfo}
-                    />
-                    <RealtimeScoreBlock score={realtimeScores?.[candidate.id]} />
-                  </div>
-                  {renderLoveCheckbox(candidate.id)}
-                  <RealtimeScoreNote score={realtimeScores?.[candidate.id]} />
-                </Label>
-              );
-            })}
-          </div>
+          <MultipleChoiceBallot
+            contest={contest}
+            candidates={candidates}
+            selectedIds={selectedIds}
+            onChange={changeMultipleSelection}
+            love={loveVoteInfo ? { ids: loveCandidateIds, remaining: availableLoveVotes, onToggle: toggleLove } : undefined}
+            scores={realtimeScores}
+            disabled={isSubmitting}
+          />
         ) : null}
 
         {contest.vote_type === "ranked" ? (
@@ -471,7 +398,7 @@ export function VoteForm({
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <CandidateThumb candidate={candidate} show={showImage} />
+                    <VoteCandidateThumb candidate={candidate} show={showImage} />
                     <div className="min-w-0 flex-1">
                       <div className="font-medium">{candidate.name}</div>
                       {showDescription ? (
