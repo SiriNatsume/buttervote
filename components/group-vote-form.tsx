@@ -638,7 +638,7 @@ export function GroupVoteForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 [--vote-scroll-offset:9rem]">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <fieldset disabled={isSubmitting} className="min-w-0 space-y-6 disabled:opacity-70">
         {unvotedContests.length > 0 ? (
           <div className="sticky top-[calc(var(--site-header-height)+0.5rem)] z-20 rounded-2xl border bg-[#FFFCF4]/95 p-3 shadow-sm backdrop-blur-sm sm:p-4">

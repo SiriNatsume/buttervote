@@ -8,16 +8,18 @@ export function VoteCandidateThumb({
   candidate,
   show,
   compact = false,
+  className,
 }: {
   candidate: Pick<Candidate, "name" | "image_path">;
   show: boolean;
   compact?: boolean;
+  className?: string;
 }) {
   if (!show) return null;
   const imageUrl = getPublicImageUrl(candidate.image_path);
 
   return (
-    <span className={cn("flex shrink-0 items-center justify-center overflow-hidden bg-muted", compact ? "size-11 rounded-lg" : "size-16 rounded-xl")}>
+    <span className={cn("flex shrink-0 items-center justify-center overflow-hidden bg-muted", compact ? "size-11 rounded-lg" : "size-16 rounded-xl", className)}>
       {imageUrl ? (
         <VoteImage
           src={imageUrl}
