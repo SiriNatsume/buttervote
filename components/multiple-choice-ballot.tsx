@@ -1,6 +1,6 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeftRight, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronUp, Heart, Plus, X,
+  ArrowLeftRight, Check, ChevronDown, ChevronUp, Heart, Plus, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { CandidateCardCandidate } from "@/components/candidate-card";
@@ -12,8 +12,6 @@ import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import type { Contest } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 8;
-
 type BallotRules = Pick<
   Contest,
   "title" | "max_choices" | "require_exact_choices" | "show_candidate_image" | "show_candidate_description" | "show_nominator_info"
@@ -24,6 +22,43 @@ type LoveVotes = {
   onToggle: (id: string, checked: boolean) => void;
 };
 type BallotDialog = { kind: "selected" } | { kind: "replace"; candidate: CandidateCardCandidate };
+
+function SelectedCandidateAvatars({ candidates }: { candidates: CandidateCardCandidate[] }) {
+  const strip = useRef<HTMLSpanElement>(null);
+  const [capacity, setCapacity] = useState(0);
+
+  useEffect(() => {
+    const element = strip.current;
+    if (!element) return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      const style = getComputedStyle(element);
+      const size = parseFloat(style.getPropertyValue("--ballot-avatar-size"));
+      const gap = parseFloat(style.columnGap);
+      setCapacity(Math.floor((entry.contentRect.width + gap) / (size + gap)));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <span
+      ref={strip}
+      aria-hidden="true"
+      className="flex h-[var(--ballot-avatar-size)] min-w-0 flex-1 items-center gap-1 overflow-hidden [--ballot-avatar-size:32px]"
+    >
+      {candidates.slice(0, capacity).map((candidate) => (
+        <VoteCandidateThumb
+          key={candidate.id}
+          candidate={candidate}
+          show
+          compact
+          className="size-[var(--ballot-avatar-size)] rounded-full"
+        />
+      ))}
+    </span>
+  );
+}
 
 function CandidateRow({ candidate, contest, selected, full, hasLove, score, onChoose }: {
   candidate: CandidateCardCandidate;
@@ -97,30 +132,22 @@ export function MultipleChoiceBallot({ contest, candidates, selectedIds, onChang
   scores?: Record<string, number>;
   disabled: boolean;
 }) {
-  const [page, setPage] = useState(0);
   const [dialog, setDialog] = useState<BallotDialog | null>(null);
   const heading = useRef<HTMLParagraphElement>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const dialogTitle = useRef<HTMLHeadingElement>(null);
   const byId = useMemo(() => new Map(candidates.map((item) => [item.id, item])), [candidates]);
   const selected = selectedIds.map((id) => byId.get(id)).filter((item) => item !== undefined);
-  const pageCount = Math.ceil(candidates.length / PAGE_SIZE);
-  const currentPage = Math.min(page, Math.max(0, pageCount - 1));
-  const start = currentPage * PAGE_SIZE;
-  const pageItems = candidates.slice(start, start + PAGE_SIZE);
-  const remaining = candidates.length - start - pageItems.length;
+  const selectedSet = new Set(selectedIds);
+  const loveSet = new Set(love?.ids);
+  const selectedLabel = `已选 ${selected.length}/${contest.max_choices} 项`;
+  const hasSelection = selected.length > 0;
   const full = selectedIds.length >= contest.max_choices;
   const rule = `${contest.require_exact_choices ? "必须" : "最多"}选 ${contest.max_choices} 项`;
   if (!candidates.length) return null;
 
-  function browse(next: number) {
-    setPage(next);
-    heading.current?.focus({ preventScroll: true });
-    heading.current?.scrollIntoView({ block: "start", behavior: "instant" });
-  }
-
   function choose(candidate: CandidateCardCandidate, button: HTMLButtonElement) {
-    if (selectedIds.includes(candidate.id)) {
+    if (selectedSet.has(candidate.id)) {
       onChange(selectedIds.filter((id) => id !== candidate.id));
     } else if (full) {
       trigger.current = button;
@@ -143,82 +170,47 @@ export function MultipleChoiceBallot({ contest, candidates, selectedIds, onChang
       <p
         ref={heading}
         tabIndex={-1}
-        className="flex scroll-mt-[calc(var(--site-header-height)+var(--vote-scroll-offset,1rem))] flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded text-sm focus:outline-none"
+        className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded text-sm focus:outline-none"
       >
         <span className="font-medium">{rule}</span>
-        <span aria-live="polite" aria-atomic="true" className="text-xs tabular-nums text-muted-foreground">
-          名单共 {candidates.length} 项{pageCount > 1 && ` · 第 ${currentPage + 1} / ${pageCount} 页`}
-        </span>
+        <span className="text-xs tabular-nums text-muted-foreground">名单共 {candidates.length} 项</span>
       </p>
       <ul aria-label={`${contest.title}候选项`} className="space-y-1.5">
-        {pageItems.map((candidate) => (
+        {candidates.map((candidate) => (
           <CandidateRow
             key={candidate.id}
             candidate={candidate}
             contest={contest}
-            selected={selectedIds.includes(candidate.id)}
+            selected={selectedSet.has(candidate.id)}
             full={full}
-            hasLove={love?.ids.includes(candidate.id) ?? false}
+            hasLove={loveSet.has(candidate.id)}
             score={scores?.[candidate.id]}
             onChoose={(button) => choose(candidate, button)}
           />
         ))}
       </ul>
-      {scores && pageItems.some((item) => typeof scores[item.id] === "number") ? (
+      {scores && candidates.some((item) => typeof scores[item.id] === "number") ? (
         <p className="text-xs text-muted-foreground">实时总分不含真爱票</p>
       ) : null}
-      <div className="sticky bottom-[calc(var(--site-bottom-nav-height)+env(safe-area-inset-bottom,0px)+0.5rem)] z-10 flex flex-wrap items-center justify-between gap-1 rounded-xl border border-[#E5CDA3] bg-[#FFF8E9] px-2 py-1 shadow-sm max-[374px]:px-1.5 max-lg:mr-9 lg:bottom-3">
+      <div className="sticky bottom-[calc(var(--site-bottom-nav-height)+env(safe-area-inset-bottom,0px)+0.5rem)] z-10 max-lg:mr-9 lg:bottom-3">
+        <p role="status" className="sr-only">{selectedLabel}</p>
         <button
           type="button"
-          disabled={disabled || !selected.length}
+          disabled={disabled || !hasSelection}
           aria-haspopup="dialog"
-          aria-label={`查看已选，已选 ${selected.length} 项，${rule}${love ? "，可分配真爱票" : ""}`}
-          className="min-h-11 min-w-0 rounded-lg px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`查看已选，${selectedLabel}${love ? "，可分配真爱票" : ""}`}
+          className="flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-[#E5CDA3] bg-[#FFF8E9] px-2.5 py-1.5 text-left shadow-sm enabled:hover:bg-[#FFF3DD] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3"
           onClick={(event) => {
             trigger.current = event.currentTarget;
             setDialog({ kind: "selected" });
           }}
         >
-          <span aria-live="polite" aria-atomic="true" className="block whitespace-nowrap text-sm font-semibold tabular-nums">
-            已选 {selected.length}/{contest.max_choices} 项
+          <span className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums">
+            {selectedLabel}
           </span>
-          {selected.length > 0 ? (
-            <span className="flex items-center gap-0.5 text-xs text-[#925331]">
-              查看已选
-              {love ? (
-                <>
-                  <span className="max-[374px]:hidden">· 真爱票</span>
-                  <Heart aria-hidden="true" className="hidden size-3 text-[#C73555] max-[374px]:block" />
-                </>
-              ) : null}
-              <ChevronUp aria-hidden="true" className={cn("size-3", love && "max-[374px]:hidden")} />
-            </span>
-          ) : null}
+          {hasSelection && contest.show_candidate_image ? <SelectedCandidateAvatars candidates={selected} /> : null}
+          {hasSelection ? <ChevronUp aria-hidden="true" className="ml-auto size-4 shrink-0 text-[#925331]" /> : null}
         </button>
-        {pageCount > 1 ? (
-          <nav aria-label={`${contest.title}候选项翻页`} className="ml-auto flex items-center gap-1">
-            {currentPage > 0 ? (
-              <Button
-                type="button" variant="ghost" size="sm" className="min-h-11 min-w-11 gap-1 px-1.5 text-[#744329] max-[374px]:px-1 max-[374px]:text-xs sm:px-3"
-                disabled={disabled} onClick={() => browse(currentPage - 1)}
-              >
-                <ChevronLeft aria-hidden="true" className="hidden sm:block" />上一页
-              </Button>
-            ) : null}
-            {remaining > 0 ? (
-              <Button
-                type="button" size="sm"
-                className="min-h-11 flex-col gap-0 rounded-lg bg-[#984522] px-3 py-1 text-white hover:bg-[#78351C] max-[374px]:px-2"
-                disabled={disabled} onClick={() => browse(currentPage + 1)}
-              >
-                <span className="flex items-center gap-1 font-semibold">下一页<ArrowRight aria-hidden="true" /></span>
-                <span className="text-xs font-normal tabular-nums"><span className="max-[374px]:sr-only">后面</span>还有 {remaining} 项</span>
-              </Button>
-            ) : (
-              <span className="px-1.5 text-xs text-muted-foreground">已到最后一页</span>
-            )}
-          </nav>
-        ) : null}
       </div>
       <Dialog open={dialog !== null} onOpenChange={(open) => { if (!open) setDialog(null); }}>
         <DialogContent
@@ -245,7 +237,7 @@ export function MultipleChoiceBallot({ contest, candidates, selectedIds, onChang
           </DialogHeader>
           <ul className="space-y-2">
             {selected.map((candidate) => {
-              const hasLove = love?.ids.includes(candidate.id) ?? false;
+              const hasLove = loveSet.has(candidate.id);
               const identity = (
                 <>
                   <VoteCandidateThumb candidate={candidate} show={contest.show_candidate_image} compact />
