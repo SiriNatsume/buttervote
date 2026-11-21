@@ -1,5 +1,6 @@
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import remarkImageWidth from "./remark-image-width";
 
 type MarkdownNode = {
   type: string;
@@ -17,7 +18,7 @@ export type MarkdownHeading = {
 
 function nodeText(node: MarkdownNode): string {
   if (typeof node.value === "string") return node.value;
-  if (node.type === "image" && node.alt) return node.alt;
+  if (node.type === "image" || node.type === "imageReference") return node.alt ?? "";
   return node.children?.map(nodeText).join("") ?? "";
 }
 
@@ -45,7 +46,8 @@ export function createMarkdownHeadingSlugger() {
 }
 
 export function extractMarkdownHeadings(source: string): MarkdownHeading[] {
-  const tree = unified().use(remarkParse).parse(source) as MarkdownNode;
+  const parser = unified().use(remarkParse).use(remarkImageWidth);
+  const tree = parser.runSync(parser.parse(source), source) as MarkdownNode;
   const slugger = createMarkdownHeadingSlugger();
   const headings: MarkdownHeading[] = [];
 
