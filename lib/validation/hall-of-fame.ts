@@ -15,6 +15,7 @@ export const hallOfFameEntryInputSchema = z.object({
   entryId: optionalUuid("名人堂条目 ID 无效。"),
   contestId: optionalUuid("关联活动 ID 无效。"),
   contestGroupId: optionalUuid("夺冠历程活动组 ID 无效。"),
+  pageId: optionalUuid("夺冠历程页面 ID 无效。"),
   eventTitle: z
     .string()
     .trim()
@@ -29,6 +30,9 @@ export const hallOfFameEntryInputSchema = z.object({
     .string()
     .trim()
     .max(200, "简介不能超过 200 个字符。"),
+}).refine((value) => !(value.contestGroupId && value.pageId), {
+  message: "夺冠历程只能关联活动组或 Markdown 页面之一。",
+  path: ["pageId"],
 });
 
 export const hallOfFameEntryIdSchema = z

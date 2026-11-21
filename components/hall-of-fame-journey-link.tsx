@@ -6,11 +6,11 @@ import { useEffect, useRef, useState } from "react";
 import styles from "./hall-of-fame-journey-link.module.css";
 
 export function HallOfFameJourneyLink({
-  contestGroupId,
+  href,
   winnerName,
   active,
 }: {
-  contestGroupId: string;
+  href: string;
   winnerName: string;
   active: boolean;
 }) {
@@ -46,7 +46,7 @@ export function HallOfFameJourneyLink({
   return (
     <div ref={containerRef} className={styles.slot} data-active={active}>
       <Link
-        href={`/groups/${contestGroupId}`}
+        href={href}
         prefetch={false}
         className={styles.link}
         aria-label={`回顾${winnerName}的夺冠历程`}

@@ -34,11 +34,14 @@ import {
   HALL_OF_FAME_THUMBNAIL_MAX_FILE_SIZE,
 } from "@/lib/hall-of-fame";
 import { getImageThumbnailBlob } from "@/lib/image/crop-image";
+import type { PageVisibility } from "@/lib/types";
+import { pageVisibilityLabel } from "@/lib/site-pages";
 
 export type HallOfFameAdminEntry = {
   id: string;
   contestId: string | null;
   contestGroupId: string | null;
+  pageId: string | null;
   eventTitle: string;
   winnerName: string;
   description: string;
@@ -48,12 +51,15 @@ export type HallOfFameAdminEntry = {
   thumbnailSize: number;
 };
 
-type ContestOption = { id: string; title: string };
 type ContestGroupOption = { id: string; name: string };
+type PageOption = { id: string; title: string; visibility: PageVisibility };
+type JourneyType = "none" | "group" | "page";
 type EditorValue = {
   entryId: string | null;
   contestId: string;
   contestGroupId: string;
+  pageId: string;
+  journeyType: JourneyType;
   eventTitle: string;
   winnerName: string;
   description: string;
@@ -64,6 +70,8 @@ const emptyEditor: EditorValue = {
   entryId: null,
   contestId: "",
   contestGroupId: "",
+  pageId: "",
+  journeyType: "none",
   eventTitle: "",
   winnerName: "",
   description: "",
@@ -72,12 +80,12 @@ const emptyEditor: EditorValue = {
 
 export function HallOfFameAdmin({
   entries,
-  contests,
   contestGroups,
+  pages,
 }: {
   entries: HallOfFameAdminEntry[];
-  contests: ContestOption[];
   contestGroups: ContestGroupOption[];
+  pages: PageOption[];
 }) {
   const router = useRouter();
   const [orderedEntries, setOrderedEntries] = useState(entries);
@@ -88,6 +96,7 @@ export function HallOfFameAdmin({
   const [submitting, setSubmitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const contestGroupNames = new Map(contestGroups.map((group) => [group.id, group.name]));
+  const pagesById = new Map(pages.map((page) => [page.id, page]));
 
   useEffect(() => {
     setOrderedEntries(entries);
@@ -99,6 +108,8 @@ export function HallOfFameAdmin({
       entryId: entry.id,
       contestId: entry.contestId ?? "",
       contestGroupId: entry.contestGroupId ?? "",
+      pageId: entry.pageId ?? "",
+      journeyType: entry.pageId ? "page" : entry.contestGroupId ? "group" : "none",
       eventTitle: entry.eventTitle,
       winnerName: entry.winnerName,
       description: entry.description,
@@ -173,6 +184,10 @@ export function HallOfFameAdmin({
     setSubmitting(true);
     try {
       const formData = new FormData(event.currentTarget);
+      // Only submit the selected target, including when switching an existing
+      // journey to another kind or clearing it altogether.
+      formData.set("contestGroupId", editor.journeyType === "group" ? editor.contestGroupId : "");
+      formData.set("pageId", editor.journeyType === "page" ? editor.pageId : "");
       if (editor.entryId) formData.set("entryId", editor.entryId);
       const poster = formData.get("poster");
       if (poster instanceof File && poster.size > 0) {
@@ -202,7 +217,7 @@ export function HallOfFameAdmin({
       if (result.warning) {
         toast.warning(result.warning);
       } else {
-        toast.success(editor.entryId ? "冠军英灵殿条目已更新。" : "冠军英灵殿条目已创建。");
+        toast.success(editor.entryId ? "冠军殿堂条目已更新。" : "冠军殿堂条目已创建。");
       }
       setEditor(null);
       router.refresh();
@@ -272,6 +287,12 @@ export function HallOfFameAdmin({
                     夺冠历程：{contestGroupNames.get(entry.contestGroupId) ?? "关联活动组"}
                   </div>
                 ) : null}
+                {entry.pageId ? (
+                  <div className="mt-1 truncate text-xs text-[#B7792C]">
+                    夺冠历程：{pagesById.get(entry.pageId)?.title ?? "关联页面"}
+                    {pagesById.get(entry.pageId)?.visibility !== "public" ? "（前台隐藏）" : ""}
+                  </div>
+                ) : null}
                 <div className="mt-1 text-xs text-muted-foreground">
                   原图 {(entry.posterSize / 1024 / 1024).toFixed(2)} MB · 缩略图 {Math.round(entry.thumbnailSize / 1024)} KB
                 </div>
@@ -298,48 +319,77 @@ export function HallOfFameAdmin({
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-[#E3C98F] px-6 py-14 text-center text-muted-foreground">
-          暂无冠军英灵殿条目，点击“新增条目”上传第一张海报。
+          暂无冠军殿堂条目，点击“新增条目”上传第一张海报。
         </div>
       )}
 
       <Dialog open={Boolean(editor)} onOpenChange={(open) => !open && setEditor(null)}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editor?.entryId ? "编辑冠军英灵殿条目" : "新增冠军英灵殿条目"}</DialogTitle>
-            <DialogDescription>展示信息独立保存，不会随关联赛事自动变化。</DialogDescription>
+            <DialogTitle>{editor?.entryId ? "编辑冠军殿堂条目" : "新增冠军殿堂条目"}</DialogTitle>
+            <DialogDescription>管理冠军信息、海报和夺冠历程入口。</DialogDescription>
           </DialogHeader>
           {editor ? (
-            <form className="grid gap-4" onSubmit={submitEditor}>
+            <form className="grid min-w-0 grid-cols-1 gap-4" onSubmit={submitEditor}>
+              {/* Preserve deprecated contest associations when editing existing entries. */}
+              <input type="hidden" name="contestId" value={editor.contestId} />
               <div className="grid gap-2">
-                <Label htmlFor="hall-contest">关联赛事（可选）</Label>
+                <Label htmlFor="hall-journey-type">夺冠历程</Label>
                 <select
-                  id="hall-contest"
-                  name="contestId"
-                  value={editor.contestId}
-                  onChange={(event) => setEditor({ ...editor, contestId: event.target.value })}
-                  className="h-10 rounded-xl border border-input bg-[#FFFCF4]/80 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  id="hall-journey-type"
+                  value={editor.journeyType}
+                  onChange={(event) => setEditor({ ...editor, journeyType: event.target.value as JourneyType })}
+                  className="h-10 w-full min-w-0 rounded-xl border border-input bg-[#FFFCF4]/80 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <option value="">不关联赛事</option>
-                  {contests.map((contest) => <option key={contest.id} value={contest.id}>{contest.title}</option>)}
+                  <option value="none">不显示夺冠历程按钮</option>
+                  <option value="group">活动组</option>
+                  <option value="page">Markdown 页面</option>
                 </select>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="hall-contest-group">夺冠历程活动组（可选）</Label>
-                <select
-                  id="hall-contest-group"
-                  name="contestGroupId"
-                  value={editor.contestGroupId}
-                  onChange={(event) => setEditor({ ...editor, contestGroupId: event.target.value })}
-                  aria-describedby="hall-contest-group-hint"
-                  className="h-10 rounded-xl border border-input bg-[#FFFCF4]/80 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">不显示夺冠历程按钮</option>
-                  {contestGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                </select>
-                <p id="hall-contest-group-hint" className="text-xs text-muted-foreground">
-                  关联后显示王冠按钮，点击进入该活动组概览；不关联则隐藏按钮。
-                </p>
-              </div>
+              {editor.journeyType === "group" ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="hall-contest-group">夺冠历程活动组</Label>
+                  <select
+                    id="hall-contest-group"
+                    name="contestGroupId"
+                    value={editor.contestGroupId}
+                    onChange={(event) => setEditor({ ...editor, contestGroupId: event.target.value })}
+                    required
+                    aria-describedby="hall-contest-group-hint"
+                    className="h-10 w-full min-w-0 rounded-xl border border-input bg-[#FFFCF4]/80 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">请选择活动组</option>
+                    {contestGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+                  </select>
+                  <p id="hall-contest-group-hint" className="text-xs text-muted-foreground">
+                    点击王冠按钮进入该活动组概览。
+                  </p>
+                </div>
+              ) : null}
+              {editor.journeyType === "page" ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="hall-journey-page">夺冠历程 Markdown 页面</Label>
+                  <select
+                    id="hall-journey-page"
+                    name="pageId"
+                    value={editor.pageId}
+                    onChange={(event) => setEditor({ ...editor, pageId: event.target.value })}
+                    required
+                    aria-describedby="hall-journey-page-hint"
+                    className="h-10 w-full min-w-0 rounded-xl border border-input bg-[#FFFCF4]/80 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">请选择页面</option>
+                    {pages.map((page) => (
+                      <option key={page.id} value={page.id}>
+                        {page.title}（{pageVisibilityLabel[page.visibility]}）
+                      </option>
+                    ))}
+                  </select>
+                  <p id="hall-journey-page-hint" className="text-xs text-muted-foreground">
+                    页面公开时显示王冠入口；改为管理可见时隐藏入口并保留关联，恢复公开后重新显示。
+                  </p>
+                </div>
+              ) : null}
               <div className="grid gap-2">
                 <Label htmlFor="hall-event-title">赛事标题</Label>
                 <Input id="hall-event-title" name="eventTitle" maxLength={120} required value={editor.eventTitle} onChange={(event) => setEditor({ ...editor, eventTitle: event.target.value })} />

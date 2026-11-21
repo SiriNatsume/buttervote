@@ -27,6 +27,7 @@
     "test:nomination-sync:local": "node --env-file=.local/supabase-app.env ./scripts/verify-nomination-sync.mjs",
     "test:bracket-export:local": "node --conditions=react-server --import tsx --env-file=.local/supabase-app.env ./scripts/verify-bracket-image-cache.mjs",
     "test:site-pages-security:local": "node --env-file=.local/supabase-app.env ./scripts/verify-site-page-security.mjs",
+    "test:hall-journeys:local": "node --env-file=.local/supabase-app.env ./scripts/verify-hall-of-fame-journeys.mjs",
     "test:qq-auth:local": "node --env-file=.local/supabase-app.env ./scripts/verify-qq-auth.mjs",
     "bot:sync-groups": "node ./scripts/qq-group-sync.mjs --watch",
     "lint": "eslint",

@@ -25,7 +25,7 @@ import { HallOfFameJourneyLink } from "@/components/hall-of-fame-journey-link";
 
 export type HallOfFameGalleryItem = {
   id: string;
-  contestGroupId: string | null;
+  journeyHref: string | null;
   eventTitle: string;
   winnerName: string;
   description: string;
@@ -51,7 +51,7 @@ export function HallOfFameGallery({
   const activeItem = items[activeIndex];
   const previousItem = items[activeIndex - 1];
   const nextItem = items[activeIndex + 1];
-  const hasJourneyLinks = items.some((item) => Boolean(item.contestGroupId));
+  const hasJourneyLinks = items.some((item) => Boolean(item.journeyHref));
   useEffect(() => {
     if (!activeItem || loadedOriginalIds.has(activeItem.id)) return;
 
@@ -144,7 +144,7 @@ export function HallOfFameGallery({
     return (
       <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-destructive/30 bg-destructive/5 px-6 text-center">
         <CircleAlert className="mb-4 size-10 text-destructive" aria-hidden="true" />
-        <h2 className="text-xl font-semibold text-[#5C321E]">冠军英灵殿加载失败</h2>
+        <h2 className="text-xl font-semibold text-[#5C321E]">冠军殿堂加载失败</h2>
         <p className="mt-2 text-sm text-muted-foreground">{errorMessage}</p>
       </div>
     );
@@ -154,7 +154,7 @@ export function HallOfFameGallery({
     return (
       <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-dashed border-[#E3C98F] bg-[#FFF8E8]/70 px-6 text-center">
         <ImageIcon className="mb-4 size-10 text-[#C99A54]" aria-hidden="true" />
-        <h2 className="text-xl font-semibold text-[#5C321E]">冠军英灵殿正在准备中</h2>
+        <h2 className="text-xl font-semibold text-[#5C321E]">冠军殿堂正在准备中</h2>
         <p className="mt-2 text-sm text-muted-foreground">历届胜者海报将在这里依次展出。</p>
       </div>
     );
@@ -210,9 +210,9 @@ export function HallOfFameGallery({
                     : "scale-90 opacity-60 hover:opacity-80"
                 }`}
               >
-                {item.contestGroupId ? (
+                {item.journeyHref ? (
                   <HallOfFameJourneyLink
-                    contestGroupId={item.contestGroupId}
+                    href={item.journeyHref}
                     winnerName={item.winnerName}
                     active={index === activeIndex}
                   />
@@ -268,7 +268,7 @@ export function HallOfFameGallery({
         </div>
         <div
           className="mx-auto flex max-w-full items-center justify-center overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          aria-label="冠军英灵殿轮播位置"
+          aria-label="冠军殿堂轮播位置"
         >
           {items.map((item, index) => (
             <button
