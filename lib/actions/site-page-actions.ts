@@ -93,6 +93,7 @@ export async function createSitePageAction(
     value.visibility,
   );
   revalidatePath("/admin/pages");
+  revalidatePath("/admin/hall-of-fame");
   revalidatePath(sitePageHref(data.slug));
   return {
     ok: true,
@@ -181,6 +182,8 @@ export async function updateSitePageAction(
   ].filter((warning): warning is string => Boolean(warning));
 
   revalidatePath("/admin/pages");
+  revalidatePath("/hall-of-fame");
+  revalidatePath("/admin/hall-of-fame");
   revalidatePath(sitePageHref(existing.slug));
   const { data: linkedGroups } = await supabase
     .from("contest_group_pages")

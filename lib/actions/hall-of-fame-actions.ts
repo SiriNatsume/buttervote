@@ -61,7 +61,7 @@ export async function deleteHallOfFameEntryAction(
     .maybeSingle();
 
   if (lookupError) return { ok: false, error: lookupError.message };
-  if (!entry) return { ok: false, error: "冠军英灵殿条目不存在。" };
+  if (!entry) return { ok: false, error: "冠军殿堂条目不存在。" };
 
   const { error: deleteError } = await supabase
     .from("hall_of_fame_entries")
@@ -81,10 +81,10 @@ export async function deleteHallOfFameEntryAction(
     );
     return {
       ok: true,
-      message: "冠军英灵殿条目已删除。",
+      message: "冠军殿堂条目已删除。",
       warning: "条目已删除，但图片文件清理失败，请稍后检查 Storage。",
     };
   }
 
-  return { ok: true, message: "冠军英灵殿条目已删除。" };
+  return { ok: true, message: "冠军殿堂条目已删除。" };
 }

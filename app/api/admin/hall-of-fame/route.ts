@@ -75,6 +75,7 @@ export async function POST(request: Request) {
     entryId: getFormText(formData, "entryId"),
     contestId: getFormText(formData, "contestId"),
     contestGroupId: getFormText(formData, "contestGroupId"),
+    pageId: getFormText(formData, "pageId"),
     eventTitle: getFormText(formData, "eventTitle"),
     winnerName: getFormText(formData, "winnerName"),
     description: getFormText(formData, "description"),
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
     return jsonError(getValidationMessage(parsed.error), 400);
   }
 
-  const { entryId, contestId, contestGroupId, eventTitle, winnerName, description } = parsed.data;
+  const { entryId, contestId, contestGroupId, pageId, eventTitle, winnerName, description } = parsed.data;
   const fileValue = formData.get("poster");
   const file = fileValue instanceof File && fileValue.size > 0 ? fileValue : null;
   const thumbnailValue = formData.get("thumbnail");
@@ -139,6 +140,16 @@ export async function POST(request: Request) {
     if (!group) return jsonError("关联活动组不存在。", 400);
   }
 
+  if (pageId) {
+    const { data: page, error: pageError } = await supabase
+      .from("site_pages").select("id").eq("id", pageId).maybeSingle();
+    if (pageError) {
+      logServerError("journey page lookup failed", pageError);
+      return jsonError("验证夺冠历程页面失败，请稍后重试。", 500);
+    }
+    if (!page) return jsonError("关联页面不存在。", 400);
+  }
+
   const { data: existing, error: lookupError } = entryId
     ? await supabase
         .from("hall_of_fame_entries")
@@ -153,7 +164,7 @@ export async function POST(request: Request) {
     logServerError("entry lookup failed", lookupError);
     return jsonError("读取名人堂条目失败，请稍后重试。", 500);
   }
-  if (entryId && !existing) return jsonError("冠军英灵殿条目不存在。", 404);
+  if (entryId && !existing) return jsonError("冠军殿堂条目不存在。", 404);
   if (!existing && !file) return jsonError("请选择海报图片。", 400);
 
   const targetEntryId = existing?.id ?? crypto.randomUUID();
@@ -226,6 +237,7 @@ export async function POST(request: Request) {
       .update({
         contest_id: contestId,
         contest_group_id: contestGroupId,
+        page_id: pageId,
         event_title: eventTitle,
         winner_name: winnerName,
         description,
@@ -254,6 +266,7 @@ export async function POST(request: Request) {
       id: targetEntryId,
       contest_id: contestId,
       contest_group_id: contestGroupId,
+      page_id: pageId,
       event_title: eventTitle,
       winner_name: winnerName,
       description,

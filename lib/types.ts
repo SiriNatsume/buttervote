@@ -375,6 +375,7 @@ export type HallOfFameEntry = {
   id: string;
   contest_id: string | null;
   contest_group_id: string | null;
+  page_id: string | null;
   event_title: string;
   winner_name: string;
   description: string;
@@ -512,6 +513,7 @@ type Tables = {
       id?: string;
       contest_id?: string | null;
       contest_group_id?: string | null;
+      page_id?: string | null;
       event_title: string;
       winner_name: string;
       description?: string;
@@ -540,6 +542,13 @@ type Tables = {
         columns: ["contest_group_id"];
         isOneToOne: false;
         referencedRelation: "contest_groups";
+        referencedColumns: ["id"];
+      },
+      {
+        foreignKeyName: "hall_of_fame_entries_page_id_fkey";
+        columns: ["page_id"];
+        isOneToOne: false;
+        referencedRelation: "site_pages";
         referencedColumns: ["id"];
       },
     ]

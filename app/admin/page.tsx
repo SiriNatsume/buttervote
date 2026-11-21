@@ -166,7 +166,7 @@ export default async function AdminPage({
           <Button asChild variant="outline">
             <Link href="/admin/hall-of-fame">
               <Images className="size-4" />
-              冠军英灵殿
+              冠军殿堂
             </Link>
           </Button>
           <Button asChild variant="outline">
