@@ -8,6 +8,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { createMarkdownHeadingSlugger } from "@/lib/markdown-headings";
+import remarkImageWidth from "@/lib/remark-image-width";
 import { cn } from "@/lib/utils";
 
 const sanitizeSchema = {
@@ -78,11 +79,22 @@ function SafeLink({ href, ...props }: ComponentPropsWithoutRef<"a">) {
   );
 }
 
+function MarkdownImage({
+  alt,
+  src,
+  title,
+  width,
+}: ComponentPropsWithoutRef<"img">) {
+  return (
+    <img src={src} title={title} width={width} alt={alt ?? ""} loading="lazy" decoding="async" />
+  );
+}
+
 function reactNodeText(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(reactNodeText).join("");
   if (React.isValidElement<{ alt?: string; children?: ReactNode }>(node)) {
-    if (node.type === "img") return node.props.alt ?? "";
+    if (node.type === MarkdownImage || node.type === "img") return node.props.alt ?? "";
     return reactNodeText(node.props.children);
   }
   return "";
@@ -120,7 +132,7 @@ export function MarkdownRenderer({
     <div className={cn("markdown-content", className)}>
       <ReactMarkdown
         skipHtml
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkImageWidth]}
         rehypePlugins={[rehypeHighlight, [rehypeSanitize, sanitizeSchema]]}
         urlTransform={safeMarkdownUrl}
         components={{
@@ -131,9 +143,7 @@ export function MarkdownRenderer({
           h4: createHeadingComponent("h4", headingSlugger),
           h5: createHeadingComponent("h5", headingSlugger),
           h6: createHeadingComponent("h6", headingSlugger),
-          img: ({ alt, ...props }) => (
-            <img {...props} alt={alt ?? ""} loading="lazy" decoding="async" />
-          ),
+          img: MarkdownImage,
           input: (props) => <input {...props} disabled />,
         }}
       >

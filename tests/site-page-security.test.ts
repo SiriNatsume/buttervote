@@ -38,12 +38,56 @@ test("Markdown renderer never executes or preserves native HTML", () => {
   assert.equal(output.includes("<table>"), true);
 });
 
+test("Markdown image width works with inline and reference images", () => {
+  const source = [
+    "| Poster |",
+    "| --- |",
+    "| ![Poster](/api/page-assets/abc){width=480} caption |",
+    "",
+    "![Cover][cover]{width=240}",
+    "",
+    '[cover]: /cover.png "Cover art"',
+  ].join("\n");
+  const output = renderToStaticMarkup(createElement(MarkdownRenderer, { source }));
+
+  assert.match(output, /<img [^>]*src="\/api\/page-assets\/abc"[^>]*width="480"[^>]*\/> caption/);
+  assert.match(output, /<img [^>]*src="\/cover\.png"[^>]*width="240"/);
+  assert.match(output, /title="Cover art"/);
+  assert.doesNotMatch(output, /\{width=/);
+});
+
+test("Markdown image width preserves regular images and literal syntax", () => {
+  const suffixes = [
+    "",
+    " {width=480}",
+    "{width=0}",
+    "{width=-1}",
+    "{width=50%}",
+    "{width=9007199254740992}",
+    "\\{width=480}",
+    "&#123;width=480}",
+  ];
+  for (const suffix of suffixes) {
+    const source = `![Poster](/poster.png)${suffix}`;
+    const output = renderToStaticMarkup(createElement(MarkdownRenderer, { source }));
+
+    assert.match(output, /<img [^>]*src="\/poster\.png"/);
+    assert.doesNotMatch(output, /\swidth="/);
+    assert.equal(output.includes("{width="), suffix.length > 0);
+  }
+
+  const source = "`![Poster](/poster.png){width=480}`";
+  const output = renderToStaticMarkup(createElement(MarkdownRenderer, { source }));
+  assert.match(output, /<code>!\[Poster\]\(\/poster\.png\)\{width=480\}<\/code>/);
+});
+
 test("Markdown table of contents matches rendered heading anchors", () => {
   const source = [
     "# Page title",
     "## 安全规则",
     "### [Attachment rules](/files)",
     "## 安全规则",
+    "## ![Poster](/poster.png){width=480} Gallery",
     "```md",
     "## Not a heading",
     "```",
@@ -55,6 +99,7 @@ test("Markdown table of contents matches rendered heading anchors", () => {
     { depth: 2, id: "安全规则", text: "安全规则" },
     { depth: 3, id: "attachment-rules", text: "Attachment rules" },
     { depth: 2, id: "安全规则-1", text: "安全规则" },
+    { depth: 2, id: "poster-gallery", text: "Poster Gallery" },
   ]);
 
   const output = renderToStaticMarkup(createElement(MarkdownRenderer, { source }));
