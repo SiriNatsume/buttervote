@@ -1,6 +1,6 @@
 "use client";
 
-import { DuelBallot } from "@/components/duel-ballot";
+import { SingleChoiceBallot } from "@/components/single-choice-ballot";
 import { MultipleChoiceBallot } from "@/components/multiple-choice-ballot";
 import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { FormEvent, useMemo, useRef, useState } from "react";
@@ -140,7 +140,7 @@ export function VoteForm({
   const showImage = contest.show_candidate_image;
   const showDescription = contest.show_candidate_description;
   const showNominatorInfo = contest.show_nominator_info;
-  const isDuel = contest.vote_type === "single" && candidates.length === 2;
+  const showSingleChoiceBallot = contest.vote_type === "single" && candidates.length >= 2;
   const loveVoteRemaining = loveVoteInfo
     ? Math.max(0, loveVoteInfo.quota - loveVoteInfo.used)
     : 0;
@@ -309,7 +309,7 @@ export function VoteForm({
   return (
     <form
       ref={formRef}
-      className={cn("butter-panel space-y-6 p-6", (isDuel || contest.vote_type === "multiple") && "px-3 sm:px-6")}
+      className={cn("butter-panel space-y-6 p-6", (showSingleChoiceBallot || contest.vote_type === "multiple") && "px-3 sm:px-6")}
       onSubmit={handleSubmit}
     >
       <input type="hidden" name="contestId" value={contest.id} />
@@ -343,8 +343,8 @@ export function VoteForm({
           </MascotEmptyState>
         ) : null}
 
-        {isDuel ? (
-          <DuelBallot
+        {showSingleChoiceBallot ? (
+          <SingleChoiceBallot
             contest={contest}
             candidates={candidates}
             selectedId={candidateId}

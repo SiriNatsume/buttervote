@@ -1,6 +1,6 @@
 "use client";
 
-import { DuelBallot } from "@/components/duel-ballot";
+import { SingleChoiceBallot } from "@/components/single-choice-ballot";
 import { MultipleChoiceBallot } from "@/components/multiple-choice-ballot";
 import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -467,7 +467,7 @@ export function GroupVoteForm({
     const selection = getSelection(contest.id);
     const selectedRanking = selection.ranking.filter(Boolean);
     const realtimeScores = realtimeScoresByContestId?.[contest.id];
-    const isDuel = contest.vote_type === "single" && contest.candidates.length === 2;
+    const showSingleChoiceBallot = contest.vote_type === "single" && contest.candidates.length >= 2;
 
     return (
       <Card
@@ -496,7 +496,7 @@ export function GroupVoteForm({
           </div>
           <CardTitle id={`group-vote-title-${contest.id}`}>{contest.title}</CardTitle>
         </CardHeader>
-        <CardContent className={isDuel || contest.vote_type === "multiple" ? "px-3 sm:px-6" : undefined}>
+        <CardContent className={showSingleChoiceBallot || contest.vote_type === "multiple" ? "px-3 sm:px-6" : undefined}>
           {contest.existingVoteId ? (
             <div className="space-y-2 rounded-2xl border bg-[#F0F5EB]/60 p-4 text-sm">
               <p className="text-muted-foreground">你已经在这个活动中投过票。</p>
@@ -525,8 +525,8 @@ export function GroupVoteForm({
             >
               暂时不能提交这一项投票。
             </MascotEmptyState>
-          ) : isDuel ? (
-            <DuelBallot
+          ) : showSingleChoiceBallot ? (
+            <SingleChoiceBallot
               contest={contest}
               candidates={contest.candidates}
               selectedId={selection.candidateId}

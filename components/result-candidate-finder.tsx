@@ -4,11 +4,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
-import type { ResultSearchItem } from "@/lib/result-search";
-
-function normalizeName(value: string) {
-  return value.normalize("NFKC").trim().toLocaleLowerCase("zh-CN");
-}
+import { normalizeCandidateName, type ResultSearchItem } from "@/lib/result-search";
 
 export function ResultCandidateFinder({ items, showImage, scoreLabel }: {
   items: ResultSearchItem[];
@@ -22,9 +18,9 @@ export function ResultCandidateFinder({ items, showImage, scoreLabel }: {
   const menu = useRef<HTMLUListElement>(null);
   const currentRow = useRef<HTMLElement | null>(null);
   const menuId = useId();
-  const term = normalizeName(query);
+  const term = normalizeCandidateName(query);
   const visible = open && term.length > 0;
-  const matches = visible ? items.filter((item) => normalizeName(item.name).includes(term)) : [];
+  const matches = visible ? items.filter((item) => normalizeCandidateName(item.name).includes(term)) : [];
 
   useEffect(() => {
     if (!visible) return;

@@ -1,8 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import {
-  ArrowLeftRight, Check, ChevronDown, ChevronUp, Heart, Plus, X,
-} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronUp, Heart, X } from "lucide-react";
 import { toast } from "sonner";
+import { BallotCandidateRow, type BallotDisplay } from "@/components/ballot-candidate-row";
 import type { CandidateCardCandidate } from "@/components/candidate-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,10 +11,7 @@ import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import type { Contest } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type BallotRules = Pick<
-  Contest,
-  "title" | "max_choices" | "require_exact_choices" | "show_candidate_image" | "show_candidate_description" | "show_nominator_info"
->;
+type BallotRules = BallotDisplay & Pick<Contest, "max_choices" | "require_exact_choices">;
 type LoveVotes = {
   ids: string[];
   remaining: number;
@@ -57,69 +53,6 @@ function SelectedCandidateAvatars({ candidates }: { candidates: CandidateCardCan
         />
       ))}
     </span>
-  );
-}
-
-function CandidateRow({ candidate, contest, selected, full, hasLove, score, onChoose }: {
-  candidate: CandidateCardCandidate;
-  contest: BallotRules;
-  selected: boolean;
-  full: boolean;
-  hasLove: boolean;
-  score?: number;
-  onChoose: (button: HTMLButtonElement) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const detailId = useId();
-  const description = contest.show_candidate_description && candidate.description;
-  const nominator = contest.show_nominator_info && candidate.nominator_display_name;
-  const verb = selected ? "取消选择" : full ? "换入" : "选择";
-  const Mark = selected ? Check : full ? ArrowLeftRight : Plus;
-
-  return (
-    <li className={cn("butter-option rounded-xl border", selected && "butter-option-selected")}>
-      <div className="flex items-center">
-        <button
-          type="button"
-          aria-label={`${verb}${candidate.name}`}
-          aria-pressed={selected}
-          aria-haspopup={full && !selected ? "dialog" : undefined}
-          onClick={(event) => onChoose(event.currentTarget)}
-          className="flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <VoteCandidateThumb candidate={candidate} show={contest.show_candidate_image} compact />
-          <span className="min-w-0 flex-1">
-            <span className="break-words font-medium leading-snug">{candidate.name}</span>
-            {hasLove ? <Heart className="ml-1 inline size-3.5 fill-current text-[#C73555]" aria-label="已用真爱票" /> : null}
-            {description && !expanded ? <span className="block truncate text-xs leading-5 text-muted-foreground">{description}</span> : null}
-            {!description && nominator ? <span className="block break-words text-xs text-muted-foreground">提名者：{nominator}</span> : null}
-            {typeof score === "number" ? <span className="block text-xs tabular-nums text-muted-foreground">实时 {score} 分</span> : null}
-          </span>
-          <Mark
-            aria-hidden="true"
-            className={cn("size-4 shrink-0", selected ? "text-orange-700" : "text-muted-foreground")}
-          />
-        </button>
-        {description ? (
-          <button
-            type="button"
-            aria-label={`${expanded ? "收起" : "展开"}${candidate.name}的简介`}
-            aria-expanded={expanded}
-            aria-controls={detailId}
-            className="flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setExpanded(!expanded)}
-          >
-            <ChevronDown aria-hidden="true" className={cn("size-4", expanded && "rotate-180")} />
-          </button>
-        ) : null}
-      </div>
-      {description ? (
-        <div id={detailId} hidden={!expanded} className="border-t px-3 py-2.5 text-sm leading-6 text-muted-foreground">
-          <p className="whitespace-pre-line break-words">{description}</p>
-          {nominator ? <p className="mt-1 text-xs">提名者：{nominator}</p> : null}
-        </div>
-      ) : null}
-    </li>
   );
 }
 
@@ -177,15 +110,15 @@ export function MultipleChoiceBallot({ contest, candidates, selectedIds, onChang
       </p>
       <ul aria-label={`${contest.title}候选项`} className="space-y-1.5">
         {candidates.map((candidate) => (
-          <CandidateRow
+          <BallotCandidateRow
             key={candidate.id}
             candidate={candidate}
             contest={contest}
             selected={selectedSet.has(candidate.id)}
-            full={full}
             hasLove={loveSet.has(candidate.id)}
             score={scores?.[candidate.id]}
-            onChoose={(button) => choose(candidate, button)}
+            disabled={disabled}
+            choice={{ kind: "multiple", full, onChoose: (button) => choose(candidate, button) }}
           />
         ))}
       </ul>
