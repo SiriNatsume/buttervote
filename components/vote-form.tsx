@@ -1,5 +1,6 @@
 "use client";
 
+import { DuelBallot } from "@/components/duel-ballot";
 import { MultipleChoiceBallot } from "@/components/multiple-choice-ballot";
 import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { FormEvent, useMemo, useRef, useState } from "react";
@@ -139,6 +140,7 @@ export function VoteForm({
   const showImage = contest.show_candidate_image;
   const showDescription = contest.show_candidate_description;
   const showNominatorInfo = contest.show_nominator_info;
+  const isDuel = contest.vote_type === "single" && candidates.length === 2;
   const loveVoteRemaining = loveVoteInfo
     ? Math.max(0, loveVoteInfo.quota - loveVoteInfo.used)
     : 0;
@@ -173,6 +175,12 @@ export function VoteForm({
     setLocalError(null);
     setSelectedIds(ids);
     setLoveCandidateIds((loveIds) => loveIds.filter((id) => ids.includes(id)));
+  }
+
+  function changeSingleSelection(id: string) {
+    setLocalError(null);
+    setCandidateId(id);
+    setLoveCandidateIds((current) => current.filter((candidateId) => candidateId === id));
   }
 
   function toggleLove(candidateId: string, checked: boolean) {
@@ -301,7 +309,7 @@ export function VoteForm({
   return (
     <form
       ref={formRef}
-      className={cn("butter-panel space-y-6 p-6", contest.vote_type === "multiple" && "px-3 sm:px-6")}
+      className={cn("butter-panel space-y-6 p-6", (isDuel || contest.vote_type === "multiple") && "px-3 sm:px-6")}
       onSubmit={handleSubmit}
     >
       <input type="hidden" name="contestId" value={contest.id} />
@@ -335,16 +343,26 @@ export function VoteForm({
           </MascotEmptyState>
         ) : null}
 
-        {contest.vote_type === "single" ? (
+        {isDuel ? (
+          <DuelBallot
+            contest={contest}
+            candidates={candidates}
+            selectedId={candidateId}
+            onChange={changeSingleSelection}
+            name="candidateId"
+            love={loveVoteInfo ? {
+              checked: loveCandidateIds.includes(candidateId),
+              canApply: availableLoveVotes > 0,
+              onToggle: toggleLove,
+            } : undefined}
+            scores={realtimeScores}
+            disabled={isSubmitting}
+          />
+        ) : contest.vote_type === "single" ? (
           <RadioGroup
             name="candidateId"
             value={candidateId}
-            onValueChange={(value) => {
-              setCandidateId(value);
-              setLoveCandidateIds((current) =>
-                current.filter((id) => id === value),
-              );
-            }}
+            onValueChange={changeSingleSelection}
             className="gap-3"
           >
             {candidates.map((candidate) => (

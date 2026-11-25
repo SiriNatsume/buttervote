@@ -1,173 +1,91 @@
 "use client";
 
-import { VoteImage } from "@/components/vote-image";
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Heart, ImageIcon } from "lucide-react";
+import { Heart } from "lucide-react";
 import { toast } from "sonner";
+import { LoveVoteConfirmDialog } from "@/components/love-vote-confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { supplementLoveVotesAction } from "@/lib/actions/vote-actions";
 import { toUserFacingError } from "@/lib/action-error";
-import { getPublicImageUrl } from "@/lib/image/image-url";
+import type { Candidate } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { LoveVoteConfirmDialog } from "@/components/love-vote-confirm-dialog";
-import { LoadingButton } from "@/components/loading-button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { LOVE_VOTE_SUPPLEMENT_ID } from "@/lib/vote-entry";
 
-export type LoveVoteSupplementCandidate = {
-  id: string;
-  name: string;
-  description: string | null;
-  image_path: string | null;
-  nominator_display_name: string | null;
-};
+type SupplementCandidate = Pick<Candidate, "id" | "name" | "image_path">;
 
-export type LoveVoteSupplementContest = {
+type SupplementContest = {
   id: string;
   title: string;
   show_candidate_image: boolean;
-  show_candidate_description: boolean;
-  show_nominator_info: boolean;
-  candidates: LoveVoteSupplementCandidate[];
+  candidates: SupplementCandidate[];
   alreadyLoveCandidateIds: string[];
 };
 
-type SelectedByContest = Record<string, string[]>;
+type SupplementOptions = {
+  groupId: string;
+  quota: number;
+  used: number;
+  contests: SupplementContest[];
+  reservedLoveVotes?: number;
+};
 
-function uniqueStrings(values: string[]) {
-  return [...new Set(values.filter(Boolean))];
-}
-
-function CandidateThumb({
-  candidate,
-  show,
-}: {
-  candidate: LoveVoteSupplementCandidate;
-  show: boolean;
-}) {
-  const imageUrl = getPublicImageUrl(candidate.image_path);
-
-  if (!show) {
-    return null;
-  }
-
-  return (
-    <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
-      {imageUrl ? (
-        <VoteImage maxWidth={256} sizes="48px"
-          src={imageUrl}
-          alt={`${candidate.name} 图片`}
-          loading="lazy"
-          decoding="async"
-          className="size-full object-cover"
-        />
-      ) : (
-        <span className="butter-placeholder flex size-full items-center justify-center">
-          <ImageIcon className="size-5" aria-hidden="true" />
-        </span>
-      )}
-    </span>
-  );
-}
-
-export function LoveVoteSupplementPanel({
+export function useLoveVoteSupplement({
   groupId,
   quota,
-  weight,
   used,
   contests,
   reservedLoveVotes = 0,
-  className,
-}: {
-  groupId: string;
-  quota: number;
-  weight: number;
-  used: number;
-  contests: LoveVoteSupplementContest[];
-  reservedLoveVotes?: number;
-  className?: string;
-}) {
+}: SupplementOptions) {
   const router = useRouter();
-  const [selectedByContest, setSelectedByContest] = useState<SelectedByContest>(
-    {},
-  );
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [draftIds, setDraftIds] = useState<string[]>([]);
+  const [receipt, setReceipt] = useState<{ minimumUsed: number; candidateIds: string[] }>({
+    minimumUsed: 0,
+    candidateIds: [],
+  });
   const [pending, startTransition] = useTransition();
+  const appliedIds = useMemo(() => new Set(receipt.candidateIds), [receipt.candidateIds]);
+  // Keep a successful supplement accounted for while the refreshed route data arrives.
+  const effectiveUsed = Math.max(used, receipt.minimumUsed);
+  const remaining = Math.max(0, quota - effectiveUsed - reservedLoveVotes);
 
-  const supplementableContests = useMemo(
-    () =>
-      contests
-        .map((contest) => {
-          const usedLoveSet = new Set(contest.alreadyLoveCandidateIds);
-          return {
-            ...contest,
-            candidates: contest.candidates.filter(
-              (candidate) => !usedLoveSet.has(candidate.id),
-            ),
-          };
-        })
-        .filter((contest) => contest.candidates.length > 0),
-    [contests],
-  );
-  const remaining = Math.max(0, quota - used - reservedLoveVotes);
-  const selectedCount = Object.values(selectedByContest).reduce(
-    (total, candidateIds) => total + candidateIds.length,
-    0,
-  );
-  const available = Math.max(0, remaining - selectedCount);
-  const candidateNameById = useMemo(() => {
-    const entries = supplementableContests.flatMap((contest) =>
-      contest.candidates.map((candidate) => [candidate.id, candidate.name] as const),
-    );
-    return new Map(entries);
-  }, [supplementableContests]);
-  const selectedCandidateNames = Object.values(selectedByContest)
-    .flatMap((candidateIds) => candidateIds)
-    .map((candidateId) => candidateNameById.get(candidateId) ?? "未知选项");
-
-  function toggleCandidate(contestId: string, candidateId: string, checked: boolean) {
-    setSelectedByContest((current) => {
-      const currentIds = current[contestId] ?? [];
-      if (checked) {
-        if (currentIds.includes(candidateId)) {
-          return current;
-        }
-
-        const currentSelectedCount = Object.values(current).reduce(
-          (total, candidateIds) => total + candidateIds.length,
-          0,
-        );
-        if (currentSelectedCount >= remaining) {
-          toast.error("剩余真爱票不足");
-          return current;
-        }
-
-        return {
-          ...current,
-          [contestId]: [...currentIds, candidateId],
-        };
-      }
-
-      const nextIds = currentIds.filter((id) => id !== candidateId);
+  const eligibleContests = useMemo(() => contests
+    .map((contest) => {
+      const alreadyUsed = new Set(contest.alreadyLoveCandidateIds);
       return {
-        ...current,
-        [contestId]: nextIds,
+        ...contest,
+        candidates: contest.candidates.filter((candidate) =>
+          !alreadyUsed.has(candidate.id) && !appliedIds.has(candidate.id),
+        ),
       };
+    })
+    .filter((contest) => contest.candidates.length > 0), [contests, appliedIds]);
+
+  const eligibleIds = useMemo(() => new Set(eligibleContests.flatMap((contest) =>
+    contest.candidates.map((candidate) => candidate.id),
+  )), [eligibleContests]);
+  const selectedIds = new Set(draftIds.filter((id) => eligibleIds.has(id)));
+  const available = Math.max(0, remaining - selectedIds.size);
+
+  function toggleCandidate(candidateId: string) {
+    if (pending || !eligibleIds.has(candidateId)) return;
+    setDraftIds((current) => {
+      const validIds = current.filter((id) => eligibleIds.has(id));
+      if (validIds.includes(candidateId)) return validIds.filter((id) => id !== candidateId);
+      return validIds.length < remaining ? [...validIds, candidateId] : validIds;
     });
   }
 
-  function submitSupplement() {
-    const items = Object.entries(selectedByContest)
-      .map(([contestId, candidateIds]) => ({
-        contestId,
-        candidateIds: uniqueStrings(candidateIds),
-      }))
-      .filter((item) => item.candidateIds.length > 0);
+  function submit(candidateIds: string[], onSuccess: () => void) {
+    if (pending || !candidateIds.length || candidateIds.length > remaining ||
+      candidateIds.some((id) => !eligibleIds.has(id))) return;
 
-    if (items.length === 0) {
-      toast.error("请选择要补投真爱票的候选项。");
-      return;
-    }
+    const requestedIds = new Set(candidateIds);
+    const items = eligibleContests.flatMap((contest) => {
+      const ids = contest.candidates.filter((candidate) => requestedIds.has(candidate.id)).map((candidate) => candidate.id);
+      return ids.length ? [{ contestId: contest.id, candidateIds: ids }] : [];
+    });
 
     startTransition(async () => {
       try {
@@ -178,120 +96,143 @@ export function LoveVoteSupplementPanel({
           return;
         }
 
+        setReceipt((current) => ({
+          minimumUsed: Math.max(current.minimumUsed, effectiveUsed + requestedIds.size),
+          candidateIds: [...current.candidateIds, ...requestedIds],
+        }));
+        setDraftIds([]);
+        onSuccess();
         toast.success(result.message ?? "真爱票已补投");
-        setSelectedByContest({});
-        setConfirmOpen(false);
         router.refresh();
       } catch (error) {
-        toast.error(
-          toUserFacingError(
-            error instanceof Error ? error.message : "真爱票补投失败，请稍后重试。",
-          ),
-        );
+        toast.error(toUserFacingError(error instanceof Error ? error.message : "真爱票补投失败，请稍后重试。"));
       }
     });
   }
 
-  if (remaining <= 0 || supplementableContests.length === 0) {
-    return null;
-  }
+  return { eligibleContests, selectedIds, appliedIds, remaining, available, effectiveUsed, pending, toggleCandidate, submit };
+}
+
+const CANDIDATE_ROW = "flex min-h-12 min-w-0 items-center gap-3 rounded-xl border px-2 py-1.5";
+
+export function LoveVoteSupplementPanel({
+  supplement,
+  showBalance = false,
+  disabled = false,
+  className,
+}: {
+  supplement: ReturnType<typeof useLoveVoteSupplement>;
+  showBalance?: boolean;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const headingId = useId();
+  const [reviewedIds, setReviewedIds] = useState<string[] | null>(null);
+  const { eligibleContests, selectedIds, remaining, available, pending, toggleCandidate, submit } = supplement;
+  const soleCandidate = eligibleContests.length === 1 && eligibleContests[0].candidates.length === 1
+    ? eligibleContests[0].candidates[0]
+    : null;
+  const reviewedIdSet = new Set(reviewedIds);
+  const reviewChoices = eligibleContests.flatMap((contest) =>
+    contest.candidates.filter((candidate) => reviewedIdSet.has(candidate.id)).map((candidate) => ({
+      id: candidate.id,
+      contestTitle: contest.title,
+      name: candidate.name,
+    })),
+  );
+  const confirmDisabled = reviewedIds !== null && (reviewChoices.length !== reviewedIds.length || reviewChoices.length > remaining);
+
+  if (!eligibleContests.length && !reviewedIds) return null;
 
   return (
-    <div className={cn("butter-panel space-y-5 p-5", className)}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#FFB3C1] bg-[#FFE4EA] px-3 py-1 text-sm font-medium text-[#C73555]">
-            <Heart className="size-4 fill-current" />
-            真爱票补投
-          </div>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            可补投给你已经选择过、但还未使用真爱票的候选项。
-          </p>
-        </div>
-        <div className="rounded-2xl border border-[#FFB3C1]/70 bg-[#FFE4EA]/60 px-4 py-3 text-sm text-[#C73555]">
-          <div className="font-semibold">还可补投 {available} 张</div>
-          <div className="mt-1 text-xs">
-            权重 x{weight} · 总额度 {quota} · 已用 {used}
-          </div>
-        </div>
+    <section
+      id={LOVE_VOTE_SUPPLEMENT_ID}
+      aria-labelledby={headingId}
+      className={cn("butter-panel scroll-mt-[calc(var(--site-header-height)+9rem)] space-y-4 p-3 sm:p-5", className)}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id={headingId} className="text-base font-semibold">补投真爱票</h2>
+        {showBalance ? <p className="text-sm text-muted-foreground" role="status">还可使用 <strong className="tabular-nums">{available}</strong> 张</p> : null}
       </div>
 
-      <div className="space-y-4">
-        {supplementableContests.map((contest) => (
-          <section key={contest.id} className="space-y-3">
-            <h3 className="break-words font-semibold">{contest.title}</h3>
-            <div className="grid gap-3 md:grid-cols-2">
-              {contest.candidates.map((candidate) => {
-                const selectedIds = selectedByContest[contest.id] ?? [];
-                const checked = selectedIds.includes(candidate.id);
+      {eligibleContests.map((contest) => (
+        <fieldset key={contest.id} className="min-w-0 space-y-1.5">
+          <legend className="mb-1.5 break-words text-xs font-medium text-muted-foreground">{contest.title}</legend>
+          {contest.candidates.map((candidate) => {
+            const identity = (
+              <>
+                <VoteCandidateThumb candidate={candidate} show={contest.show_candidate_image} compact className="size-9 rounded-lg" />
+                <span className="min-w-0 flex-1 break-words text-sm font-medium">{candidate.name}</span>
+              </>
+            );
+            if (soleCandidate) {
+              return <div key={candidate.id} className={cn("border-[#EED8AA]/70 bg-white/60", CANDIDATE_ROW)}>{identity}</div>;
+            }
 
-                return (
-                  <Label
-                    key={candidate.id}
-                    className={cn(
-                      "butter-option block cursor-pointer rounded-2xl border p-4",
-                      checked && "butter-option-selected scale-[1.01]",
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        checked={checked}
-                        disabled={pending || (!checked && available <= 0)}
-                        onCheckedChange={(value) =>
-                          toggleCandidate(contest.id, candidate.id, value === true)
-                        }
-                        className="mt-4"
-                      />
-                      <CandidateThumb
-                        candidate={candidate}
-                        show={contest.show_candidate_image}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="break-words font-medium">{candidate.name}</div>
-                        {contest.show_candidate_description ? (
-                          <div className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
-                            {candidate.description || "暂无简介。"}
-                          </div>
-                        ) : null}
-                        {contest.show_nominator_info &&
-                        candidate.nominator_display_name ? (
-                          <div className="mt-2 text-xs leading-5 text-muted-foreground">
-                            提名者：{candidate.nominator_display_name}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </Label>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+            const checked = selectedIds.has(candidate.id);
+            const choiceDisabled = disabled || pending || (!checked && available === 0);
+
+            return (
+              <label key={candidate.id} className={cn("block", choiceDisabled ? "cursor-not-allowed" : "cursor-pointer")}>
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  aria-label={`为${candidate.name}补投真爱票`}
+                  checked={checked}
+                  disabled={choiceDisabled}
+                  onChange={() => toggleCandidate(candidate.id)}
+                />
+                <span className={cn(
+                  CANDIDATE_ROW,
+                  "peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2",
+                  checked ? "border-[#DA8FA3] bg-[#FFF0F3]" : "border-[#EED8AA]/70 bg-white/60",
+                  choiceDisabled && "opacity-60",
+                )}>
+                  {identity}
+                  <span className={cn(
+                    "grid size-6 shrink-0 place-items-center rounded-md border",
+                    checked ? "border-[#A7304D] bg-[#A7304D] text-white" : "text-muted-foreground",
+                  )}>
+                    <Heart aria-hidden="true" className={cn("size-3.5", checked && "fill-current")} />
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+      ))}
+
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {!soleCandidate ? (
+          <p role="status" className="mr-auto text-sm text-muted-foreground">已选 <strong className="tabular-nums">{selectedIds.size}</strong> 张</p>
+        ) : null}
+        <Button
+          type="button"
+          variant="loveParticipation"
+          className="min-h-11"
+          aria-label={soleCandidate ? `给${soleCandidate.name}补投 1 张` : undefined}
+          disabled={disabled || pending || (soleCandidate ? remaining === 0 : selectedIds.size === 0 || selectedIds.size > remaining)}
+          onClick={() => setReviewedIds(soleCandidate ? [soleCandidate.id] : [...selectedIds])}
+        >
+          {soleCandidate ? "补投 1 张" : "核对真爱票"}
+        </Button>
       </div>
-
-      <LoadingButton
-        type="button"
-        variant="loveParticipation"
-        loading={pending}
-        loadingText="补投中..."
-        disabled={selectedCount === 0}
-        onClick={() => setConfirmOpen(true)}
-      >
-        <Heart className="size-4" />
-        补投真爱票
-      </LoadingButton>
 
       <LoveVoteConfirmDialog
-        open={confirmOpen}
-        candidateNames={selectedCandidateNames}
+        open={reviewedIds !== null}
+        supplementChoices={reviewChoices}
+        confirmDisabled={confirmDisabled}
         loading={pending}
-        onOpenChange={(open) => {
-          if (!pending) {
-            setConfirmOpen(open);
-          }
+        onOpenChange={(open) => { if (!open && !pending) setReviewedIds(null); }}
+        onConfirm={() => {
+          if (reviewedIds) submit(reviewedIds, () => setReviewedIds(null));
         }}
-        onConfirm={submitSupplement}
       />
-    </div>
+    </section>
   );
+}
+
+export function StandaloneLoveVoteSupplementPanel({ className, ...options }: SupplementOptions & { className?: string }) {
+  const supplement = useLoveVoteSupplement(options);
+  return <LoveVoteSupplementPanel supplement={supplement} showBalance className={className} />;
 }
