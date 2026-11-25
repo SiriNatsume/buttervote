@@ -3,7 +3,7 @@ import { ActivityBreadcrumb } from "@/components/activity-breadcrumb";
 import { redirect } from "next/navigation";
 import { Countdown } from "@/components/countdown";
 import { GroupAccessDeniedPanel } from "@/components/group-access-denied-panel";
-import { LoveVoteSupplementPanel } from "@/components/love-vote-supplement-panel";
+import { StandaloneLoveVoteSupplementPanel } from "@/components/love-vote-supplement-panel";
 import { MascotEmptyState } from "@/components/mascot";
 import { VoteForm } from "@/components/vote-form";
 import { Button } from "@/components/ui/button";
@@ -155,19 +155,16 @@ export default async function VotePage({
         </MascotEmptyState>
 
         {loveVoteInfo ? (
-          <LoveVoteSupplementPanel
+          <StandaloneLoveVoteSupplementPanel
             className="mt-6"
             groupId={loveVoteInfo.groupId}
             quota={loveVoteInfo.quota}
-            weight={loveVoteInfo.weight}
             used={loveVoteInfo.used}
             contests={[
               {
                 id: contest.id,
                 title: contest.title,
                 show_candidate_image: contest.show_candidate_image,
-                show_candidate_description: contest.show_candidate_description,
-                show_nominator_info: contest.show_nominator_info,
                 candidates: supplementCandidates,
                 alreadyLoveCandidateIds: (existingLoveRows ?? []).map(
                   (row) => row.candidate_id,

@@ -1,5 +1,6 @@
 "use client";
 
+import { DuelBallot } from "@/components/duel-ballot";
 import { MultipleChoiceBallot } from "@/components/multiple-choice-ballot";
 import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -17,8 +18,9 @@ import {
 } from "@/lib/group-vote-progress";
 import type { Candidate, Contest, ContestGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { LOVE_VOTE_SUPPLEMENT_ID } from "@/lib/vote-entry";
 import { GroupVoteReviewDialog } from "@/components/group-vote-review-dialog";
-import { LoveVoteSupplementPanel } from "@/components/love-vote-supplement-panel";
+import { LoveVoteSupplementPanel, useLoveVoteSupplement } from "@/components/love-vote-supplement-panel";
 import { MascotEmptyState } from "@/components/mascot";
 import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
@@ -152,7 +154,6 @@ export function GroupVoteForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeContestId, setActiveContestId] = useState<string | null>(null);
   const stepRailRef = useRef<HTMLDivElement>(null);
-  const loveVoteRemaining = Math.max(0, group.love_vote_quota - usedLoveVotes);
   const loveVoteEnabledForGroup =
     group.love_vote_quota > 0 && Number(group.love_vote_weight) > 1;
   const selectedLoveCount = useMemo(
@@ -163,7 +164,6 @@ export function GroupVoteForm({
           : 0), 0),
     [contests, selections],
   );
-  const availableLoveVotes = Math.max(0, loveVoteRemaining - selectedLoveCount);
   const {
     pending: unvotedContests,
     unavailable: unavailableContests,
@@ -192,10 +192,11 @@ export function GroupVoteForm({
     }
   }, [currentContestId]);
   const supplementContests = useMemo(
-    () =>
-      contests
+    () => loveVoteEnabledForGroup
+      ? contests
         .filter(
           (contest) =>
+            contest.status === "voting" &&
             contest.existingVoteId &&
             contest.love_vote_enabled !== false &&
             (contest.selectedCandidateIds ?? []).length > 0,
@@ -210,9 +211,18 @@ export function GroupVoteForm({
             alreadyLoveCandidateIds: contest.alreadyLoveCandidateIds ?? [],
           };
         })
-        .filter((contest) => contest.candidates.length > 0),
-    [contests],
+        .filter((contest) => contest.candidates.length > 0)
+      : [],
+    [contests, loveVoteEnabledForGroup],
   );
+  const supplement = useLoveVoteSupplement({
+    groupId: group.id,
+    quota: group.love_vote_quota,
+    used: usedLoveVotes,
+    contests: supplementContests,
+    reservedLoveVotes: selectedLoveCount,
+  });
+  const availableLoveVotes = supplement.available;
   const candidateNameById = useMemo(() => {
     const entries = contests.flatMap((contest) =>
       contest.candidates.map((candidate) => [candidate.id, candidate.name] as const),
@@ -286,7 +296,7 @@ export function GroupVoteForm({
           return selection;
         }
 
-        if (selectedLoveCount >= loveVoteRemaining) {
+        if (availableLoveVotes === 0) {
           toast.error("剩余真爱票不足");
           return selection;
         }
@@ -457,6 +467,7 @@ export function GroupVoteForm({
     const selection = getSelection(contest.id);
     const selectedRanking = selection.ranking.filter(Boolean);
     const realtimeScores = realtimeScoresByContestId?.[contest.id];
+    const isDuel = contest.vote_type === "single" && contest.candidates.length === 2;
 
     return (
       <Card
@@ -485,7 +496,7 @@ export function GroupVoteForm({
           </div>
           <CardTitle id={`group-vote-title-${contest.id}`}>{contest.title}</CardTitle>
         </CardHeader>
-        <CardContent className={contest.vote_type === "multiple" ? "px-3 sm:px-6" : undefined}>
+        <CardContent className={isDuel || contest.vote_type === "multiple" ? "px-3 sm:px-6" : undefined}>
           {contest.existingVoteId ? (
             <div className="space-y-2 rounded-2xl border bg-[#F0F5EB]/60 p-4 text-sm">
               <p className="text-muted-foreground">你已经在这个活动中投过票。</p>
@@ -495,7 +506,7 @@ export function GroupVoteForm({
                     <li key={candidateId} className="flex flex-wrap items-center gap-2">
                       {contest.vote_type === "ranked" ? <span className="text-muted-foreground">第 {choiceIndex + 1} 名</span> : null}
                       <span>{candidateNameById.get(candidateId) ?? "已投候选项"}</span>
-                      {contest.alreadyLoveCandidateIds?.includes(candidateId) ? (
+                      {contest.alreadyLoveCandidateIds?.includes(candidateId) || supplement.appliedIds.has(candidateId) ? (
                         <span className="inline-flex items-center gap-1 text-xs text-[#C73555]">
                           <Heart className="size-3 fill-current" aria-hidden="true" />真爱票
                         </span>
@@ -514,6 +525,20 @@ export function GroupVoteForm({
             >
               暂时不能提交这一项投票。
             </MascotEmptyState>
+          ) : isDuel ? (
+            <DuelBallot
+              contest={contest}
+              candidates={contest.candidates}
+              selectedId={selection.candidateId}
+              onChange={(candidateId) => updateSelection(contest, (current) => ({ ...current, candidateId }))}
+              love={loveVoteEnabledForGroup && contest.love_vote_enabled !== false ? {
+                checked: selection.loveCandidateIds.includes(selection.candidateId),
+                canApply: availableLoveVotes > 0,
+                onToggle: (id, checked) => toggleLove(contest, id, checked),
+              } : undefined}
+              scores={realtimeScores}
+              disabled={isSubmitting || supplement.pending}
+            />
           ) : contest.vote_type === "single" ? (
             <RadioGroup
               value={selection.candidateId}
@@ -639,7 +664,7 @@ export function GroupVoteForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <fieldset disabled={isSubmitting} className="min-w-0 space-y-6 disabled:opacity-70">
+      <fieldset disabled={isSubmitting || supplement.pending} className="min-w-0 space-y-6 disabled:opacity-70">
         {unvotedContests.length > 0 ? (
           <div className="sticky top-[calc(var(--site-header-height)+0.5rem)] z-20 rounded-2xl border bg-[#FFFCF4]/95 p-3 shadow-sm backdrop-blur-sm sm:p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs sm:text-sm">
@@ -715,13 +740,17 @@ export function GroupVoteForm({
                 <Heart className="size-4 fill-current" />
                 真爱票
               </div>
-              <div className="mt-3 text-2xl font-semibold">
+              <div className="mt-3 text-2xl font-semibold" role="status">
                 还可使用 {availableLoveVotes} 张
               </div>
             </div>
-            <div className="text-sm text-muted-foreground">
-              权重 x{group.love_vote_weight} · 总额度 {group.love_vote_quota} · 已用{" "}
-              {usedLoveVotes}
+            <div className="space-y-2 text-sm text-muted-foreground sm:text-right">
+              <p>权重 x{group.love_vote_weight} · 总额度 {group.love_vote_quota} · 已用 {supplement.effectiveUsed}</p>
+              {supplement.eligibleContests.length > 0 ? (
+                <Button asChild variant="loveParticipation" size="sm" className="min-h-11">
+                  <a href={`#${LOVE_VOTE_SUPPLEMENT_ID}`}>补投真爱票</a>
+                </Button>
+              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -760,25 +789,17 @@ export function GroupVoteForm({
         ) : null}
 
         {votedContests.length > 0 ? (
-          <details className="group space-y-4 rounded-2xl border bg-[#FFFCF4]/60 p-4 sm:p-5" open={unvotedContests.length === 0}>
-            <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-              <Check className="size-4 text-[#526C53]" aria-hidden="true" />
-              已投票的活动 · {votedContests.length} 场
-              <ChevronRight className="ml-auto size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
-            </summary>
-            <p className="text-xs leading-5 text-muted-foreground">已提交的选票保留在这里。活动允许时，可为已选候选项补投真爱票。</p>
-            {votedContests.map((contest) => renderContest(contest))}
-            {supplementContests.length > 0 ? (
-              <LoveVoteSupplementPanel
-                groupId={group.id}
-                quota={group.love_vote_quota}
-                weight={Number(group.love_vote_weight)}
-                used={usedLoveVotes}
-                reservedLoveVotes={selectedLoveCount}
-                contests={supplementContests}
-              />
-            ) : null}
-          </details>
+          <div className="space-y-4">
+            <LoveVoteSupplementPanel supplement={supplement} disabled={isSubmitting} />
+            <details className="group space-y-4 rounded-2xl border bg-[#FFFCF4]/60 p-4 sm:p-5" open={unvotedContests.length === 0}>
+              <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <Check className="size-4 text-[#526C53]" aria-hidden="true" />
+                已投票的活动 · {votedContests.length} 场
+                <ChevronRight className="ml-auto size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+              </summary>
+              {votedContests.map((contest) => renderContest(contest))}
+            </details>
+          </div>
         ) : null}
       </fieldset>
       <GroupVoteReviewDialog

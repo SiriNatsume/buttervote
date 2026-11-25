@@ -3,6 +3,7 @@ import { Heart } from "lucide-react";
 import { MascotFigure } from "@/components/mascot";
 import { homepageActionHref, type HomepageSidebarData } from "@/lib/homepage-sidebar";
 import { actionStyles } from "@/lib/action-styles";
+import { LOVE_VOTE_SUPPLEMENT_ID } from "@/lib/vote-entry";
 
 const actionClassName = "flex h-11 w-full items-center justify-center px-3 py-2 text-center text-xs font-medium lg:h-10";
 const nominationActionClassName = `${actionClassName} ${actionStyles.nomination}`;
@@ -14,7 +15,9 @@ export function HomepagePersonalOverview({ data }: {
   const showPersonal = data.signedIn && data.personalDataAvailable;
   const showNominations = data.signedIn && data.nominationDataAvailable;
   const guestActionHref = data.signedIn ? null : "/#public-contests";
-  const voteActionHref = data.actionHref ?? guestActionHref;
+  const voteActionHref = data.actionHref && data.canSupplementLoveVote
+    ? `${data.actionHref}#${LOVE_VOTE_SUPPLEMENT_ID}`
+    : data.actionHref ?? guestActionHref;
   const nominationActionHref = data.nominationActionHref ?? guestActionHref;
   const nominationHistoryHref = data.nominationHistoryHref ?? guestActionHref;
   const showNominationAction = !data.signedIn || (data.canNominate && Boolean(nominationActionHref));

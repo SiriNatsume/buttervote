@@ -30,7 +30,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { formatDateTime } from "@/lib/time";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
-import { contestVoteHref } from "@/lib/vote-entry";
+import { contestVoteHref, LOVE_VOTE_SUPPLEMENT_ID } from "@/lib/vote-entry";
 
 export default async function ContestDetailPage({
   params,
@@ -356,7 +356,7 @@ export default async function ContestDetailPage({
               ) : null}
               {canSupplementLoveVote ? (
                 <Button asChild size="lg" variant="loveParticipation">
-                  <Link href={voteHref}>
+                  <Link href={`${voteHref}#${LOVE_VOTE_SUPPLEMENT_ID}`}>
                     <Heart className="size-4 fill-current" />
                     补投真爱票
                   </Link>
