@@ -1,5 +1,9 @@
 import type { TallyResult } from "./tally";
 
+export function normalizeCandidateName(value: string) {
+  return value.normalize("NFKC").trim().toLocaleLowerCase("zh-CN");
+}
+
 export type ResultSearchItem = {
   rowId: string;
   name: string;
