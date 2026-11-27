@@ -1,5 +1,7 @@
 import { useId, useRef, useState } from "react";
-import { Check, ChevronDown, Heart, Search } from "lucide-react";
+import { Check, ChevronDown, Heart, Search, UsersRound } from "lucide-react";
+import { BOTH_SUPPORT_CHOICE, BOTH_SUPPORT_LABEL } from "@/lib/both-support";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BallotCandidateRow, type BallotDisplay } from "@/components/ballot-candidate-row";
 import type { CandidateCardCandidate } from "@/components/candidate-card";
 import { Button } from "@/components/ui/button";
@@ -16,20 +18,22 @@ type SingleChoiceOptions = {
   name: string;
   scores?: Record<string, number>;
   disabled: boolean;
+  bothSupport?: { selected: boolean; onRequest: () => void; inputId: string };
 };
 
-type SingleChoiceBallotProps = Omit<SingleChoiceOptions, "name"> & {
+type SingleChoiceBallotProps = Omit<SingleChoiceOptions, "name" | "bothSupport"> & {
   name?: string;
+  bothSupportEnabled?: boolean;
   love?: { checked: boolean; canApply: boolean; onToggle: (candidateId: string, checked: boolean) => void };
 };
 
 const MIN_SEARCHABLE_CANDIDATES = 10;
 
-function DuelChoices({ contest, candidates, selectedId, onChange, name, scores, disabled }: SingleChoiceOptions) {
+function DuelChoices({ contest, candidates, selectedId, onChange, name, scores, disabled, bothSupport }: SingleChoiceOptions) {
   return (
     <div role="radiogroup" aria-label={`${contest.title}候选项`} className="grid grid-cols-2 gap-2.5">
       {candidates.map((candidate) => {
-        const checked = candidate.id === selectedId;
+        const checked = candidate.id === selectedId || bothSupport?.selected;
         const description = contest.show_candidate_description ? candidate.description : null;
         const score = scores?.[candidate.id];
 
@@ -47,8 +51,8 @@ function DuelChoices({ contest, candidates, selectedId, onChange, name, scores, 
                 type="radio"
                 name={name}
                 value={candidate.id}
-                aria-label={candidate.name}
-                checked={checked}
+                aria-label={bothSupport?.selected ? `${candidate.name}（已同时支持，点击改为仅支持此项）` : candidate.name}
+                checked={candidate.id === selectedId}
                 disabled={disabled}
                 onChange={() => onChange(candidate.id)}
               />
@@ -86,6 +90,24 @@ function DuelChoices({ contest, candidates, selectedId, onChange, name, scores, 
           </div>
         );
       })}
+      {bothSupport ? (
+        <label className={cn("butter-option relative col-span-2 flex cursor-pointer items-center gap-3 rounded-xl border p-3", bothSupport.selected && "butter-option-selected")}>
+          <input type="radio" name={name} value={BOTH_SUPPORT_CHOICE}
+            id={bothSupport.inputId}
+            className="peer sr-only" checked={bothSupport.selected} disabled={disabled}
+            aria-label={BOTH_SUPPORT_LABEL}
+            onClick={bothSupport.onRequest} onChange={bothSupport.onRequest} />
+          <span className="pointer-events-none absolute inset-0 rounded-xl peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" />
+          <UsersRound className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">{BOTH_SUPPORT_LABEL}</span>
+            <span className="mt-1 block text-xs text-muted-foreground">双方各得 1 分，不可使用真爱票</span>
+          </span>
+          <span aria-hidden="true" className={cn("grid size-6 shrink-0 place-items-center rounded-full border border-[#DFC28E]", bothSupport.selected && "border-[#A65327] bg-[#A65327] text-white")}>
+            {bothSupport.selected ? <Check className="size-4" /> : null}
+          </span>
+        </label>
+      ) : null}
     </div>
   );
 }
@@ -176,12 +198,22 @@ function SingleChoiceList({ contest, candidates, selectedId, onChange, name, sco
   );
 }
 
-export function SingleChoiceBallot({ contest, candidates, selectedId, onChange, name, love, scores, disabled }: SingleChoiceBallotProps) {
+export function SingleChoiceBallot({ contest, candidates, selectedId, onChange, name, love, scores, disabled, bothSupportEnabled = false }: SingleChoiceBallotProps) {
   const choiceName = useId();
+  const [bothConfirmOpen, setBothConfirmOpen] = useState(false);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const bothChoiceId = `${choiceName}-both-support`;
+  const supportsBoth = selectedId === BOTH_SUPPORT_CHOICE || bothConfirmOpen;
   const selected = candidates.find((candidate) => candidate.id === selectedId);
   const hasScores = candidates.some((candidate) => typeof scores?.[candidate.id] === "number");
   const isDuel = candidates.length === 2;
-  const options = { contest, candidates, selectedId: selected?.id ?? "", onChange, name: name ?? choiceName, scores, disabled };
+  const options = { contest, candidates, selectedId: supportsBoth ? "" : selected?.id ?? "", onChange, name: name ?? choiceName, scores, disabled,
+    bothSupport: bothSupportEnabled && isDuel ? { selected: supportsBoth, inputId: bothChoiceId, onRequest: () => {
+      if (disabled) return;
+      onChange("");
+      setBothConfirmOpen(true);
+    } } : undefined,
+  };
 
   return (
     <div className={isDuel ? "mx-auto max-w-md space-y-3" : "space-y-2.5"}>
@@ -192,7 +224,7 @@ export function SingleChoiceBallot({ contest, candidates, selectedId, onChange, 
         !isDuel && "sticky bottom-[calc(var(--site-bottom-nav-height)+env(safe-area-inset-bottom,0px)+0.5rem)] z-10 shadow-sm max-lg:mr-9 lg:bottom-3",
       )}>
         <div role="status" className="flex min-w-0 flex-1 items-center gap-2 text-sm">
-          {selected ? (
+          {supportsBoth ? <span className="font-semibold">已选：{BOTH_SUPPORT_LABEL}</span> : selected ? (
             <>
               <VoteCandidateThumb candidate={selected} show={contest.show_candidate_image} compact className="size-8 rounded-full" />
               <span className={cn("min-w-0 break-words font-semibold", !isDuel && "line-clamp-2")}>已选 {selected.name}</span>
@@ -207,7 +239,7 @@ export function SingleChoiceBallot({ contest, candidates, selectedId, onChange, 
             variant="outline"
             aria-label={selected ? `为${selected.name}使用真爱票` : "真爱票"}
             aria-pressed={love.checked}
-            disabled={disabled || !selected || (!love.checked && !love.canApply)}
+            disabled={disabled || supportsBoth || !selected || (!love.checked && !love.canApply)}
             onClick={() => { if (selected) love.onToggle(selected.id, !love.checked); }}
             className={cn(
               "min-h-11 rounded-xl px-3 shadow-none",
@@ -219,6 +251,36 @@ export function SingleChoiceBallot({ contest, candidates, selectedId, onChange, 
           </Button>
         ) : null}
       </div>
+      {supportsBoth ? <p className="text-xs leading-5 text-muted-foreground">不会更新最终得票时间，这张选票不能补投真爱票。</p> : null}
+      <Dialog open={bothConfirmOpen} onOpenChange={(open) => {
+        setBothConfirmOpen(open);
+        if (!open) onChange("");
+      }}>
+        <DialogContent className="max-w-md" onOpenAutoFocus={(event) => {
+          event.preventDefault(); cancelButton.current?.focus();
+        }} onCloseAutoFocus={(event) => {
+          event.preventDefault(); document.getElementById(bothChoiceId)?.focus();
+        }}>
+          <DialogHeader>
+            <DialogTitle>确认{BOTH_SUPPORT_LABEL}</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-4 pt-2 text-left text-sm leading-7 text-foreground">
+                <p>这将使<strong>两个选项都得到一票</strong>，但是<strong>不会更新任何选项的最终得票时间</strong>。同时，你将<strong>不能对这两个选项使用真爱票</strong>。</p>
+                <p>「我们建议仅在不认识本组候选项时做出此决定。」</p>
+                <p>即使如此你也要继续吗？</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button ref={cancelButton} type="button" variant="outline" onClick={() => {
+              onChange(""); setBothConfirmOpen(false);
+            }}>我再想想</Button>
+            <Button type="button" onClick={() => {
+              onChange(BOTH_SUPPORT_CHOICE); setBothConfirmOpen(false);
+            }}>我已知悉</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { isBothSupportVote, validateBothSupportVote } from "@/lib/both-support";
 import { getActionUser } from "@/lib/auth";
 import { toUserFacingError } from "@/lib/action-error";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
@@ -70,7 +71,7 @@ export async function submitVoteAction(formData: FormData) {
 
   const { data: contest } = await supabase
     .from("contests")
-    .select("id,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,archived_at")
+    .select("id,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,both_support_enabled,archived_at")
     .eq("id", contestId)
     .maybeSingle();
 
@@ -114,7 +115,15 @@ export async function submitVoteAction(formData: FormData) {
   let payload: Record<string, string | string[]>;
   let selectedCandidateIds: string[] = [];
 
-  if (voteType === "single") {
+  const ballotType = formData.get("ballotType");
+  if (ballotType && ballotType !== "both_support") return voteError("选票类型无效。");
+  if (ballotType === "both_support") {
+    payload = { ballotType: "both_support", candidateIds: formData.getAll("candidateIds").map(String) };
+    const error = validateBothSupportVote(contest, candidateIds, payload,
+      formData.getAll("loveCandidateIds").map(String));
+    if (error) return voteError(error);
+    selectedCandidateIds = payload.candidateIds as string[];
+  } else if (voteType === "single") {
     const candidateId = String(formData.get("candidateId") ?? "");
     if (!candidateIds.has(candidateId)) {
       return voteError("请选择有效候选项。");
@@ -273,6 +282,13 @@ export async function supplementLoveVotesAction(input: unknown) {
   }
 
   const supabase = createRequiredServiceClient();
+  const { data: sourceVotes, error: sourceError } = await supabase
+    .from("votes").select("contest_id,payload").eq("voter_id", user.id)
+    .in("contest_id", normalizedItems.map((item) => item.contestId));
+  if (sourceError) return voteError("无法校验原选票，请稍后重试。");
+  if ((sourceVotes ?? []).some((vote) => isBothSupportVote(vote.payload))) {
+    return voteError("同时支持票不能使用或补投真爱票。");
+  }
   const { data: insertedCount, error } = await supabase.rpc("supplement_love_votes", {
     p_group_id: parsed.data.groupId,
     p_voter_id: user.id,

@@ -1,9 +1,10 @@
 import type { Contest } from "./types";
+import { BOTH_SUPPORT_CHOICE, canUseBothSupport } from "./both-support";
 
 type GroupVoteRule = Pick<
   Contest,
   "vote_type" | "max_choices" | "require_exact_choices"
->;
+> & { both_support_enabled?: boolean; candidates?: readonly { id: string }[] };
 
 export type ContestSelection = {
   candidateId: string;
@@ -26,6 +27,10 @@ export function selectedIdsForContest(
   selection: ContestSelection,
 ) {
   if (contest.vote_type === "single") {
+    if (selection.candidateId === BOTH_SUPPORT_CHOICE) {
+      return canUseBothSupport(contest, contest.candidates?.length ?? 0)
+        ? (contest.candidates ?? []).map((candidate) => candidate.id) : [];
+    }
     return selection.candidateId ? [selection.candidateId] : [];
   }
 
@@ -41,6 +46,7 @@ export function isContestSelectionComplete(
   selection: ContestSelection,
 ) {
   const selectedIds = selectedIdsForContest(contest, selection);
+  if (selection.candidateId === BOTH_SUPPORT_CHOICE && selection.loveCandidateIds.length > 0) return false;
   if (selectedIds.length === 0 || new Set(selectedIds).size !== selectedIds.length) {
     return false;
   }

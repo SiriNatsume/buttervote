@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Heart, Pencil, Send } from "lucide-react";
+import { Heart, Pencil, Send, UsersRound } from "lucide-react";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ export type GroupVoteReviewItem = {
   contestId: string;
   title: string;
   voteType: VoteType;
+  isBothSupport?: boolean;
   choices: { id: string; name: string; love: boolean }[];
 };
 
@@ -93,7 +94,12 @@ export function GroupVoteReviewDialog({
                       <span className="text-xs text-muted-foreground">第 {choiceIndex + 1} 名</span>
                     ) : null}
                     <span className="min-w-0 break-words">{choice.name}</span>
-                    {choice.love ? (
+                    {item.isBothSupport ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF0D7] px-2 py-0.5 text-xs text-[#A65327]">
+                        <UsersRound className="size-3" aria-hidden="true" />
+                        同时支持
+                      </span>
+                    ) : choice.love ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#FFE4EA] px-2 py-0.5 text-xs text-[#C73555]">
                         <Heart className="size-3 fill-current" aria-hidden="true" />
                         真爱票 ×{loveVoteWeight}

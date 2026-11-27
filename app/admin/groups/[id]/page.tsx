@@ -49,7 +49,7 @@ export default async function AdminGroupDetailPage({
     supabase
       .from("contests")
       .select(
-        "id,title,status,vote_type,max_choices,love_vote_enabled,live_results_enabled,voting_starts_at,voting_ends_at,created_at",
+        "id,title,status,vote_type,max_choices,love_vote_enabled,both_support_enabled,live_results_enabled,voting_starts_at,voting_ends_at,created_at",
       )
       .eq("group_id", id)
       .is("archived_at", null)
@@ -185,6 +185,7 @@ export default async function AdminGroupDetailPage({
               id: contest.id,
               title: contest.title,
               love_vote_enabled: contest.love_vote_enabled,
+              both_support_enabled: contest.both_support_enabled,
               live_results_enabled: contest.live_results_enabled,
             }))}
           />

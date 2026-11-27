@@ -38,14 +38,16 @@ type GroupContestVotingSettingsContest = {
   id: string;
   title: string;
   love_vote_enabled: boolean;
+  both_support_enabled: boolean;
   live_results_enabled: boolean;
 };
 
 type SettingValue = "on" | "off";
-type BatchActionName = "love" | "live" | "both";
+type BatchActionName = "love" | "live" | "support" | "both";
 
 type BatchPayload = {
   loveVoteEnabled?: boolean;
+  bothSupportEnabled?: boolean;
   liveResultsEnabled?: boolean;
 };
 
@@ -83,6 +85,7 @@ export function GroupContestSettingsBatchPanel({
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loveVoteValue, setLoveVoteValue] = useState<SettingValue>("on");
+  const [bothSupportValue, setBothSupportValue] = useState<SettingValue>("on");
   const [liveResultsValue, setLiveResultsValue] = useState<SettingValue>("on");
   const [pendingAction, setPendingAction] = useState<BatchActionName | null>(null);
   const [pendingBatchRequest, setPendingBatchRequest] =
@@ -199,7 +202,15 @@ export function GroupContestSettingsBatchPanel({
           </Button>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="space-y-2">
+            <Label>允许同时支持两项</Label>
+            <Select value={bothSupportValue} onValueChange={(value) => setBothSupportValue(value as SettingValue)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="on">开启</SelectItem><SelectItem value="off">关闭</SelectItem></SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">仅对恰好两个有效候选项的单选活动生效。</p>
+          </div>
           <div className="space-y-2">
             <Label>允许使用真爱票</Label>
             <Select
@@ -232,7 +243,13 @@ export function GroupContestSettingsBatchPanel({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <LoadingButton type="button" variant="outline" loading={pendingAction === "support"}
+            loadingText="保存中..." disabled={Boolean(pendingAction)}
+            onClick={() => requestBatch("support", { bothSupportEnabled: valueToBoolean(bothSupportValue) },
+              "确认批量更新同时支持开关？", `将把 ${selectedIds.length} 个活动的“允许同时支持两项”设为“${valueLabel(bothSupportValue)}”。已提交的选票不受影响。`)}>
+            批量保存同时支持
+          </LoadingButton>
           <LoadingButton
             type="button"
             variant="outline"
@@ -278,15 +295,16 @@ export function GroupContestSettingsBatchPanel({
                 "both",
                 {
                   loveVoteEnabled: valueToBoolean(loveVoteValue),
+                  bothSupportEnabled: valueToBoolean(bothSupportValue),
                   liveResultsEnabled: valueToBoolean(liveResultsValue),
                 },
                 "确认批量保存投票设置？",
-                `将一次性更新 ${selectedIds.length} 个活动的真爱票开关和实时公开开关。`,
+                `将一次性更新 ${selectedIds.length} 个活动的同时支持、真爱票和实时公开开关。`,
               )
             }
           >
             <Settings2 className="size-4" />
-            批量保存两项
+            批量保存全部设置
           </LoadingButton>
         </div>
       </div>
@@ -297,6 +315,7 @@ export function GroupContestSettingsBatchPanel({
             <TableRow>
               <TableHead className="w-12" />
               <TableHead>活动</TableHead>
+              <TableHead>允许同时支持两项</TableHead>
               <TableHead>允许使用真爱票</TableHead>
               <TableHead>投票结果实时公开</TableHead>
             </TableRow>
@@ -306,6 +325,7 @@ export function GroupContestSettingsBatchPanel({
               <TableRow key={contest.id}>
                 <TableCell>
                   <Checkbox
+                    aria-label={`选择活动：${contest.title}`}
                     checked={selectedSet.has(contest.id)}
                     disabled={Boolean(pendingAction)}
                     onCheckedChange={(value) =>
@@ -314,6 +334,7 @@ export function GroupContestSettingsBatchPanel({
                   />
                 </TableCell>
                 <TableCell className="font-medium">{contest.title}</TableCell>
+                <TableCell><SettingBadge enabled={contest.both_support_enabled} /></TableCell>
                 <TableCell>
                   <SettingBadge enabled={contest.love_vote_enabled} />
                 </TableCell>
@@ -334,6 +355,7 @@ export function GroupContestSettingsBatchPanel({
           >
             <div className="flex items-start gap-3">
               <Checkbox
+                aria-label={`选择活动：${contest.title}`}
                 checked={selectedSet.has(contest.id)}
                 disabled={Boolean(pendingAction)}
                 onCheckedChange={(value) =>
@@ -343,6 +365,9 @@ export function GroupContestSettingsBatchPanel({
               <div className="min-w-0">
                 <div className="break-words font-medium">{contest.title}</div>
                 <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                    同时支持<SettingBadge enabled={contest.both_support_enabled} />
+                  </span>
                   <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
                     真爱票
                     <SettingBadge enabled={contest.love_vote_enabled} />

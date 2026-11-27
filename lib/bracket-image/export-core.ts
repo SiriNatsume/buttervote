@@ -22,7 +22,7 @@ export type BracketExportResult = Ready | { kind: "not-found" } | { kind: "chang
   | { kind: "not-modified"; etag: string; elapsedMs: number };
 type Built = { png: Uint8Array; complete: boolean; visibilityVersion: string };
 // Bump this when layout, export dimensions, or font rendering changes.
-export const BRACKET_EXPORT_RENDER_VERSION = "cream-poster-v1";
+export const BRACKET_EXPORT_RENDER_VERSION = "cream-poster-v2";
 
 function validPng(bytes: Uint8Array) {
   return bytes.byteLength > 32 && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71;

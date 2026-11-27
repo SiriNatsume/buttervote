@@ -162,6 +162,7 @@ export type Contest = {
   live_results_enabled: boolean;
   closed_result_visibility: ClosedResultVisibility;
   love_vote_enabled: boolean;
+  both_support_enabled: boolean;
   voting_starts_at: string | null;
   voting_ends_at: string | null;
   image_path: string | null;
@@ -617,6 +618,7 @@ type Tables = {
       live_results_enabled?: boolean;
       closed_result_visibility?: ClosedResultVisibility;
       love_vote_enabled?: boolean;
+      both_support_enabled?: boolean;
       voting_starts_at?: string | null;
       voting_ends_at?: string | null;
       image_path?: string | null;

@@ -130,6 +130,7 @@ const contestSettingsSchema = z.object({
   live_results_enabled: z.boolean(),
   closed_result_visibility: z.enum(closedResultVisibilities),
   love_vote_enabled: z.boolean(),
+  both_support_enabled: z.boolean(),
   voting_starts_at: z.string().nullable(),
   voting_ends_at: z.string().nullable(),
 });
@@ -156,6 +157,7 @@ const batchGroupVotingSettingsSchema = z.object({
   groupId: z.string().uuid(),
   contestIds: z.array(z.string().uuid()).min(1, "请至少选择一个活动"),
   loveVoteEnabled: z.boolean().optional(),
+  bothSupportEnabled: z.boolean().optional(),
   liveResultsEnabled: z.boolean().optional(),
 });
 
@@ -783,6 +785,7 @@ export async function updateContestSettings(formData: FormData) {
     live_results_enabled: checkboxFromForm(formData.get("live_results_enabled")),
     closed_result_visibility: formData.get("closed_result_visibility"),
     love_vote_enabled: checkboxFromForm(formData.get("love_vote_enabled")),
+    both_support_enabled: checkboxFromForm(formData.get("both_support_enabled")),
     voting_starts_at: datetimeLocalToIso(formData.get("voting_starts_at")),
     voting_ends_at: datetimeLocalToIso(formData.get("voting_ends_at")),
   });
@@ -840,6 +843,7 @@ export async function updateContestSettings(formData: FormData) {
       live_results_enabled: parsed.data.live_results_enabled,
       closed_result_visibility: parsed.data.closed_result_visibility,
       love_vote_enabled: parsed.data.love_vote_enabled,
+      both_support_enabled: parsed.data.both_support_enabled,
       voting_starts_at: parsed.data.voting_starts_at,
       voting_ends_at: parsed.data.voting_ends_at,
     })
@@ -1310,6 +1314,9 @@ export async function batchUpdateGroupContestVotingSettings(input: unknown) {
   const contestUpdate: Record<string, unknown> = {};
   if (typeof parsed.data.loveVoteEnabled === "boolean") {
     contestUpdate.love_vote_enabled = parsed.data.loveVoteEnabled;
+  }
+  if (typeof parsed.data.bothSupportEnabled === "boolean") {
+    contestUpdate.both_support_enabled = parsed.data.bothSupportEnabled;
   }
   if (typeof parsed.data.liveResultsEnabled === "boolean") {
     contestUpdate.live_results_enabled = parsed.data.liveResultsEnabled;

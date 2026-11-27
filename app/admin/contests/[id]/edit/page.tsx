@@ -63,7 +63,7 @@ export default async function EditContestPage({
     supabase
       .from("contests")
       .select(
-        "id,title,description,status,vote_type,max_choices,require_exact_choices,nomination_image_required,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,voting_starts_at,voting_ends_at,image_path,image_width,image_height,image_size,created_by,archived_at,created_at,updated_at",
+        "id,title,description,status,vote_type,max_choices,require_exact_choices,nomination_image_required,group_id,show_candidate_image,show_candidate_description,show_nominator_info,show_existing_nominations,max_nominations_per_user,candidate_description_max_length,live_results_enabled,closed_result_visibility,love_vote_enabled,both_support_enabled,voting_starts_at,voting_ends_at,image_path,image_width,image_height,image_size,created_by,archived_at,created_at,updated_at",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -406,10 +406,15 @@ export default async function EditContestPage({
                 />
                 允许使用真爱票
               </Label>
+              <Label className="flex items-center gap-3">
+                <Checkbox name="both_support_enabled" defaultChecked={contest.both_support_enabled !== false} />
+                允许同时支持两项
+              </Label>
             </div>
-            <p className="-mt-2 text-sm text-muted-foreground">
-              关闭后，即使所属活动组开启真爱票机制，用户也不能在该活动中使用真爱票。
-            </p>
+            <div className="-mt-2 space-y-1 text-sm text-muted-foreground">
+              <p>关闭「允许使用真爱票」后，即使所属活动组开启真爱票机制，用户也不能在该活动中使用真爱票。</p>
+              <p>同时支持仅在单选且恰好有两个有效候选项时可用，关闭不会影响已提交的选票。</p>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="max_nominations_per_user">
