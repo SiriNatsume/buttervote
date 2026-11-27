@@ -1,4 +1,5 @@
 import type { GroupHomepageContest } from "@/lib/group-homepage";
+import { isBothSupportVote } from "@/lib/both-support";
 import { canNominateByStatus } from "@/lib/contest-rules";
 import { contestVoteHref } from "@/lib/vote-entry";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
@@ -189,7 +190,7 @@ export function buildHomepageSidebarData(input: {
       ) return false;
 
       const vote = votesByContest.get(contest.id);
-      if (!vote) return false;
+      if (!vote || isBothSupportVote(vote.payload)) return false;
       const selected = new Set(selectedCandidateIdsFromVotePayload(contest.vote_type, vote.payload));
       const loved = lovedCandidatesByVote.get(vote.id);
       const active = activeCandidatesByContest.get(contest.id);
