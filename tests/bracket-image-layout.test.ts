@@ -42,7 +42,8 @@ test("completed export preserves all matches, highlights only the champion's act
   assert.match(svg, /data-champion="revealed"/);
   assert.match(svg, /同分判定：海选排名更高者获胜/);
   assert.match(svg, /07\.03 结束/);
-  assert.match(svg, /正赛已结束/);
+  assert.match(svg, /赛事对阵 · 全程赛果/);
+  assert.doesNotMatch(svg, /位参赛角色|场对决|已公开角色|已生成对阵/);
   assert.doesNotMatch(svg, /样式预览|NaN|Infinity/);
 });
 
@@ -72,10 +73,10 @@ test("live public scores stay visible without declaring a winner or using incomp
   assert.match(svg, /冠军赛 · 投票中/);
   assert.match(svg, /07\.03 截止/);
   assert.match(svg, /data-champion="pending"/);
-  assert.doesNotMatch(svg, /data-champion-route="true"|同分判定：|正赛已结束/);
+  assert.doesNotMatch(svg, /data-champion-route="true"|同分判定：|全程赛果/);
 });
 
-test("incomplete draw has empty future seats and accurate counts instead of fictitious completed rounds", () => {
+test("incomplete draw has empty future seats and no participant or match count subtitle", () => {
   const data = fixture();
   data.matches = data.matches.slice(0, 1);
   data.matches[0].resultVisible = false;
@@ -85,9 +86,9 @@ test("incomplete draw has empty future seats and accurate counts instead of fict
   data.matches[0].left!.imagePath = "unavailable.jpg";
   const svg = renderBracketImageLayout(data, assets);
   assert.equal((svg.match(/data-match=/g) ?? []).length, 16);
-  assert.match(svg, /2 位已公开角色 · 1 场已生成对阵/);
+  assert.doesNotMatch(svg, /已公开角色|已生成对阵|<text x="80" y="211"/);
   assert.match(svg, /等待开始/);
-  assert.match(svg, /冠军待定/);
+  assert.match(svg, /待揭晓/);
   assert.match(svg, /赛程待定/);
   assert.doesNotMatch(svg, /data-champion-route="true"|>20<|<image/);
 });
@@ -114,6 +115,9 @@ test("long names and wide scores remain bounded; user text and embedded image re
   match.left!.name = '艾莉娜·奥列格芙娜·阿文<script>"&';
   match.left!.score = 1234567.5;
   match.left!.imagePath = "test";
+  const final = data.matches.find(item => item.round === "final")!;
+  final.left!.name = '艾莉娜·奥列格芙娜·阿文<script>"&' + "超长冠军名称".repeat(8);
+  final.left!.imagePath = "test";
   data.tournamentName = '测试<&"' + "很长的赛事标题".repeat(15);
   const svg = renderBracketImageLayout(data, {
     logoDataUrl: null,

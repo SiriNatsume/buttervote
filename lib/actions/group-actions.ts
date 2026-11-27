@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { bothSupportCandidateIds, isBothSupportVote, validateBothSupportVote } from "@/lib/both-support";
 import { getActionUser } from "@/lib/auth";
 import { toUserFacingError } from "@/lib/action-error";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
@@ -53,6 +54,10 @@ function getSelectedCandidateIds(params: {
   payload: Record<string, unknown>;
 }) {
   const { voteType, maxChoices, requireExactChoices, payload } = params;
+  if (payload.ballotType !== undefined) {
+    if (!isBothSupportVote(payload)) return { error: "选票类型无效。" };
+    return { candidateIds: bothSupportCandidateIds(payload) };
+  }
 
   if (voteType === "single") {
     const candidateId = payload.candidateId;
@@ -164,7 +169,7 @@ export async function submitGroupVotes(input: GroupVoteInput) {
   ] = await Promise.all([
     supabase
       .from("contests")
-      .select("id,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled")
+      .select("id,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,both_support_enabled")
       .is("archived_at", null)
       .in("id", contestIds),
     supabase
@@ -236,6 +241,11 @@ export async function submitGroupVotes(input: GroupVoteInput) {
     }
 
     const contestCandidateIds = candidatesByContest.get(contest.id) ?? new Set<string>();
+    if (isBothSupportVote(voteRequest.payload)) {
+      const error = validateBothSupportVote(contest, contestCandidateIds,
+        voteRequest.payload, voteRequest.loveCandidateIds);
+      if (error) return { ok: false, error };
+    }
     if (selected.candidateIds.some((candidateId) => !contestCandidateIds.has(candidateId))) {
       return { ok: false, error: "选中的候选项不属于对应活动。" };
     }

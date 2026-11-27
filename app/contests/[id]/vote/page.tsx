@@ -15,6 +15,7 @@ import { applyDueScheduledTransitionsForContest } from "@/lib/scheduled-transiti
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
+import { isBothSupportVote } from "@/lib/both-support";
 import { contestVoteHref } from "@/lib/vote-entry";
 import { formatDateTime } from "@/lib/time";
 import { loadVisibleContestTallies } from "@/lib/visible-result-tallies";
@@ -48,7 +49,7 @@ export default async function VotePage({
       supabase
         .from("contests")
         .select(
-          "id,title,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,show_candidate_image,show_candidate_description,show_nominator_info,voting_ends_at,archived_at",
+          "id,title,status,vote_type,max_choices,require_exact_choices,group_id,love_vote_enabled,both_support_enabled,show_candidate_image,show_candidate_description,show_nominator_info,voting_ends_at,archived_at",
         )
         .eq("id", id)
         .maybeSingle(),
@@ -146,7 +147,8 @@ export default async function VotePage({
             </Button>
           }
         >
-          <p>你已经参与过该活动投票，不能重复提交普通投票。</p>
+          <p>你已经参与过该活动投票，不能重复提交选票。</p>
+          {isBothSupportVote(existingVote.payload) ? <p>你选择了同时支持两项，这张选票不能补投真爱票。</p> : null}
           {query.error ? (
             <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {query.error}
@@ -154,7 +156,7 @@ export default async function VotePage({
           ) : null}
         </MascotEmptyState>
 
-        {loveVoteInfo ? (
+        {loveVoteInfo && !isBothSupportVote(existingVote.payload) ? (
           <StandaloneLoveVoteSupplementPanel
             className="mt-6"
             groupId={loveVoteInfo.groupId}

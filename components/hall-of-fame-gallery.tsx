@@ -5,6 +5,7 @@ import {
   type MouseEvent,
   type UIEvent,
   type WheelEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -47,6 +48,18 @@ export function HallOfFameGallery({
   );
   const trackRef = useRef<HTMLDivElement>(null);
   const wheelLockedRef = useRef(false);
+  const journeyHintSeenRef = useRef(false);
+
+  const claimJourneyHint = useCallback(() => {
+    if (journeyHintSeenRef.current) return false;
+    journeyHintSeenRef.current = true;
+    return true;
+  }, []);
+
+  useEffect(() => () => {
+    // Re-arm on leaving, including when the router hides and restores the page.
+    journeyHintSeenRef.current = false;
+  }, []);
 
   const activeItem = items[activeIndex];
   const previousItem = items[activeIndex - 1];
@@ -215,6 +228,7 @@ export function HallOfFameGallery({
                     href={item.journeyHref}
                     winnerName={item.winnerName}
                     active={index === activeIndex}
+                    claimHint={claimJourneyHint}
                   />
                 ) : null}
                 <button

@@ -393,6 +393,43 @@ test("love supplement eligibility requires a selected active candidate without a
   assert.equal(supplement({ activeCandidates: [{ id: "candidate-1", contest_id: "2" }] }).canSupplementLoveVote, false);
 });
 
+test("both-support ballots do not advertise love supplements despite active choices and remaining quota", () => {
+  const result = supplement({
+    contests: [contest("1")],
+    votes: [{ id: "vote-1", contest_id: "1", payload: {
+      ballotType: "both_support", candidateIds: ["candidate-1", "candidate-1b"],
+    } }],
+    activeCandidates: ["candidate-1", "candidate-1b"].map((id) => ({ id, contest_id: "1" })),
+  });
+
+  assert.equal(result.votedCount, 1);
+  assert.equal(result.pendingCount, 0);
+  assert.equal(result.loveBalances?.[0]?.remaining, group.love_vote_quota);
+  assert.equal(result.canSupplementLoveVote, false);
+});
+
+test("an ordinary ballot remains supplementable alongside a both-support ballot", () => {
+  const input = {
+    votes: [
+      { id: "vote-1", contest_id: "1", payload: {
+        ballotType: "both_support", candidateIds: ["candidate-1", "candidate-1b"],
+      } },
+      ...ordinaryVotes("2"),
+    ],
+    activeCandidates: [
+      { id: "candidate-1", contest_id: "1" },
+      { id: "candidate-1b", contest_id: "1" },
+      { id: "candidate-2", contest_id: "2" },
+    ],
+  };
+
+  assert.equal(supplement(input).canSupplementLoveVote, true);
+  assert.equal(supplement({
+    ...input,
+    loveAllocations: [{ group_id: group.id, vote_id: "vote-2", candidate_id: "candidate-2" }],
+  }).canSupplementLoveVote, false);
+});
+
 test("love supplement does not appear for exhausted, disabled, closed, unknown or inaccessible ballots", () => {
   const cases: Array<[string, Partial<Parameters<typeof buildHomepageSidebarData>[0]>]> = [
     ["guest", { signedIn: false }],

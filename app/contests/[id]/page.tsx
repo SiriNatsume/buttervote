@@ -21,6 +21,7 @@ import { StatusBadge, VoteTypeBadge } from "@/components/contest-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getCurrentProfile } from "@/lib/auth";
+import { isBothSupportVote } from "@/lib/both-support";
 import { getRequestTime } from "@/lib/request-time";
 import { getPublicImageUrl } from "@/lib/image/image-url";
 import { canParticipateContestGroup } from "@/lib/permissions/user-groups";
@@ -171,6 +172,7 @@ export default async function ContestDetailPage({
     hasVoted &&
     Boolean(profile) &&
     Boolean(existingVote) &&
+    !isBothSupportVote(existingVote?.payload) &&
     Boolean(group) &&
     canUseGroupParticipation &&
     contest.love_vote_enabled !== false &&

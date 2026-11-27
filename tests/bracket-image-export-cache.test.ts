@@ -60,6 +60,24 @@ test("a hot image skips the builder while rechecking current access and DB state
   assert.deepEqual(h.stats(), { builds: 1, guards: 5, checks: 5 });
 });
 
+test("an older layout's stored PNG and browser validator cannot reuse the previous design", async () => {
+  const store = new Map<string, Artifact>();
+  const cache = createVersionedArtifactCache({ store: {
+    get: async (key) => store.get(key) ?? null,
+    put: async (key, value) => { store.set(key, value); },
+  } });
+  const state = initial();
+  const oldRevision = `cream-poster-v1:${state.tournamentId}:${state.revision}`;
+  await cache.write("bracket-export-v1", state.groupId, oldRevision, png(99), 3_600_000);
+  const h = harness(store);
+  const result = await h.run("123", `W/"${oldRevision}"`);
+  assert.ok(result.kind === "ready");
+  assert.equal(result.cache, "MISS");
+  assert.notEqual(result.etag, `W/"${oldRevision}"`);
+  assert.equal(result.png[39], 1);
+  assert.equal(h.stats().builds, 1);
+});
+
 test("score and same-path image revisions immediately replace one private cache slot across isolates", async () => {
   const store = new Map<string, Artifact>();
   const first = harness(store);

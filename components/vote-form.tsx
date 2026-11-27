@@ -1,6 +1,7 @@
 "use client";
 
 import { SingleChoiceBallot } from "@/components/single-choice-ballot";
+import { BOTH_SUPPORT_CHOICE, canUseBothSupport } from "@/lib/both-support";
 import { MultipleChoiceBallot } from "@/components/multiple-choice-ballot";
 import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { FormEvent, useMemo, useRef, useState } from "react";
@@ -35,6 +36,7 @@ type VoteFormContest = Pick<
   | "show_candidate_image"
   | "show_candidate_description"
   | "show_nominator_info"
+  | "both_support_enabled"
 >;
 
 type VoteFormCandidate = Pick<
@@ -252,6 +254,11 @@ export function VoteForm({
     setLocalError(null);
     setIsSubmitting(true);
     const formData = new FormData(form);
+    if (candidateId === BOTH_SUPPORT_CHOICE) {
+      formData.delete("candidateId");
+      formData.set("ballotType", "both_support");
+      for (const candidate of candidates) formData.append("candidateIds", candidate.id);
+    }
     for (const id of selectedIds) {
       formData.append("candidateIds", id);
     }
@@ -346,6 +353,7 @@ export function VoteForm({
         {showSingleChoiceBallot ? (
           <SingleChoiceBallot
             contest={contest}
+            bothSupportEnabled={canUseBothSupport(contest, candidates.length)}
             candidates={candidates}
             selectedId={candidateId}
             onChange={changeSingleSelection}

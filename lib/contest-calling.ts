@@ -1,3 +1,4 @@
+import { bothSupportCandidateIds, isBothSupportVote } from "@/lib/both-support";
 import type {
   Candidate,
   ContestCallingEvent,
@@ -139,6 +140,12 @@ function extractVotePoints(voteType: VoteType, vote: Vote, candidateIds: Set<str
     return points;
   }
 
+  if (isBothSupportVote(vote.payload)) {
+    return voteType === "single" ? bothSupportCandidateIds(vote.payload)
+      .filter((id) => candidateIds.has(id))
+      .map((candidateId) => ({ voteId: vote.id, candidateId, points: 1, createdAt: vote.created_at })) : [];
+  }
+
   if (voteType === "single") {
     const candidateId = vote.payload.candidateId;
     if (typeof candidateId === "string" && candidateIds.has(candidateId)) {
@@ -238,8 +245,12 @@ export function buildContestCallingEvents(params: {
   const basePoints = params.votes
     .flatMap((vote) => extractVotePoints(params.voteType, vote, candidateIds))
     .sort(compareVotePoints);
+  const bothSupportVoteIds = new Set(params.votes.filter((vote) =>
+    isBothSupportVote(vote.payload),
+  ).map((vote) => vote.id));
   const basePointByVoteAndCandidate = new Map(
-    basePoints.map((point) => [`${point.voteId}:${point.candidateId}`, point]),
+    basePoints.filter((point) => !bothSupportVoteIds.has(point.voteId))
+      .map((point) => [`${point.voteId}:${point.candidateId}`, point]),
   );
   const effectiveLoveVoteWeight =
     typeof params.loveVoteWeight === "number" && Number.isFinite(params.loveVoteWeight)

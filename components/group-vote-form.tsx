@@ -1,6 +1,7 @@
 "use client";
 
 import { SingleChoiceBallot } from "@/components/single-choice-ballot";
+import { BOTH_SUPPORT_CHOICE, canUseBothSupport } from "@/lib/both-support";
 import { MultipleChoiceBallot } from "@/components/multiple-choice-ballot";
 import { VoteCandidateThumb } from "@/components/vote-candidate-thumb";
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -55,6 +56,7 @@ type GroupVoteContest = Pick<
   | "show_candidate_description"
   | "show_nominator_info"
   | "love_vote_enabled"
+  | "both_support_enabled"
 >;
 
 type GroupVoteCandidate = Pick<
@@ -67,6 +69,7 @@ type ContestWithCandidates = GroupVoteContest & {
   existingVoteId?: string | null;
   selectedCandidateIds?: string[];
   alreadyLoveCandidateIds?: string[];
+  isBothSupport?: boolean;
 };
 
 const STEP_BUTTON_CLASS_NAME =
@@ -198,6 +201,7 @@ export function GroupVoteForm({
           (contest) =>
             contest.status === "voting" &&
             contest.existingVoteId &&
+            !contest.isBothSupport &&
             contest.love_vote_enabled !== false &&
             (contest.selectedCandidateIds ?? []).length > 0,
         )
@@ -235,6 +239,7 @@ export function GroupVoteForm({
       contestId: contest.id,
       title: contest.title,
       voteType: contest.vote_type,
+      isBothSupport: selection.candidateId === BOTH_SUPPORT_CHOICE,
       choices: selectedIdsForContest(contest, selection).map((id) => ({
         id,
         name: candidateNameById.get(id) ?? "未知选项",
@@ -270,7 +275,7 @@ export function GroupVoteForm({
         ...current,
         [contest.id]: {
           ...nextSelection,
-          loveCandidateIds: nextSelection.loveCandidateIds.filter((candidateId) =>
+          loveCandidateIds: nextSelection.candidateId === BOTH_SUPPORT_CHOICE ? [] : nextSelection.loveCandidateIds.filter((candidateId) =>
             selectedIds.has(candidateId),
           ),
         },
@@ -284,6 +289,7 @@ export function GroupVoteForm({
     checked: boolean,
   ) {
     updateSelection(contest, (selection) => {
+      if (selection.candidateId === BOTH_SUPPORT_CHOICE) return selection;
       const selectedIds = new Set(selectedIdsForContest(contest, selection));
       if (!selectedIds.has(candidateId)) {
         return selection;
@@ -354,7 +360,9 @@ export function GroupVoteForm({
       if (contest.vote_type === "single") {
         return {
           contestId: contest.id,
-          payload: { candidateId: selection.candidateId },
+          payload: selection.candidateId === BOTH_SUPPORT_CHOICE
+            ? { ballotType: "both_support", candidateIds: contest.candidates.map((candidate) => candidate.id) }
+            : { candidateId: selection.candidateId },
           loveCandidateIds: selection.loveCandidateIds,
         };
       }
@@ -500,6 +508,7 @@ export function GroupVoteForm({
           {contest.existingVoteId ? (
             <div className="space-y-2 rounded-2xl border bg-[#F0F5EB]/60 p-4 text-sm">
               <p className="text-muted-foreground">你已经在这个活动中投过票。</p>
+              {contest.isBothSupport ? <p className="font-medium">同时支持两项 · 不能补投真爱票</p> : null}
               {(contest.selectedCandidateIds ?? []).length > 0 ? (
                 <ul className="space-y-1.5">
                   {(contest.selectedCandidateIds ?? []).map((candidateId, choiceIndex) => (
@@ -528,6 +537,7 @@ export function GroupVoteForm({
           ) : showSingleChoiceBallot ? (
             <SingleChoiceBallot
               contest={contest}
+              bothSupportEnabled={canUseBothSupport(contest, contest.candidates.length)}
               candidates={contest.candidates}
               selectedId={selection.candidateId}
               onChange={(candidateId) => updateSelection(contest, (current) => ({ ...current, candidateId }))}

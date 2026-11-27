@@ -14,6 +14,7 @@ import { applyScheduledTransitions } from "@/lib/scheduled-transitions";
 import { createClient } from "@/lib/supabase/server";
 import { createServerDataClient } from "@/lib/supabase/server-data";
 import { selectedCandidateIdsFromVotePayload } from "@/lib/vote-payload";
+import { isBothSupportVote } from "@/lib/both-support";
 import { loadVisibleContestTallies } from "@/lib/visible-result-tallies";
 import { visibleTallyScore } from "@/lib/visible-tally-score";
 
@@ -38,7 +39,7 @@ export default async function GroupVotePage({
     supabase
       .from("contests")
       .select(
-        "id,title,status,vote_type,max_choices,require_exact_choices,show_candidate_image,show_candidate_description,show_nominator_info,love_vote_enabled,created_at",
+        "id,title,status,vote_type,max_choices,require_exact_choices,show_candidate_image,show_candidate_description,show_nominator_info,love_vote_enabled,both_support_enabled,created_at",
       )
       .eq("group_id", id)
       .is("archived_at", null)
@@ -128,6 +129,7 @@ export default async function GroupVotePage({
       ...contest,
       candidates: candidatesByContest.get(contest.id) ?? [],
       existingVoteId: existingVote?.id ?? null,
+      isBothSupport: existingVote ? isBothSupportVote(existingVote.payload) : false,
       selectedCandidateIds: existingVote
         ? selectedCandidateIdsFromVotePayload(contest.vote_type, existingVote.payload)
         : [],

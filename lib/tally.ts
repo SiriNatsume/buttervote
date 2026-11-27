@@ -1,4 +1,5 @@
 import type { Candidate, LoveVoteAllocation, Vote, VoteType } from "@/lib/types";
+import { bothSupportCandidateIds, isBothSupportVote } from "@/lib/both-support";
 
 export type TallyResult = {
   candidateId: string;
@@ -122,6 +123,16 @@ export function tallyVotes(params: {
 
   for (const vote of votes) {
     if (!isRecord(vote.payload)) {
+      continue;
+    }
+
+    if (isBothSupportVote(vote.payload)) {
+      if (voteType === "single") {
+        for (const id of bothSupportCandidateIds(vote.payload)) {
+          if (candidateIds.has(id)) normalScores.set(id, (normalScores.get(id) ?? 0) + 1);
+        }
+      }
+      // Both-support points never affect the time tie-break or love weighting.
       continue;
     }
 

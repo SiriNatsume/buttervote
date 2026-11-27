@@ -103,6 +103,28 @@ function nameLines(name: string, width: number) {
   return wrap(name, width / size, size === 19 ? 2 : 3).map(value => ({ value, size }));
 }
 
+function championLaurel(side: 1 | -1) {
+  return `<g transform="translate(1440 535) scale(${side} 1)" fill="#D5BB86">
+    <path d="M-66 83 C-104 64 -124 22 -111 -28 C-106 -48 -98 -64 -86 -76" fill="none" stroke="#C8AC76" stroke-width="2" stroke-linecap="round"/>
+    <path d="M-80 72 C-100 75 -118 67 -122 55 C-101 53 -88 60 -80 72Z"/>
+    <path d="M-97 54 C-120 54 -135 41 -135 26 C-113 31 -104 40 -97 54Z"/>
+    <path d="M-108 30 C-129 24 -140 9 -135 -6 C-117 3 -110 15 -108 30Z"/>
+    <path d="M-113 4 C-129 -8 -133 -25 -124 -37 C-111 -22 -109 -9 -113 4Z"/>
+    <path d="M-108 -22 C-119 -38 -115 -56 -104 -64 C-97 -45 -99 -31 -108 -22Z"/>
+    <path d="M-98 -46 C-102 -63 -94 -77 -82 -81 C-80 -64 -87 -52 -98 -46Z"/>
+  </g>`;
+}
+
+function championCrown() {
+  return `<circle cx="1440" cy="535" r="82" fill="#FBF5E7"/>
+    <g transform="translate(1440 535)">
+      <path d="M-36 -19 L-20 -4 L0 -31 L20 -4 L36 -19 L27 20 H-27Z" fill="url(#champion-gold)" stroke="#BC944E" stroke-width="2.4" stroke-linejoin="round"/>
+      <circle cx="-36" cy="-21" r="4" fill="#C9A25D"/><circle cy="-33" r="4" fill="#C9A25D"/><circle cx="36" cy="-21" r="4" fill="#C9A25D"/>
+      <path d="M-25 29 H25" stroke="#BC944E" stroke-width="4" stroke-linecap="round"/>
+      <path d="M0 -5 L6 4 L0 12 L-6 4Z" fill="#FFFCF4"/>
+    </g>`;
+}
+
 // Public live scores do not make an in-progress match a completed win.
 function winner(match: BracketImageMatch | undefined) {
   if (!match?.resultVisible || !match.winnerEntryId || match.contest?.status === "voting") return null;
@@ -268,16 +290,12 @@ export function renderBracketImageLayout(data: BracketImageData, assets: Bracket
   }
 
   const fullResult = matches.length === POSITIONS.length && matches.every(match => winner(match));
-  const phase = fullResult ? "正赛已结束" : matches.some(match => match.contest?.status === "voting") ? "投票中"
-    : matches.some(match => status(match) === "结果待公开") ? "等待结果公开"
-      : matches.length && matches.every(match => status(match) === "等待开始") ? "等待开始"
-        : matches.length ? "赛程进行中" : "等待赛程生成";
-  const participantCount = new Set(matches.flatMap(match => [match.left?.entryId, match.right?.entryId]).filter(Boolean)).size;
-  const summary = fullResult ? `${participantCount} 位参赛角色 · ${matches.length} 场对决 · ${phase}`
-    : `${participantCount} 位已公开角色 · ${matches.length} 场已生成对阵 · ${phase}`;
   const titleSize = Math.min(66, Math.max(38, 2240 / Math.max(1, units(data.tournamentName))));
   const titleLines = wrap(data.tournamentName, 2240 / titleSize, 2);
-  const championName = champion ? wrap(champion.name, 348 / 25, 1)[0] : "冠军待定";
+  const championName = champion?.name ?? "待揭晓";
+  const championNameSize = units(championName) * 28 <= 348 ? 28 : 24;
+  const championNameLines = wrap(championName, 348 / championNameSize, 2);
+  const championImage = champion?.imagePath && assets.participantImages.get(champion.imagePath);
   const versionMs = Number(data.visibilityVersion);
   const updatedAt = Number.isFinite(versionMs) && versionMs > 0 && Number.isFinite(new Date(versionMs).getTime())
     ? `数据更新 ${formatDateTime(new Date(versionMs))}` : "以活动当前公开赛果为准";
@@ -291,13 +309,16 @@ export function renderBracketImageLayout(data: BracketImageData, assets: Bracket
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${BRACKET_IMAGE_WIDTH}" height="${BRACKET_IMAGE_HEIGHT}" viewBox="0 0 ${BRACKET_IMAGE_WIDTH} ${BRACKET_IMAGE_HEIGHT}" role="img" aria-labelledby="bracket-title">
   <title id="bracket-title">${escapeXml(data.tournamentName)} · 分享对阵图</title>
-  <defs><linearGradient id="champion-paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F9E9B6"/><stop offset="1" stop-color="#FFF8E8"/></linearGradient></defs>
+  <defs>
+    <linearGradient id="champion-paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFEFB"/><stop offset="1" stop-color="#FCF5E7"/></linearGradient>
+    <linearGradient id="champion-gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E8CD8D"/><stop offset="1" stop-color="#C69B50"/></linearGradient>
+    <radialGradient id="champion-halo"><stop offset="0" stop-color="#F4E4BC" stop-opacity=".7"/><stop offset="1" stop-color="#FBF5E8" stop-opacity="0"/></radialGradient>
+  </defs>
   ${rect(0, 0, BRACKET_IMAGE_WIDTH, BRACKET_IMAGE_HEIGHT, 0, C.paper)}
   ${rect(0, 0, BRACKET_IMAGE_WIDTH, 9, 0, "#F3D980")}
   ${rect(80, 72, 42, 6, 3, C.orange)}
   ${text(138, 81, fullResult ? "赛事对阵 · 全程赛果" : "赛事对阵 · 当前赛程", 21, "#8B6B45", 500)}
   ${titleLines.map((value, i) => text(76, titleLines.length === 1 ? 157 : 127 + i * 48, value, titleSize, C.ink, 600)).join("")}
-  ${text(80, 211, summary, 23, C.muted, 400)}
   ${assets.logoDataUrl ? `<image href="${escapeXml(assets.logoDataUrl)}" x="2510" y="94" width="290" height="80" preserveAspectRatio="xMidYMid meet"/>` : text(2800, 157, "Butter Vote", 44, C.orange, 600, 'text-anchor="end"')}
   ${text(2798, 211, "buttervote.com", 23, "#A1896D", 500, 'text-anchor="end" letter-spacing="1"')}
   ${line(80, 256, 2800, 256, C.line, 1.5)}
@@ -306,13 +327,18 @@ export function renderBracketImageLayout(data: BracketImageData, assets: Bracket
   ${heading(1708, "semifinal", [2])}${heading(2094, "quarterfinal", [3, 4])}${heading(2480, "round_of_16", [5, 6, 7, 8])}
   ${edges.join("\n")}${thirdPlaceConnection(1)}${thirdPlaceConnection(2)}
   <g data-champion="${champion ? "revealed" : "pending"}">
-    ${rect(1240, 389, 400, 329, 26, "#AD8850", 'opacity="0.07"')}
-    ${rect(1240, 384, 400, 329, 26, "url(#champion-paper)", 'stroke="#E4C788" stroke-width="1.5"')}
-    <path d="M1256 567 Q1294 602 1272 650 M1624 567 Q1586 602 1608 650" fill="none" stroke="#E8CF91" stroke-width="2"/>
-    ${text(1440, 423, "冠  军", 23, "#946526", 600, 'text-anchor="middle"')}
-    ${rect(1334, 444, 212, 212, 22, C.card, `stroke="#E9D9B5" stroke-width="1.5"${champion ? "" : ' stroke-dasharray="7 7"'}`)}
-    ${champion ? avatar(champion, 1340, 450, 200, 17, "champion-avatar") : text(1440, 565, "待揭晓", 32, "#A18C6F", 500, 'text-anchor="middle"')}
-    ${text(1440, 692, championName, 25, C.ink, 600, 'text-anchor="middle"')}
+    <title>${escapeXml(champion ? `冠军：${champion.name}` : "冠军待揭晓")}</title>
+    ${rect(1240, 391, 400, 329, 24, "#9C7A43", 'opacity="0.045"')}
+    ${rect(1240, 384, 400, 329, 24, "url(#champion-paper)", 'stroke="#DECDAA" stroke-width="1.5"')}
+    <path d="M1265 385 H1615" stroke="#D5B56D" stroke-width="3" stroke-linecap="round"/>
+    <path d="M1294 420 H1376 M1504 420 H1586" stroke="#E4D7BC" stroke-width="1.5"/>
+    ${text(1440, 428, "冠  军", 22, "#9B743C", 600, 'text-anchor="middle"')}
+    <circle cx="1440" cy="535" r="110" fill="url(#champion-halo)"/>
+    ${championLaurel(1)}${championLaurel(-1)}
+    <circle cx="1440" cy="535" r="91" fill="#FFFDFA" stroke="#E2D1AE" stroke-width="1.5"/>
+    ${champion && championImage ? avatar(champion, 1355, 450, 170, 85, "champion-avatar") : championCrown()}
+    ${championNameLines.map((value, i) => text(1440, championNameLines.length === 1 ? 669 : 652 + i * 30,
+      value, championNameSize, champion ? "#493A2B" : "#9C8664", champion ? 600 : 500, 'text-anchor="middle"')).join("")}
   </g>
   ${line(1440, 714, 1440, 748, champion ? C.orange : "#D9CDBD", 3)}
   <circle cx="1440" cy="751" r="4" fill="${champion ? C.orange : "#D9CDBD"}"/>

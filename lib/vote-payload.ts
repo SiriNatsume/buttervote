@@ -1,4 +1,5 @@
 import type { Json, VoteType } from "@/lib/types";
+import { bothSupportCandidateIds, isBothSupportVote } from "@/lib/both-support";
 
 function isRecord(value: Json): value is Record<string, Json | undefined> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20,6 +21,10 @@ export function selectedCandidateIdsFromVotePayload(
 ) {
   if (!isRecord(payload)) {
     return [];
+  }
+
+  if (isBothSupportVote(payload)) {
+    return voteType === "single" ? bothSupportCandidateIds(payload) : [];
   }
 
   if (voteType === "single") {
